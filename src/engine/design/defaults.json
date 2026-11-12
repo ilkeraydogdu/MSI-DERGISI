@@ -2,22 +2,22 @@
   "version": 1,
   "theme": {
     "light": {
-      "background": "#f5f4f1",
-      "surface": "#ffffff",
-      "subtle": "#edece8",
-      "text": "#242b35",
-      "muted": "#5b626c",
-      "border": "#dcdedc",
-      "accent": "#b51230"
+      "background": "#f6f3ee",
+      "surface": "#fcfbf9",
+      "subtle": "#efeae1",
+      "text": "#1e2024",
+      "muted": "#59534c",
+      "border": "#ddd5c8",
+      "accent": "#c91818"
     },
     "dark": {
-      "background": "#12161f",
-      "surface": "#1a202c",
-      "subtle": "#232b3a",
-      "text": "#f4f6fa",
-      "muted": "#b5bfd0",
-      "border": "#323d52",
-      "accent": "#bd193b"
+      "background": "#1d222c",
+      "surface": "#262c38",
+      "subtle": "#303846",
+      "text": "#dadde4",
+      "muted": "#a2aab8",
+      "border": "#3f4a5c",
+      "accent": "#d42020"
     },
     "width": 1280,
     "radius": 2,
@@ -271,6 +271,11 @@
           "layout": "list",
           "link": "/kategori/haberler?page=2",
           "link_label": "Haber arşivine git"
+        },
+        {
+          "kind": "banner",
+          "title": "",
+          "category": "ad-strip-bottom"
         },
         {
           "kind": "cta",

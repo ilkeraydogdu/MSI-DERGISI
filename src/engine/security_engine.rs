@@ -23,8 +23,8 @@ pub fn generate_csp_nonce() -> String {
 static RATE_LIMIT_STORE: OnceCell<Mutex<HashMap<String, (u32, i64)>>> = OnceCell::new();
 
 /// Default rate limit values for backward compatibility with tests.
-const DEFAULT_MAX_REQUESTS_PER_MINUTE: u32 = 120;
-const DEFAULT_RATE_LIMIT_WINDOW_SECS: i64 = 60;
+const DEFAULT_MAX_REQUESTS_PER_MINUTE: u32 = crate::db::constants::RATE_LIMIT_MAX_REQUESTS_PER_MINUTE;
+const DEFAULT_RATE_LIMIT_WINDOW_SECS: i64 = crate::db::constants::RATE_LIMIT_WINDOW_SECONDS;
 
 /// Per-request CSP nonce stored in Axum request extensions.
 /// Controllers extract this to inject `nonce="..."` on inline `<script>` tags.
@@ -69,7 +69,7 @@ impl CentralSecurityFilter {
 
         if !is_static_asset {
             if let Ok(mut map) = Self::bucket_store().lock() {
-                if map.len() > 10_000 {
+                if map.len() > crate::db::constants::RATE_LIMIT_STORE_MAX_ENTRIES {
                     map.retain(|_, (_, ts)| now_ts - *ts < window_secs * 2);
                 }
                 let entry = map

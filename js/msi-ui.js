@@ -191,8 +191,10 @@
     const more = $(".nav-more");
     if (more && !more.contains(e.target)) more.open = false;
   });
-  $$(".navigation>a").forEach((a) => {
+  $$(".navigation>a:not(.language-link)").forEach((a) => {
+    const rawHref = a.getAttribute("href") || "";
     if (
+      rawHref.startsWith("/") &&
       new URL(a.href).pathname === location.pathname &&
       location.pathname !== "/"
     )
@@ -561,11 +563,16 @@
     $("[data-reader-prev]").disabled = spreadIndex <= 0;
     $("[data-reader-next]").disabled = spreadIndex >= spreads.length - 1;
     if (spread) {
+      const spTitle = localized(spread, "title").trim();
+      const spExcerpt = localized(spread, "excerpt").trim();
       const title = document.createElement("h3");
-      title.textContent = localized(spread, "title");
-      const description = document.createElement("p");
-      description.textContent = localized(spread, "excerpt");
-      root.append(title, description);
+      title.textContent = spTitle;
+      root.append(title);
+      if (spExcerpt && spExcerpt.toLowerCase() !== spTitle.toLowerCase()) {
+        const description = document.createElement("p");
+        description.textContent = spExcerpt;
+        root.append(description);
+      }
       if (spread.linked_content_slug) {
         const a = document.createElement("a");
         a.href = "/icerik/" + encodeURIComponent(spread.linked_content_slug);
@@ -598,7 +605,19 @@
       ? issue.cover_image
       : "/" + issue.cover_image.replace(/^\/+/, "");
     image.alt = localized(issue, "title");
-    $("#issue-dialog-summary").textContent = localized(issue, "summary");
+    const rawSummary = localized(issue, "summary").trim();
+    const firstSpreadTitle = issue.spreads?.[0]
+      ? localized(issue.spreads[0], "title").trim()
+      : "";
+    const metaFallback =
+      boot.lang === "en"
+        ? `${issue.page_count || 96} pages · ${issue.dossier_count || 6} special dossiers · ISSN 1306-0309`
+        : `${issue.page_count || 96} sayfa · ${issue.dossier_count || 6} özel dosya · ISSN 1306-0309`;
+    $("#issue-dialog-summary").textContent =
+      firstSpreadTitle &&
+      rawSummary.toLowerCase().includes(firstSpreadTitle.slice(0, 24).toLowerCase())
+        ? metaFallback
+        : rawSummary || metaFallback;
     $("#issue-download").href =
       `/api/v1/edergi/${issue.issue_number}/download-pdf?pages=all`;
     renderSpread();
@@ -1115,5 +1134,73 @@
     const ad = e.target.closest("[data-ad-click-id]");
     if (ad) track("ad_click", Number(ad.dataset.adClickId));
   });
+
+  // Smart Portrait/Document Framing & Interactive Lightbox for Article Galleries
+  const galleryItems = $$(".msi-gallery-item");
+  if (galleryItems.length) {
+    const lbDialog = $("#gallery-lightbox");
+    const lbImg = $("#lightbox-img");
+    const lbCap = $("#lightbox-caption");
+    const lbCounter = $("#lightbox-counter");
+    const lbRaw = $("#lightbox-raw-link");
+    let lbIndex = 0;
+
+    const frameGalleryImg = (fig, img) => {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      if (img.naturalHeight >= img.naturalWidth * 0.84) {
+        fig.classList.add("is-contain");
+        fig.style.setProperty("--gal-bg", `url("${img.currentSrc || img.src}")`);
+      }
+    };
+
+    const showLightboxAt = (nextIdx) => {
+      if (!lbDialog || !lbImg || !galleryItems.length) return;
+      lbIndex =
+        ((nextIdx % galleryItems.length) + galleryItems.length) %
+        galleryItems.length;
+      const fig = galleryItems[lbIndex];
+      const link = $("a", fig);
+      const img = $("img", fig);
+      const fullHref = link?.getAttribute("href") || img?.src || "";
+      lbImg.src = fullHref;
+      lbImg.alt = img?.alt || "";
+      if (lbCap) lbCap.textContent = img?.alt || "";
+      if (lbCounter)
+        lbCounter.textContent = `${text("GÖRSEL", "IMAGE")} ${lbIndex + 1} / ${galleryItems.length}`;
+      if (lbRaw) lbRaw.href = fullHref;
+      const prevBtn = $("[data-lightbox-prev]", lbDialog);
+      const nextBtn = $("[data-lightbox-next]", lbDialog);
+      if (prevBtn) prevBtn.hidden = galleryItems.length < 2;
+      if (nextBtn) nextBtn.hidden = galleryItems.length < 2;
+      openDialog("gallery-lightbox");
+    };
+
+    galleryItems.forEach((fig, idx) => {
+      const img = $("img", fig);
+      const link = $("a", fig);
+      if (img) {
+        if (img.complete && img.naturalWidth) frameGalleryImg(fig, img);
+        else img.addEventListener("load", () => frameGalleryImg(fig, img), { once: true });
+      }
+      link?.addEventListener("click", (ev) => {
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || !lbDialog) return;
+        ev.preventDefault();
+        showLightboxAt(idx);
+      });
+    });
+
+    $("[data-lightbox-prev]")?.addEventListener("click", () =>
+      showLightboxAt(lbIndex - 1),
+    );
+    $("[data-lightbox-next]")?.addEventListener("click", () =>
+      showLightboxAt(lbIndex + 1),
+    );
+    document.addEventListener("keydown", (ev) => {
+      if (!lbDialog?.open) return;
+      if (ev.key === "ArrowLeft") showLightboxAt(lbIndex - 1);
+      else if (ev.key === "ArrowRight") showLightboxAt(lbIndex + 1);
+    });
+  }
+
   window.MSIUI = { toast, openIssue };
 })();

@@ -681,7 +681,7 @@ fn seed_magazine_issues(conn: &Connection) -> rusqlite::Result<()> {
     let spreads_json = serde_json::to_string(&spreads_280).unwrap_or_else(|_| "[]".to_string());
 
     let issues: &[(i32, &str, &str, &str, &str, &str, i32, &str, i32, Option<&str>, i32, i32, &str, &str, &str)] = &[
-        (281, "saha-expo-2026-ozel-sayisi", "MSI Dergisi & MSI TDR • SAHA EXPO 2026 Özel Sayısı", "MSI TDR • SAHA EXPO 2026 Special Exhibition Issue", "Ekim", "October", 2026, "images/msi/saha-deniz.webp", 1, Some("SAHA EXPO 2026"), 144, 18, "SAHA EXPO 2026 Uluslararası Savunma, Havacılık ve Uzay Sanayii Fuarı Çift Dilli (TR/EN) Özel Sayısı.", "Bilingual (TR/EN) Special Exhibition Issue for SAHA EXPO 2026 Defense & Aerospace Exhibition.", "/api/v1/edergi/281/download-pdf"),
+        (286, "msi-dergisi-sayi-286", "MSI Dergisi • Sayı 286 (Kasım 2026)", "MSI Magazine • Issue 286 (November 2026)", "Kasım", "November", 2026, "images/msi/msi-dergisi-sayi-286-kapak.webp", 0, None, 128, 14, "ARES Tersanesi 20. Yıl Kapak Dosyası, Denizhan-76 ve Savunma Ekosistemi Özel Dosyaları.", "ARES Shipyard 20th Anniversary Cover File, Denizhan-76 and Defense Ecosystem Special Dossiers.", "/api/v1/edergi/286/download-pdf"),
         (280, "sayi-280-eylul-2026", "MSI Dergisi • Sayı 280 (Eylül 2026)", "MSI Magazine • Issue 280 (September 2026)", "Eylül", "September", 2026, "images/msi/dergi-280.webp", 0, None, 112, 12, "Milli Muharip Uçak KAAN 5. Nesil Aviyonik, CTech Sürü İDA Hibrit Haberleşme ve AKINCI İHA-300 Kapak Dosyası.", "National Combat Aircraft KAAN 5th-Gen Avionics, CTech Swarm USV Comms and AKINCI IHA-300 Cover Dossier.", "/api/v1/edergi/280/download-pdf"),
         (279, "sayi-279-agustos-2026", "MSI Dergisi • Sayı 279 (Ağustos 2026)", "MSI Magazine • Issue 279 (August 2026)", "Ağustos", "August", 2026, "images/msi/kaan.webp", 0, None, 108, 11, "Çelik Kubbe Katmanlı Hava Savunma Mimarisi, SİPER Ürün-2 ve MİLGEM İSTİF Sınıfı Fırkateynler.", "Steel Dome Multi-Layered Air Defense Architecture, SIPER Block-2 and MILGEM ISTIF-Class Frigates.", "/api/v1/edergi/279/download-pdf"),
         (278, "sayi-278-temmuz-2026", "MSI Dergisi • Sayı 278 (Temmuz 2026)", "MSI Magazine • Issue 278 (July 2026)", "Temmuz", "July", 2026, "images/msi/stm-fuar.webp", 0, None, 104, 10, "Mavi Vatan Deniz Sistemleri, STM500 Denizaltısı ve YALTES Savaş Yönetim Konsolları Dosyası.", "Blue Homeland Naval Systems, STM500 Submarine and YALTES Combat Management Consoles Dossier.", "/api/v1/edergi/278/download-pdf"),
@@ -760,7 +760,7 @@ fn seed_ad_campaigns(conn: &Connection) -> rusqlite::Result<()> {
     let ads: &[(&str, &str, &str, &str, &str, &str, &str, &str, &str, &str, &str, Option<&str>, i32, i32, i32, i32, &str, &str, &str, i64, i64)] = &[
         (
             "ad-mag-top",
-            "REKLAM ALANI 1",
+            "HAVACILIK & UZAY VİTRİNİ",
             "970 × 90 LEADERBOARD / DERGİ TEPE SPONSORLUK",
             "TUSAŞ",
             "defense_oem",
@@ -779,7 +779,7 @@ fn seed_ad_campaigns(conn: &Connection) -> rusqlite::Result<()> {
         ),
         (
             "ad-mag-mid",
-            "REKLAM ALANI 2",
+            "SAVUNMA SANAYİİ TANITIMI",
             "728 × 90 YATAY KUŞAK / DOSYA SPONSORLUĞU",
             "ROKETSAN",
             "defense_oem",
@@ -798,7 +798,7 @@ fn seed_ad_campaigns(conn: &Connection) -> rusqlite::Result<()> {
         ),
         (
             "ad-mag-pricing",
-            "REKLAM ALANI 3",
+            "KOMUTA KONTROL & SİBER VİTRİN",
             "970 × 90 PRESTİJ KUŞAK / ARŞİV SPONSORLUĞU",
             "HAVELSAN",
             "defense_oem",
@@ -817,7 +817,7 @@ fn seed_ad_campaigns(conn: &Connection) -> rusqlite::Result<()> {
         ),
         (
             "ad-news-top",
-            "REKLAM ALANI 4",
+            "RADAR & ELEKTRONİK HARP VİTRİNİ",
             "970 × 90 HABER PORTALI TEPE LEADERBOARD",
             "ASELSAN",
             "defense_oem",
@@ -836,7 +836,7 @@ fn seed_ad_campaigns(conn: &Connection) -> rusqlite::Result<()> {
         ),
         (
             "ad-news-infeed",
-            "REKLAM ALANI 5",
+            "DENİZ SİSTEMLERİ TANITIMI",
             "728 × 90 İÇERİK ARASI YATAY KUŞAK",
             "STM SAVUNMA",
             "defense_oem",
@@ -855,7 +855,7 @@ fn seed_ad_campaigns(conn: &Connection) -> rusqlite::Result<()> {
         ),
         (
             "ad-news-mid",
-            "REKLAM ALANI 6",
+            "STRATEJİK ETKİNLİK SPONSORU",
             "728 × 90 STRATEJİK İÇERİK SPONSORLUĞU",
             "SAHA EXPO 2026",
             "auxiliary_service",
@@ -874,7 +874,7 @@ fn seed_ad_campaigns(conn: &Connection) -> rusqlite::Result<()> {
         ),
         (
             "ad-news-billboard",
-            "REKLAM ALANI 7",
+            "KARA PLATFORMLARI VİTRİNİ",
             "970 × 250 PRESTİJ BİLLBOARD / FOOTER ÖNCESİ KUŞAK",
             "BMC SAVUNMA",
             "defense_oem",

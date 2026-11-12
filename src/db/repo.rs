@@ -2043,6 +2043,32 @@ impl Database {
     }
 
     // =========================================================================
+    // FAZ 3: DYNAMIC SOURCE GROUPS (replaces hardcoded slugs in search_engine)
+    // =========================================================================
+
+    /// Returns distinct source_group values with their display labels from site_settings.
+    /// Each entry: (code, label_tr, label_en). Falls back to code-as-label if no setting exists.
+    pub fn get_distinct_source_groups(&self) -> Vec<(String, String, String)> {
+        let conn = match self.open_conn() { Ok(c) => c, Err(_) => return vec![] };
+        let mut stmt = match conn.prepare(
+            "SELECT DISTINCT source_group FROM contents WHERE source_group IS NOT NULL AND source_group != '' ORDER BY source_group"
+        ) { Ok(s) => s, Err(_) => return vec![] };
+        let codes: Vec<String> = match stmt.query_map([], |r| r.get::<_, String>(0)) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(_) => return vec![],
+        };
+        // Load label overrides from site_settings (key pattern: source_label.{code}.tr / .en)
+        let settings = self.load_site_settings_db();
+        codes.into_iter().map(|code| {
+            let tr_key = format!("source_label.{}.tr", code);
+            let en_key = format!("source_label.{}.en", code);
+            let label_tr = settings.iter().find(|s| s.key == tr_key).map(|s| s.value_tr.clone()).unwrap_or_else(|| code.clone());
+            let label_en = settings.iter().find(|s| s.key == en_key).map(|s| s.value_en.clone()).unwrap_or_else(|| code.clone());
+            (code, label_tr, label_en)
+        }).collect()
+    }
+
+    // =========================================================================
     // FAZ 2: %100 SQL MERKEZİLEŞTİRME — Translation Seed Methods
     // =========================================================================
 

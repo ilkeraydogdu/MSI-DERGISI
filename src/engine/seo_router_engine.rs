@@ -652,7 +652,7 @@ impl CentralSeoEngine {
 
         let list_elements: Vec<Value> = items
             .iter()
-            .take(12)
+            .take(crate::db::constants::HOMEPAGE_GRID_LIMIT)
             .enumerate()
             .map(|(i, c)| {
                 json!({
@@ -750,7 +750,7 @@ impl CentralSeoEngine {
 
         let has_part: Vec<Value> = sorted_issues
             .into_iter()
-            .take(16)
+            .take(crate::db::constants::HOMEPAGE_HERO_LIMIT + 4)
             .map(|iss| {
                 json!({
                     "@type": "PublicationIssue",
@@ -1028,7 +1028,7 @@ impl CentralSeoEngine {
         );
         xml.push('\n');
 
-        for item in contents.iter().take(200) {
+        for item in contents.iter().take(crate::db::constants::SEARCH_MAX_RESULTS) {
             let pub_iso = Self::to_iso8601_tr(&item.published_at);
             let is_en_only = item.title_tr.ends_with("(MSI TDR)") && !item.title_en.is_empty();
             let pub_lang = if is_en_only { "en" } else { "tr" };
@@ -1272,15 +1272,15 @@ Sitemap: {base}/rss.xml?lang=en
             let en_items: Vec<&ContentItem> = contents
                 .iter()
                 .filter(|c| !c.title_en.is_empty())
-                .take(40)
+                .take(crate::db::constants::SITEMAP_PREVIEW_LIMIT)
                 .collect();
             if en_items.is_empty() {
-                contents.iter().take(40).collect()
+                contents.iter().take(crate::db::constants::SITEMAP_PREVIEW_LIMIT).collect()
             } else {
                 en_items
             }
         } else {
-            contents.iter().take(40).collect()
+            contents.iter().take(crate::db::constants::SITEMAP_PREVIEW_LIMIT).collect()
         };
 
         for item in filtered {
@@ -1351,7 +1351,7 @@ Sitemap: {base}/rss.xml?lang=en
         let items: Vec<Value> = contents
             .iter()
             .filter(|c| !is_en || !c.title_en.is_empty())
-            .take(50)
+            .take(crate::db::constants::NEWSLETTER_RECIPIENT_LIMIT)
             .map(|c| {
                 let title = if is_en && !c.title_en.is_empty() {
                     &c.title_en
@@ -1458,7 +1458,7 @@ Sitemap: {base}/rss.xml?lang=en
         }
         out.push('\n');
 
-        let limit = if full { 350 } else { 40 };
+        let limit = if full { crate::db::constants::SITEMAP_FULL_LIMIT } else { crate::db::constants::SITEMAP_PREVIEW_LIMIT };
         out.push_str(&format!(
             "## Son Savunma Sanayii Haberleri, Özel Dosyalar ve Analizler (Toplam Arşiv: {} Makale)\n",
             contents.len()

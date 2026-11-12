@@ -1,4 +1,5 @@
 pub mod constants;
+pub mod query_helpers;
 pub mod repo;
 pub mod schema;
 pub mod seed;
@@ -69,10 +70,22 @@ impl Database {
             l1_cache: Arc::new(RwLock::new(None)),
         };
 
-        let conn = db
+        let mut conn = db
             .open_conn()
             .map_err(|e| format!("SQLite bağlantı hatası: {}", e))?;
         schema::init_schema(&conn).map_err(|e| format!("Şema başlatma hatası: {}", e))?;
+
+        // Phase 5: Run rusqlite_migration for schema version tracking
+        {
+            use rusqlite_migration::{Migrations, M};
+            let migrations = Migrations::new(vec![
+                M::up(include_str!("../../migrations/001_initial_schema.sql")),
+                M::up(include_str!("../../migrations/002_fts_sync.sql")),
+            ]);
+            if let Err(e) = migrations.to_latest(&mut conn) {
+                tracing::warn!("Migration uyarısı (non-fatal): {}", e);
+            }
+        }
 
         let content_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM contents", [], |r| r.get(0))

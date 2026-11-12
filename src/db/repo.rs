@@ -92,17 +92,12 @@ impl Database {
     }
 
     fn load_categories_db(&self) -> Vec<CategoryNode> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT id, slug, parent_slug, name_tr, name_en, group_type, description_tr, description_en, icon_class, sort_order, is_dynamic
              FROM categories ORDER BY sort_order ASC, id ASC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            Ok(CategoryNode {
+            [],
+            |r| Ok(CategoryNode {
                 id: r.get(0)?,
                 slug: r.get(1)?,
                 parent_slug: r.get(2)?,
@@ -114,12 +109,8 @@ impl Database {
                 icon_class: r.get(8)?,
                 sort_order: r.get(9)?,
                 is_dynamic: r.get::<_, i32>(10)? != 0,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            }),
+        )
     }
 
     pub fn get_category_by_slug(&self, slug: &str) -> Option<CategoryNode> {
@@ -162,29 +153,20 @@ impl Database {
     }
 
     fn load_ssb_tags_db(&self) -> Vec<SsbInterestTag> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT id, code, name_tr, name_en, category_group, sort_order
              FROM ssb_tags ORDER BY sort_order ASC, id ASC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            Ok(SsbInterestTag {
+            [],
+            |r| Ok(SsbInterestTag {
                 id: r.get(0)?,
                 code: r.get(1)?,
                 name_tr: r.get(2)?,
                 name_en: r.get(3)?,
                 category_group: r.get(4)?,
                 sort_order: r.get(5)?,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            }),
+        )
     }
 
     pub fn insert_ssb_tag(&self, tag: &SsbInterestTag) -> rusqlite::Result<i64> {
@@ -440,32 +422,36 @@ impl Database {
             |r| r.get(0),
         )?;
 
-        conn.execute(
+        // Batch junction-table writes: one prepared statement per table, reused across rows,
+        // wrapped in a single transaction so partial failures cannot leave orphaned links.
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
             "DELETE FROM content_placements WHERE content_id = ?1",
             params![content_id],
         )?;
-        for p in &item.placements {
-            conn.execute(
+        {
+            let mut stmt = tx.prepare_cached(
                 "INSERT OR IGNORE INTO content_placements (content_id, category_slug) VALUES (?1, ?2)",
-                params![content_id, p],
             )?;
+            // Always include primary content_type in placements as well
+            for p in item.placements.iter().chain(std::iter::once(&item.content_type)) {
+                stmt.execute(params![content_id, p])?;
+            }
         }
-        // Always include primary content_type in placements as well
-        conn.execute(
-            "INSERT OR IGNORE INTO content_placements (content_id, category_slug) VALUES (?1, ?2)",
-            params![content_id, item.content_type],
-        )?;
 
-        conn.execute(
+        tx.execute(
             "DELETE FROM content_ssb_tags WHERE content_id = ?1",
             params![content_id],
         )?;
-        for tag in &item.ssb_tags {
-            conn.execute(
+        {
+            let mut stmt = tx.prepare_cached(
                 "INSERT OR IGNORE INTO content_ssb_tags (content_id, ssb_code) VALUES (?1, ?2)",
-                params![content_id, tag],
             )?;
+            for tag in &item.ssb_tags {
+                stmt.execute(params![content_id, tag])?;
+            }
         }
+        tx.commit()?;
 
         drop(conn);
         self.refresh_l1_cache();
@@ -522,45 +508,38 @@ impl Database {
     }
 
     fn load_issues_db(&self) -> Vec<MagazineIssue> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT issue_number, slug, title_tr, title_en, publish_month_tr, publish_month_en,
                     year, cover_image, is_special_issue, event_name, page_count, dossier_count,
                     summary_tr, summary_en, pdf_path, spreads_json
              FROM magazine_issues
              ORDER BY issue_number DESC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            let spreads_raw: String = r.get(15)?;
-            let spreads: Vec<MagazinePageSpread> =
-                serde_json::from_str(&spreads_raw).unwrap_or_default();
-            Ok(MagazineIssue {
-                issue_number: r.get(0)?,
-                slug: r.get(1)?,
-                title_tr: r.get(2)?,
-                title_en: r.get(3)?,
-                publish_month_tr: r.get(4)?,
-                publish_month_en: r.get(5)?,
-                year: r.get(6)?,
-                cover_image: r.get(7)?,
-                is_special_issue: r.get::<_, i32>(8)? != 0,
-                event_name: r.get(9)?,
-                page_count: r.get(10)?,
-                dossier_count: r.get(11)?,
-                summary_tr: r.get(12)?,
-                summary_en: r.get(13)?,
-                pdf_path: r.get(14)?,
-                spreads,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            [],
+            |r| {
+                let spreads_raw: String = r.get(15)?;
+                let spreads: Vec<MagazinePageSpread> =
+                    serde_json::from_str(&spreads_raw).unwrap_or_default();
+                Ok(MagazineIssue {
+                    issue_number: r.get(0)?,
+                    slug: r.get(1)?,
+                    title_tr: r.get(2)?,
+                    title_en: r.get(3)?,
+                    publish_month_tr: r.get(4)?,
+                    publish_month_en: r.get(5)?,
+                    year: r.get(6)?,
+                    cover_image: r.get(7)?,
+                    is_special_issue: r.get::<_, i32>(8)? != 0,
+                    event_name: r.get(9)?,
+                    page_count: r.get(10)?,
+                    dossier_count: r.get(11)?,
+                    summary_tr: r.get(12)?,
+                    summary_en: r.get(13)?,
+                    pdf_path: r.get(14)?,
+                    spreads,
+                })
+            },
+        )
     }
 
     pub fn get_issue_by_number(&self, issue_number: i32) -> Option<MagazineIssue> {
@@ -808,53 +787,46 @@ impl Database {
     }
 
     fn load_ads_db(&self) -> Vec<AdCampaign> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT id, slot_code, badge_label, dimensions, sponsor_name, sponsor_type, pill_style,
                     title_tr, title_en, desc_tr, desc_en, target_url, image_url,
                     budget_score, is_default_fallback, is_floating_popup, is_newsletter_ad,
                     target_categories_json, target_ssb_tags_json, target_institutions_json,
                     impressions_count, clicks_count, is_active
              FROM ad_campaigns ORDER BY id ASC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            let cat_raw: String = r.get(17)?;
-            let ssb_raw: String = r.get(18)?;
-            let inst_raw: String = r.get(19)?;
-            Ok(AdCampaign {
-                id: r.get(0)?,
-                slot_code: r.get(1)?,
-                badge_label: r.get(2)?,
-                dimensions: r.get(3)?,
-                sponsor_name: r.get(4)?,
-                sponsor_type: r.get(5)?,
-                pill_style: r.get(6)?,
-                title_tr: r.get(7)?,
-                title_en: r.get(8)?,
-                desc_tr: r.get(9)?,
-                desc_en: r.get(10)?,
-                target_url: r.get(11)?,
-                image_url: r.get(12)?,
-                budget_score: r.get(13)?,
-                is_default_fallback: r.get::<_, i32>(14)? != 0,
-                is_floating_popup: r.get::<_, i32>(15)? != 0,
-                is_newsletter_ad: r.get::<_, i32>(16)? != 0,
-                target_categories: serde_json::from_str(&cat_raw).unwrap_or_default(),
-                target_ssb_tags: serde_json::from_str(&ssb_raw).unwrap_or_default(),
-                target_institutions: serde_json::from_str(&inst_raw).unwrap_or_default(),
-                impressions_count: r.get(20)?,
-                clicks_count: r.get(21)?,
-                is_active: r.get::<_, i32>(22)? != 0,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            [],
+            |r| {
+                let cat_raw: String = r.get(17)?;
+                let ssb_raw: String = r.get(18)?;
+                let inst_raw: String = r.get(19)?;
+                Ok(AdCampaign {
+                    id: r.get(0)?,
+                    slot_code: r.get(1)?,
+                    badge_label: r.get(2)?,
+                    dimensions: r.get(3)?,
+                    sponsor_name: r.get(4)?,
+                    sponsor_type: r.get(5)?,
+                    pill_style: r.get(6)?,
+                    title_tr: r.get(7)?,
+                    title_en: r.get(8)?,
+                    desc_tr: r.get(9)?,
+                    desc_en: r.get(10)?,
+                    target_url: r.get(11)?,
+                    image_url: r.get(12)?,
+                    budget_score: r.get(13)?,
+                    is_default_fallback: r.get::<_, i32>(14)? != 0,
+                    is_floating_popup: r.get::<_, i32>(15)? != 0,
+                    is_newsletter_ad: r.get::<_, i32>(16)? != 0,
+                    target_categories: serde_json::from_str(&cat_raw).unwrap_or_default(),
+                    target_ssb_tags: serde_json::from_str(&ssb_raw).unwrap_or_default(),
+                    target_institutions: serde_json::from_str(&inst_raw).unwrap_or_default(),
+                    impressions_count: r.get(20)?,
+                    clicks_count: r.get(21)?,
+                    is_active: r.get::<_, i32>(22)? != 0,
+                })
+            },
+        )
     }
 
     pub fn upsert_ad(&self, ad: &AdCampaign) -> rusqlite::Result<i64> {
@@ -1094,35 +1066,28 @@ impl Database {
     }
 
     fn load_subscription_plans_db(&self) -> Vec<SubscriptionPlan> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT code, name_tr, name_en, price_try, period_label_tr, period_label_en,
                     features_tr_json, features_en_json, is_featured
              FROM subscription_plans ORDER BY sort_order ASC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            let f_tr: String = r.get(6)?;
-            let f_en: String = r.get(7)?;
-            Ok(SubscriptionPlan {
-                code: r.get(0)?,
-                name_tr: r.get(1)?,
-                name_en: r.get(2)?,
-                price_try: r.get(3)?,
-                period_label_tr: r.get(4)?,
-                period_label_en: r.get(5)?,
-                features_tr: serde_json::from_str(&f_tr).unwrap_or_default(),
-                features_en: serde_json::from_str(&f_en).unwrap_or_default(),
-                is_featured: r.get::<_, i32>(8)? != 0,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            [],
+            |r| {
+                let f_tr: String = r.get(6)?;
+                let f_en: String = r.get(7)?;
+                Ok(SubscriptionPlan {
+                    code: r.get(0)?,
+                    name_tr: r.get(1)?,
+                    name_en: r.get(2)?,
+                    price_try: r.get(3)?,
+                    period_label_tr: r.get(4)?,
+                    period_label_en: r.get(5)?,
+                    features_tr: serde_json::from_str(&f_tr).unwrap_or_default(),
+                    features_en: serde_json::from_str(&f_en).unwrap_or_default(),
+                    is_featured: r.get::<_, i32>(8)? != 0,
+                })
+            },
+        )
     }
 
     pub fn get_commerce_products(&self) -> Vec<CommerceProduct> {
@@ -1135,19 +1100,14 @@ impl Database {
     }
 
     fn load_commerce_products_db(&self) -> Vec<CommerceProduct> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT id, sku, product_type, title_tr, title_en, author_or_source,
                     description_tr, description_en, price_try, cover_image,
                     file_resolution_or_pages, is_available
              FROM commerce_products ORDER BY id ASC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            Ok(CommerceProduct {
+            [],
+            |r| Ok(CommerceProduct {
                 id: r.get(0)?,
                 sku: r.get(1)?,
                 product_type: r.get(2)?,
@@ -1160,12 +1120,8 @@ impl Database {
                 cover_image: r.get(9)?,
                 file_resolution_or_pages: r.get(10)?,
                 is_available: r.get::<_, i32>(11)? != 0,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            }),
+        )
     }
 
     pub fn get_order_invoices(&self) -> Vec<OrderInvoice> {
@@ -1554,28 +1510,19 @@ impl Database {
     }
 
     fn load_site_settings_db(&self) -> Vec<SiteSetting> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT key, value_tr, value_en, setting_group, updated_at
              FROM site_settings ORDER BY setting_group ASC, key ASC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            Ok(SiteSetting {
+            [],
+            |r| Ok(SiteSetting {
                 key: r.get(0)?,
                 value_tr: r.get(1)?,
                 value_en: r.get(2)?,
                 setting_group: r.get(3)?,
                 updated_at: r.get(4)?,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            }),
+        )
     }
 
     pub fn get_setting_map(&self, lang: &str) -> HashMap<String, String> {
@@ -1654,19 +1601,14 @@ impl Database {
     }
 
     fn load_notifications_db(&self) -> Vec<SystemNotification> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT id, target_audience, target_email, notification_type, severity,
                     title_tr, title_en, message_tr, message_en, action_url,
                     is_read, is_active_banner, created_at
              FROM system_notifications ORDER BY id DESC LIMIT 100",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            Ok(SystemNotification {
+            [],
+            |r| Ok(SystemNotification {
                 id: r.get(0)?,
                 target_audience: r.get(1)?,
                 target_email: r.get(2)?,
@@ -1680,12 +1622,8 @@ impl Database {
                 is_read: r.get::<_, i32>(10)? != 0,
                 is_active_banner: r.get::<_, i32>(11)? != 0,
                 created_at: r.get(12)?,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            }),
+        )
     }
 
     pub fn insert_notification(&self, notif: &SystemNotification) -> rusqlite::Result<i64> {

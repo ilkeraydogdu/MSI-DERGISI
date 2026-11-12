@@ -378,3 +378,46 @@
     </div>
   </form>
 </dialog>
+
+<dialog
+  id="gallery-lightbox"
+  class="ui-dialog lightbox-dialog"
+  aria-labelledby="lightbox-caption"
+>
+  <div class="lightbox-topbar">
+    <span class="eyebrow" id="lightbox-counter">GÖRSEL GALERİ</span>
+    <div class="lightbox-actions">
+      <a
+        id="lightbox-raw-link"
+        class="text-link"
+        href="#"
+        target="_blank"
+        rel="noopener"
+        >Tam boy aç ↗</a
+      >
+      <button class="icon-button" data-close-dialog aria-label="Kapat">×</button>
+    </div>
+  </div>
+  <div class="lightbox-stage">
+    <button
+      type="button"
+      class="button secondary lightbox-nav"
+      data-lightbox-prev
+      aria-label="Önceki görsel"
+    >
+      ←
+    </button>
+    <figure class="lightbox-figure">
+      <img id="lightbox-img" alt="" />
+      <figcaption id="lightbox-caption"></figcaption>
+    </figure>
+    <button
+      type="button"
+      class="button secondary lightbox-nav"
+      data-lightbox-next
+      aria-label="Sonraki görsel"
+    >
+      →
+    </button>
+  </div>
+</dialog>

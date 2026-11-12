@@ -583,7 +583,7 @@ fn render_section(
             };
             let (cw, ch) = image_dimensions(&i.cover_image).unwrap_or((960, 1200));
             return format!(
-                r#"<section class="magazine-hero container" data-hero-section><div class="hero-copy"><div class="eyebrow"><span class="accent-rule"></span>{eyebrow}</div><h1>{title}</h1><p class="hero-description">{description}</p><div class="hero-actions"><button class="button primary" data-open-issue="{number}">{number}. sayıyı canlı incele {arrow}</button><a class="text-link" href="{link}">{link_label} {arrow}</a></div><div class="hero-metrics" aria-label="Yayın göstergeleri"><div><strong>22+ Yıl</strong><span>KESİNTİSİZ OTORİTE</span></div><div><strong>{number}+ Sayı</strong><span>STRATEJİK HAFIZA</span></div><div><strong>TR · EN</strong><span>KÜRESEL REFERANS</span></div></div><div class="hero-footnote"><span>BAĞIMSIZ SAVUNMA İSTİHBARATI</span><span>SAVUNMA · HAVACILIK · UZAY · DENİZCİLİK</span></div></div><div class="hero-cover-stage" data-hero-stage data-issue-number="{number}"><div class="stage-topbar"><span class="stage-live-pill"><span class="live-dot" aria-hidden="true"></span>CANLI DİJİTAL KİOSK · SAYI {number}</span>{spread_tabs}</div><span class="cover-index" aria-hidden="true">{number}<small>REFERANS SAYI</small></span><div class="hero-mockup-3d" data-tilt-card><button class="hero-cover" data-open-issue="{number}" aria-label="{issue_title}"><img src="{cover}" alt="{issue_title}" width="{cw}" height="{ch}" fetchpriority="high"><span class="cover-sheen" aria-hidden="true"></span></button></div>{live_dossier}<div class="cover-caption"><span>{month} {year} · ISSN 1306-0309</span><span>{pages} sayfa · {dossiers} özel dosya</span></div></div></section>"#,
+                r#"<div class="hero-stage-band"><section class="magazine-hero container" data-hero-section><div class="hero-copy"><div class="eyebrow"><span class="accent-rule"></span>{eyebrow}</div><h1>{title}</h1><p class="hero-description">{description}</p><div class="hero-actions"><button class="button primary" data-open-issue="{number}">{number}. sayıyı canlı incele {arrow}</button><a class="text-link" href="{link}">{link_label} {arrow}</a></div><div class="hero-metrics" aria-label="Yayın göstergeleri"><div><strong>22+ Yıl</strong><span>KESİNTİSİZ OTORİTE</span></div><div><strong>{number}+ Sayı</strong><span>STRATEJİK HAFIZA</span></div><div><strong>TR · EN</strong><span>KÜRESEL REFERANS</span></div></div><div class="hero-footnote"><span>BAĞIMSIZ SAVUNMA İSTİHBARATI</span><span>SAVUNMA · HAVACILIK · UZAY · DENİZCİLİK</span></div></div><div class="hero-cover-stage" data-hero-stage data-issue-number="{number}"><div class="stage-topbar"><span class="stage-live-pill"><span class="live-dot" aria-hidden="true"></span>CANLI DİJİTAL KİOSK · SAYI {number}</span>{spread_tabs}</div><span class="cover-index" aria-hidden="true">{number}<small>REFERANS SAYI</small></span><div class="hero-mockup-3d" data-tilt-card><button class="hero-cover" data-open-issue="{number}" aria-label="{issue_title}"><img src="{cover}" alt="{issue_title}" width="{cw}" height="{ch}" fetchpriority="high"><span class="cover-sheen" aria-hidden="true"></span></button></div>{live_dossier}<div class="cover-caption"><span>{month} {year} · ISSN 1306-0309</span><span>{pages} sayfa · {dossiers} özel dosya</span></div></div></section></div>"#,
                 eyebrow = esc(&s.eyebrow),
                 title = esc(&s.title).replace('\n', "<br>"),
                 description = esc(&s.description),
@@ -717,19 +717,46 @@ fn render_section(
             d.plans
                 .iter()
                 .take(s.limit)
-                .map(|p| format!(
-                    "<article class=\"plan-card\"><div class=\"eyebrow\">{}</div><h3>{}</h3><div class=\"plan-price\">₺{:.0}</div><p>{}</p><ul>{}</ul><a class=\"button primary\" href=\"/kurumsal/iletisim\" data-select-plan=\"{}\">Planı incele {}</a></article>",
-                    if p.is_featured { "ÖNERİLEN PLAN" } else { "ABONELİK" },
-                    esc(localized(d.lang, &p.name_tr, &p.name_en)),
-                    p.price_try,
-                    esc(localized(d.lang, &p.period_label_tr, &p.period_label_en)),
-                    (if d.lang == "en" { &p.features_en } else { &p.features_tr })
-                        .iter()
-                        .map(|f| format!("<li>{}</li>", esc(f)))
-                        .collect::<String>(),
-                    esc(&p.code),
-                    icon("arrow")
-                ))
+                .map(|p| {
+                    let card_cls = if p.is_featured {
+                        "plan-card is-featured"
+                    } else {
+                        "plan-card"
+                    };
+                    let btn_cls = if p.is_featured {
+                        "button primary"
+                    } else {
+                        "button secondary"
+                    };
+                    let eyebrow_lbl = if p.is_featured {
+                        if d.lang == "en" {
+                            "RECOMMENDED PLAN"
+                        } else {
+                            "ÖNERİLEN PLAN"
+                        }
+                    } else if d.lang == "en" {
+                        "SUBSCRIPTION"
+                    } else {
+                        "ABONELİK"
+                    };
+                    let cta_lbl = if d.lang == "en" {
+                        "Explore plan"
+                    } else {
+                        "Planı incele"
+                    };
+                    format!(
+                        "<article class=\"{card_cls}\"><div class=\"eyebrow\">{eyebrow_lbl}</div><h3>{}</h3><div class=\"plan-price\">₺{:.0}</div><p>{}</p><ul>{}</ul><a class=\"{btn_cls}\" href=\"/kurumsal/iletisim\" data-select-plan=\"{}\">{cta_lbl} {}</a></article>",
+                        esc(localized(d.lang, &p.name_tr, &p.name_en)),
+                        p.price_try,
+                        esc(localized(d.lang, &p.period_label_tr, &p.period_label_en)),
+                        (if d.lang == "en" { &p.features_en } else { &p.features_tr })
+                            .iter()
+                            .map(|f| format!("<li>{}</li>", esc(f)))
+                            .collect::<String>(),
+                        esc(&p.code),
+                        icon("arrow")
+                    )
+                })
                 .collect::<String>()
         ),
         SectionKind::Products => format!(
@@ -750,12 +777,24 @@ fn render_section(
                 .collect::<String>()
         ),
     };
+    let kind_slug = match s.kind {
+        SectionKind::Articles => "articles",
+        SectionKind::Issues => "issues",
+        SectionKind::Topics => "topics",
+        SectionKind::Plans => "plans",
+        SectionKind::Products => "products",
+        SectionKind::Text => "text",
+        SectionKind::MagazineHero => "hero",
+        SectionKind::NewsHero => "news-hero",
+        SectionKind::Banner => "banner",
+        SectionKind::Cta => "cta",
+    };
     let mut section = s.clone();
     if matches!(s.kind, SectionKind::Text) {
         section.description.clear();
     }
     format!(
-        "<section class=\"container section-space\" data-section=\"{index}\">{}{content}</section>",
+        "<div class=\"section-band section-band-{kind_slug}\" data-band-index=\"{index}\"><section class=\"container section-space\" data-section=\"{index}\">{}{content}</section></div>",
         heading(&section)
     )
 }

@@ -48,21 +48,63 @@ pub fn render_with_nonce(
         .iter()
         .map(|n| format!("<a href=\"{}\">{}</a>", link(&n.href), esc(&n.label)))
         .collect();
-    let category_links: String = categories
-        .iter()
-        .filter(|c| {
-            c.group_type == "icerikler"
-                || c.group_type == "gruplandirilmis"
-                || c.group_type == "etkinlik-dosyasi"
-        })
-        .map(|c| {
-            format!(
-                "<a href=\"/kategori/{}\">{}</a>",
-                esc(&c.slug),
-                esc(localized(lang, &c.name_tr, &c.name_en))
-            )
-        })
-        .collect();
+    let canonical_editorial_skip = [
+        "basyazi",
+        "kapak-dosyalari",
+        "ozel-dosyalar",
+        "advertorial",
+        "dergi-icerikleri",
+        "etkinlikler",
+        "etkinlik-ozel-sayilari",
+        "etkinlik-sonrasi-ozel-dosyalar",
+        "highlights",
+        "feature",
+    ];
+    let mut seen_mega_labels = std::collections::HashSet::new();
+    let mut editorial_mega_links = String::new();
+    let mut dossier_mega_links = String::new();
+    for c in categories {
+        if canonical_editorial_skip.contains(&c.slug.as_str()) {
+            continue;
+        }
+        let raw_label = localized(lang, &c.name_tr, &c.name_en);
+        let display_label = if c.slug == "ni" && raw_label.trim().eq_ignore_ascii_case("NI") {
+            if lang == "en" {
+                "NI Test & Measurement Dossier"
+            } else {
+                "NI Test ve Ölçüm Dosyası"
+            }
+        } else {
+            raw_label
+        };
+        let norm_key = display_label.trim().to_lowercase();
+        if !seen_mega_labels.insert(norm_key) {
+            continue;
+        }
+        let item_html = format!(
+            "<a href=\"/kategori/{}\">{}</a>",
+            esc(&c.slug),
+            esc(display_label)
+        );
+        if c.group_type == "etkinlik-dosyasi" {
+            dossier_mega_links.push_str(&item_html);
+        } else if c.group_type == "icerikler" || c.group_type == "gruplandirilmis" {
+            editorial_mega_links.push_str(&item_html);
+        }
+    }
+    let sec_lbl = if lang == "en" {
+        "EDITORIAL SECTIONS"
+    } else {
+        "YAYIN BÖLÜMLERİ"
+    };
+    let dos_lbl = if lang == "en" {
+        "EXHIBITION & SPECIAL DOSSIERS"
+    } else {
+        "FUAR, KONFERANS VE ÖZEL DOSYALAR"
+    };
+    let category_links = format!(
+        "<div class=\"mega-section\"><div class=\"mega-section-title\">{sec_lbl}</div><div class=\"mega-links-grid\">{editorial_mega_links}</div></div><div class=\"mega-section\"><div class=\"mega-section-title\">{dos_lbl}</div><div class=\"mega-links-grid\">{dossier_mega_links}</div></div>"
+    );
     let public_notifications: Vec<_> = notifications
         .iter()
         .filter(|n| {

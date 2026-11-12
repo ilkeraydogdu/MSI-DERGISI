@@ -345,7 +345,7 @@ pub async fn render_category_page(
     // Unified query via CentralContentQueryEngine — replaces scattered filter/pagination logic.
     let mut criteria = CentralContentQueryEngine::from_params(&params);
     criteria.category = Some(slug.clone());
-    criteria.per_page = Some(24);
+    criteria.per_page = Some(crate::db::constants::DEFAULT_PAGE_SIZE);
     let query_result = CentralContentQueryEngine::execute(&state.db, &criteria);
     let total_items = query_result.total_count;
     let total_pages = query_result.total_pages;
@@ -365,15 +365,36 @@ pub async fn render_category_page(
                     .iter()
                     .filter(|it| CentralSearchEngine::item_matches_category(it, &sc.slug))
                     .count();
-                let sc_title = esc(localized(&lang, &sc.name_tr, &sc.name_en));
+                let raw_sc_title = localized(&lang, &sc.name_tr, &sc.name_en);
+                let sc_title = if sc.slug == "ni" && raw_sc_title.trim().eq_ignore_ascii_case("NI") {
+                    if lang == "en" {
+                        esc("NI Test & Measurement Systems Special Dossier")
+                    } else {
+                        esc("NI Test ve Ölçüm Sistemleri Özel Dosyası")
+                    }
+                } else {
+                    esc(raw_sc_title)
+                };
                 let sc_desc = esc(localized(&lang, &sc.description_tr, &sc.description_en));
+                let badge_kicker = if lang == "en" {
+                    "SPECIAL DOSSIER"
+                } else {
+                    "ÖZEL DOSYA"
+                };
+                let open_lbl = if lang == "en" {
+                    "Explore dossier"
+                } else {
+                    "Dosyayı incele"
+                };
                 format!(
-                    r#"<a class="subdossier-card" href="/kategori/{slug}"><div class="subdossier-badge">{title}</div><div class="subdossier-copy"><h3>{title}</h3><p>{desc}</p><span>{cnt} {cnt_lbl} →</span></div></a>"#,
+                    r#"<a class="subdossier-card" href="/kategori/{slug}"><div class="subdossier-badge"><span class="subdossier-kicker">{kicker}</span><span class="subdossier-count">{cnt} {cnt_lbl}</span></div><div class="subdossier-copy"><h3>{title}</h3><p>{desc}</p><span>{open_lbl} →</span></div></a>"#,
                     slug = esc(&sc.slug),
+                    kicker = badge_kicker,
                     title = sc_title,
                     desc = sc_desc,
                     cnt = sc_count,
-                    cnt_lbl = if lang == "en" { "articles" } else { "içerik" }
+                    cnt_lbl = if lang == "en" { "articles" } else { "içerik" },
+                    open_lbl = open_lbl
                 )
             })
             .collect();
@@ -623,7 +644,7 @@ pub async fn render_search_page(
     let mut criteria = CentralContentQueryEngine::from_params(&params);
     criteria.sort_by = criteria.sort_by.or_else(|| Some("latest".to_string()));
     criteria.lang = Some(lang.clone());
-    criteria.limit = Some(60);
+    criteria.limit = Some(crate::db::constants::ADMIN_LIST_LIMIT);
 
     let _query_result = CentralContentQueryEngine::execute(&state.db, &criteria);
 

@@ -1291,8 +1291,8 @@ pub fn seed_site_settings_and_notifications(conn: &Connection) -> rusqlite::Resu
         ),
         (
             "primary_accent_color",
-            "#c4122f",
-            "#c4122f",
+            "#c91818",
+            "#c91818",
             "theme",
             "2026-11-07 10:00:00",
         ),

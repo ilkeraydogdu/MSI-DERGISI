@@ -136,6 +136,16 @@
         return 'anasayfa-vitrin';
     }
 
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function isGovEmail(email) {
         if (!email || !email.includes('@')) return false;
         const domain = email.trim().toLowerCase().split('@')[1] || '';
@@ -220,8 +230,8 @@
         modal.className = 'msi-fs-modal-backdrop';
         modal.setAttribute('aria-hidden', 'true');
 
-        const userNameDefault = (state.user && state.user.full_name) || 'Alb. Murat Yilmaz';
-        const orgNameDefault = (state.user && state.user.organization_name) || 'MSB / SSB Kurumsal Paydas';
+        const userNameDefault = escapeHtml((state.user && state.user.full_name) || 'Alb. Murat Yilmaz');
+        const orgNameDefault = escapeHtml((state.user && state.user.organization_name) || 'MSB / SSB Kurumsal Paydas');
 
         modal.innerHTML = `
             <div class="msi-fs-modal-dialog modal-xl" role="dialog" aria-modal="true" aria-labelledby="msi-mag-modal-title">
@@ -319,15 +329,15 @@
 
         container.innerHTML = `
             <div style="text-align:center;">
-                <img src="${sp.image_url}" alt="${title}" style="width:100%; max-height:240px; object-fit:cover; border-radius:8px; border:1px solid var(--msi-border, #E2E8F0);">
+                <img src="${escapeHtml(sp.image_url)}" alt="${escapeHtml(title)}" style="width:100%; max-height:240px; object-fit:cover; border-radius:8px; border:1px solid var(--msi-border, #E2E8F0);">
             </div>
             <div>
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                    <span class="msi-badge msi-badge-red">${sp.category_badge}</span>
-                    <span class="msi-badge msi-badge-slate">${sp.page_no}</span>
+                    <span class="msi-badge msi-badge-red">${escapeHtml(sp.category_badge)}</span>
+                    <span class="msi-badge msi-badge-slate">${escapeHtml(sp.page_no)}</span>
                 </div>
-                <h4 style="color:var(--msi-text-heading, #0F172A); font-size:18px; font-weight:800; line-height:1.35; margin-bottom:10px;">${title}</h4>
-                <p style="color:var(--msi-text-body, #334155); font-size:13.5px; line-height:1.65; margin-bottom:12px;">${excerpt}</p>
+                <h4 style="color:var(--msi-text-heading, #0F172A); font-size:18px; font-weight:800; line-height:1.35; margin-bottom:10px;">${escapeHtml(title)}</h4>
+                <p style="color:var(--msi-text-body, #334155); font-size:13.5px; line-height:1.65; margin-bottom:12px;">${escapeHtml(excerpt)}</p>
                 <div style="font-size:11.5px; color:var(--msi-text-muted, #64748B);">
                     <i class="fas fa-shield-alt text-danger me-1"></i>
                     Kurumsal E-Dergi Kiosk • Tam Çözünürlüklü Vektörel PDF ve Sayfa Bazlı Arşiv İndirme Hazır
@@ -339,7 +349,7 @@
             const u = document.getElementById('pdf-wm-user')?.value || 'Kayitli Okur';
             const o = document.getElementById('pdf-wm-org')?.value || 'MSB / SSB Kurumsal';
             const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
-            wmPreview.innerHTML = `<i class="fas fa-fingerprint me-1"></i> <strong>CANLI FİLİGRAN ÖNİZLEMESİ:</strong> MSB/SSB/KURUMSAL LISANS: ${u} (${o}) - TARIH: ${ts} - DRM KODU: MSI-DRM-2026-VERIFIED`;
+            wmPreview.innerHTML = `<i class="fas fa-fingerprint me-1"></i> <strong>CANLI FİLİGRAN ÖNİZLEMESİ:</strong> MSB/SSB/KURUMSAL LISANS: ${escapeHtml(u)} (${escapeHtml(o)}) - TARIH: ${escapeHtml(ts)} - DRM KODU: MSI-DRM-2026-VERIFIED`;
         }
     }
 

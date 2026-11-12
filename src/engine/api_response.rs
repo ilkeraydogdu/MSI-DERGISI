@@ -68,42 +68,10 @@ pub mod msg_keys {
     pub const VALIDATION_ERROR: &str = "api.error.validation_error";
 }
 
-/// Seed API-specific translation keys into the database if they don't exist.
-pub fn seed_api_translations(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
-    let entries: Vec<(&str, &str, &str)> = vec![
-        (msg_keys::CONTENT_NOT_FOUND, "İçerik bulunamadı", "Content not found"),
-        (msg_keys::INVALID_EMAIL, "Geçerli bir kurumsal e-posta adresi giriniz.", "Please enter a valid corporate email address."),
-        (msg_keys::EMAIL_ALREADY_EXISTS, "Bu e-posta ile bir hesap zaten var. Lütfen giriş yapın.", "An account with this email already exists. Please log in."),
-        (msg_keys::REGISTRATION_FIELDS_REQUIRED, "Ad soyad, en az 8 karakterli şifre ve KVKK onayı gerekli.", "Full name, minimum 8-character password and KVKK consent are required."),
-        (msg_keys::KVKK_CONSENT_REQUIRED, "Ad soyad, en az 8 karakterli şifre ve KVKK aydınlatma beyanı gerekli.", "Full name, minimum 8-character password and KVKK disclosure statement are required."),
-        (msg_keys::LOGIN_FAILED, "E-posta veya şifre hatalı.", "Invalid email or password."),
-        (msg_keys::AUTH_REQUIRED_PDF, "E-Dergi PDF indirmek için abone girişi yapınız.", "Subscriber login required to download E-Magazine PDF."),
-        (msg_keys::SUBSCRIBER_ACCESS_REQUIRED, "PDF indirme yetkisi aktif MSI Dergisi abonelerine ve onaylı kamu personeline özeldir.", "PDF download access is exclusive to active MSI Magazine subscribers and verified government personnel."),
-        (msg_keys::ISSUE_NOT_FOUND, "İstenen dergi sayısı bulunamadı.", "Requested magazine issue not found."),
-        (msg_keys::CHECKOUT_FIELDS_REQUIRED, "Geçerli ad soyad ve e-posta adresi zorunludur.", "Valid full name and email address are required."),
-        (msg_keys::DISTANCE_SALES_CONSENT_REQUIRED, "6502 sayılı Kanun gereğince Ön Bilgilendirme Formu ve Mesafeli Satış Sözleşmesi onayı zorunludur.", "Preliminary Information Form and Distance Sales Agreement consent required per Law No. 6502."),
-        (msg_keys::PLAN_NOT_FOUND, "Seçilen abonelik planı veya yayın katalogda bulunamadı.", "Selected subscription plan or publication not found in catalog."),
-        (msg_keys::INVALID_FILE_TYPE, "Yalnızca .webp, .png, .jpg, .svg, .pdf ve .mp4 dosyaları yüklenebilir.", "Only .webp, .png, .jpg, .svg, .pdf and .mp4 files can be uploaded."),
-        (msg_keys::FILE_TOO_LARGE, "Dosya boş veya 25 MB sınırını aşıyor.", "File is empty or exceeds the 25 MB limit."),
-        (msg_keys::UPLOAD_NO_FIELD, "Yüklenecek dosya alanı bulunamadı.", "No file field found for upload."),
-        (msg_keys::SERVER_ERROR_GENERIC, "Bir sunucu hatası oluştu. Lütfen tekrar deneyin.", "A server error occurred. Please try again."),
-        (msg_keys::SERVER_ERROR_SAVE, "Kaydedilirken bir sunucu hatası oluştu.", "A server error occurred while saving."),
-        (msg_keys::SERVER_ERROR_UPLOAD, "Dosya yükleme sırasında bir sunucu hatası oluştu.", "A server error occurred during file upload."),
-        (msg_keys::SERVER_ERROR_FILE_WRITE, "Dosya kaydedilirken bir sunucu hatası oluştu.", "A server error occurred while saving the file."),
-        (msg_keys::SERVER_ERROR_ORDER, "Sipariş kaydı oluşturulurken bir sunucu hatası oluştu. Lütfen tekrar deneyin.", "A server error occurred while creating the order record. Please try again."),
-        (msg_keys::SERVER_ERROR_AD_SAVE, "Reklam kaydedilirken bir sunucu hatası oluştu.", "A server error occurred while saving the advertisement."),
-        (msg_keys::BAD_REQUEST, "Geçersiz istek.", "Bad request."),
-        (msg_keys::VALIDATION_ERROR, "Doğrulama hatası. Lütfen girdilerinizi kontrol edin.", "Validation error. Please check your input."),
-    ];
-
-    for (key, tr, en) in &entries {
-        conn.execute(
-            "INSERT OR IGNORE INTO translations (key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp)
-             VALUES (?1, ?2, ?3, '', '', '', '', 'api')",
-            rusqlite::params![key, tr, en],
-        )?;
-    }
-    Ok(())
+/// Seed API-specific translation keys via centralized repo method.
+/// Raw SQL removed — now delegates to Database::seed_api_translations().
+pub fn seed_api_translations(db: &crate::db::Database) -> Result<(), String> {
+    db.seed_api_translations().map_err(|e| format!("API translation seed hatası: {}", e))
 }
 
 // ---------------------------------------------------------------------------

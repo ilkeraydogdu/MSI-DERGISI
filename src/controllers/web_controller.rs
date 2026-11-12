@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
 };
@@ -12,6 +12,7 @@ use crate::engine::{
     design_engine,
     query_engine::CentralQueryEngine,
     search_engine,
+    security_engine::CspNonce,
     seo_router_engine::{self, CentralSeoEngine},
 };
 use crate::models::{ContentItem, SearchFilterQuery, SeoMetaBundle};
@@ -70,6 +71,7 @@ pub async fn render_home(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let t0 = Instant::now();
     let lang = detect_language(&params, &headers);
@@ -130,7 +132,7 @@ pub async fn render_home(
     );
 
     let exec_us = t0.elapsed().as_micros();
-    let full_html = design_engine::render_master_shell(
+    let full_html = design_engine::render_master_shell_with_nonce(
         &lang,
         &domain_mode,
         &settings_map,
@@ -142,6 +144,7 @@ pub async fn render_home(
         &snap.data.notifications,
         &body_html,
         exec_us,
+        Some(&csp_nonce.0),
     );
 
     Html(full_html).into_response()
@@ -166,12 +169,13 @@ fn render_shell_with_seo(
     mode: &str,
     seo: &SeoMetaBundle,
     main_body_html: &str,
+    nonce: Option<&str>,
 ) -> String {
     let t0 = Instant::now();
     let snap = CentralQueryEngine::snapshot(&state.db);
     let settings_map = state.db.get_setting_map(lang);
     let exec_us = t0.elapsed().as_micros();
-    design_engine::render_master_shell(
+    design_engine::render_master_shell_with_nonce(
         lang,
         mode,
         &settings_map,
@@ -183,6 +187,7 @@ fn render_shell_with_seo(
         &snap.data.notifications,
         main_body_html,
         exec_us,
+        nonce,
     )
 }
 
@@ -194,6 +199,7 @@ fn render_shared_shell(
     canonical_path: Option<&str>,
     article_opt: Option<&ContentItem>,
     noindex: bool,
+    nonce: Option<&str>,
 ) -> String {
     let path = canonical_path
         .map(|s| {
@@ -244,7 +250,7 @@ fn render_shared_shell(
         seo.robots = "noindex, follow".to_string();
     }
 
-    render_shell_with_seo(state, lang, "magazine", &seo, main_body_html)
+    render_shell_with_seo(state, lang, "magazine", &seo, main_body_html, nonce)
 }
 
 pub async fn render_article_detail(
@@ -252,9 +258,19 @@ pub async fn render_article_detail(
     Path(slug): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let Some(item) = state.db.get_content_by_slug(&slug) else {
+        for cand in [
+            format!("/icerik/{}", slug),
+            format!("/haberler/{}", slug),
+            format!("/en/haberler/{}", slug),
+        ] {
+            if let Some(rule) = state.db.find_seo_redirect(&cand) {
+                return Redirect::permanent(&rule.new_path).into_response();
+            }
+        }
         return render_not_found(State(state), headers).await;
     };
     let user = authenticated_reader(&state, &headers);
@@ -292,6 +308,7 @@ pub async fn render_article_detail(
         Some(&canonical_path),
         Some(&item),
         false,
+        Some(&csp_nonce.0),
     ))
     .into_response()
 }
@@ -301,6 +318,7 @@ pub async fn render_category_page(
     Path(slug): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     use crate::engine::{
         content_query_engine::CentralContentQueryEngine,
@@ -491,13 +509,14 @@ pub async fn render_category_page(
         seo.robots = "noindex, follow".to_string();
     }
 
-    Html(render_shell_with_seo(&state, &lang, "magazine", &seo, &body)).into_response()
+    Html(render_shell_with_seo(&state, &lang, "magazine", &seo, &body, Some(&csp_nonce.0))).into_response()
 }
 
 pub async fn render_edergi_kiosk(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     use crate::engine::design::components::{render_page, PageData};
     let lang = detect_language(&params, &headers);
@@ -531,7 +550,7 @@ pub async fn render_edergi_kiosk(
         &state.config.primary_domain,
         &state.config.news_domain,
     );
-    Html(design_engine::render_master_shell(
+    Html(design_engine::render_master_shell_with_nonce(
         &lang,
         &page.mode,
         &settings,
@@ -543,6 +562,7 @@ pub async fn render_edergi_kiosk(
         &snap.notifications,
         &body,
         0,
+        Some(&csp_nonce.0),
     ))
     .into_response()
 }
@@ -556,7 +576,7 @@ pub async fn render_subscriptions_and_store(
     let settings = state.db.get_setting_map(&lang);
     let config = crate::engine::design::config::load(&settings);
     match config.page("abonelik-ve-satis") {
-        Some(page) => render_configured_page(&state, &lang, page, &settings),
+        Some(page) => render_configured_page(&state, &lang, page, &settings, None),
         None => render_not_found(State(state), headers).await,
     }
 }
@@ -584,7 +604,7 @@ pub async fn render_corporate_page(
         other => other,
     };
     match config.page(&format!("kurumsal-{}", normalized)) {
-        Some(page) => render_configured_page(&state, &lang, page, &settings),
+        Some(page) => render_configured_page(&state, &lang, page, &settings, None),
         None => render_not_found(State(state), headers).await,
     }
 }
@@ -593,6 +613,7 @@ pub async fn render_search_page(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     use crate::engine::content_query_engine::CentralContentQueryEngine;
 
@@ -656,6 +677,7 @@ pub async fn render_search_page(
         Some("/arama"),
         None,
         has_active_filter,
+        Some(&csp_nonce.0),
     ))
     .into_response()
 }
@@ -664,6 +686,7 @@ pub async fn render_account_page(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let tr = &state.translations;
@@ -684,6 +707,7 @@ pub async fn render_account_page(
             Some("/hesabim"),
             None,
             true,
+            Some(&csp_nonce.0),
         ))
         .into_response();
     };
@@ -723,6 +747,7 @@ pub async fn render_account_page(
         Some("/hesabim"),
         None,
         true,
+        Some(&csp_nonce.0),
     ))
     .into_response()
 }
@@ -922,9 +947,10 @@ pub async fn redirect_legacy_haber_tr(
     State(state): State<AppState>,
     Path(slug): Path<String>,
 ) -> Response {
-    let old = format!("/haber/{}", slug);
-    if let Some(rule) = state.db.find_seo_redirect(&old) {
-        return Redirect::permanent(&rule.new_path).into_response();
+    for old in [format!("/haberler/{}", slug), format!("/haber/{}", slug)] {
+        if let Some(rule) = state.db.find_seo_redirect(&old) {
+            return Redirect::permanent(&rule.new_path).into_response();
+        }
     }
     Redirect::permanent(&crate::engine::url_builder::article_url(&slug)).into_response()
 }
@@ -944,9 +970,13 @@ pub async fn redirect_legacy_kategori_tr(
     State(state): State<AppState>,
     Path(slug): Path<String>,
 ) -> Response {
-    let old = crate::engine::url_builder::category_url(&slug);
-    if let Some(rule) = state.db.find_seo_redirect(&old) {
-        return Redirect::permanent(&rule.new_path).into_response();
+    for old in [
+        format!("/kategoriler/{}", slug),
+        crate::engine::url_builder::category_url(&slug),
+    ] {
+        if let Some(rule) = state.db.find_seo_redirect(&old) {
+            return Redirect::permanent(&rule.new_path).into_response();
+        }
     }
     Redirect::permanent(&crate::engine::url_builder::category_url(&slug)).into_response()
 }
@@ -955,9 +985,13 @@ pub async fn redirect_legacy_kategori_en(
     State(state): State<AppState>,
     Path(slug): Path<String>,
 ) -> Response {
-    let old = format!("/en/kategori/{}", slug);
-    if let Some(rule) = state.db.find_seo_redirect(&old) {
-        return Redirect::permanent(&rule.new_path).into_response();
+    for old in [
+        format!("/en/kategoriler/{}", slug),
+        format!("/en/kategori/{}", slug),
+    ] {
+        if let Some(rule) = state.db.find_seo_redirect(&old) {
+            return Redirect::permanent(&rule.new_path).into_response();
+        }
     }
     Redirect::permanent(&crate::engine::url_builder::category_url_lang(&slug, "en")).into_response()
 }
@@ -1009,6 +1043,7 @@ pub async fn handle_fallback_or_redirect(
     uri: axum::http::Uri,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let path = uri.path();
 
@@ -1080,24 +1115,36 @@ pub async fn handle_fallback_or_redirect(
         }
     }
 
+    // 2d. Legacy msidergisi.com magazine viewer routes (`/magazines`, `/magazines/*`, `/en/magazines/*`)
+    if trimmed == "magazines" || trimmed.starts_with("magazines/") {
+        return Redirect::permanent("/e-dergi").into_response();
+    }
+    if trimmed == "en/magazines" || trimmed.starts_with("en/magazines/") {
+        return Redirect::permanent("/e-dergi?lang=en").into_response();
+    }
+
     // 3. Check if path matches a category slug directly (e.g. /haberler, /ozel-dosyalar, /soylesiler)
     if state.db.get_category_by_slug(trimmed).is_some() {
+        let csp_nonce = CspNonce(String::new());
         return render_category_page(
             State(state),
             Path(trimmed.to_string()),
             Query(params),
             headers,
+            Extension(csp_nonce),
         )
         .await;
     }
 
     // 4. Check if path matches an article slug directly
     if state.db.get_content_by_slug(trimmed).is_some() {
+        let csp_nonce = CspNonce(String::new());
         return render_article_detail(
             State(state),
             Path(trimmed.to_string()),
             Query(params),
             headers,
+            Extension(csp_nonce),
         )
         .await;
     }
@@ -1106,6 +1153,9 @@ pub async fn handle_fallback_or_redirect(
 }
 
 pub async fn render_not_found(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    // 404 handler cannot extract Extension<CspNonce> because it is called from other handlers
+    // that already consumed the extension. Use None nonce — CSP will fall back to unsafe-inline
+    // for this error page only.
     let lang = detect_language(&HashMap::new(), &headers);
     let tr = &state.translations;
     let body_html = format!(r##"<section class="py-5 bg-light text-center">
@@ -1133,6 +1183,7 @@ pub async fn render_not_found(State(state): State<AppState>, headers: HeaderMap)
         None,
         None,
         true,
+        None,
     );
     (StatusCode::NOT_FOUND, Html(html)).into_response()
 }
@@ -1142,6 +1193,7 @@ pub async fn render_designed_page(
     Path(slug): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let settings = state.db.get_setting_map(&lang);
@@ -1149,7 +1201,7 @@ pub async fn render_designed_page(
     let Some(page) = config.page(&slug) else {
         return render_not_found(State(state), headers).await;
     };
-    render_configured_page(&state, &lang, page, &settings)
+    render_configured_page(&state, &lang, page, &settings, Some(&csp_nonce.0))
 }
 
 fn render_configured_page(
@@ -1157,6 +1209,7 @@ fn render_configured_page(
     lang: &str,
     page: &crate::engine::design::config::Page,
     settings: &HashMap<String, String>,
+    nonce: Option<&str>,
 ) -> Response {
     use crate::engine::design::components::{render_page, PageData};
     let snap = CentralQueryEngine::snapshot(&state.db).data;
@@ -1188,7 +1241,7 @@ fn render_configured_page(
         &state.config.primary_domain,
         &state.config.news_domain,
     );
-    Html(design_engine::render_master_shell(
+    Html(design_engine::render_master_shell_with_nonce(
         lang,
         &page.mode,
         settings,
@@ -1200,6 +1253,7 @@ fn render_configured_page(
         &snap.notifications,
         &body,
         0,
+        nonce,
     ))
     .into_response()
 }
@@ -1208,6 +1262,7 @@ pub async fn render_coming_soon(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let settings_map = state.db.get_setting_map(&lang);
@@ -1336,12 +1391,12 @@ pub async fn render_coming_soon(
         &state.config.news_domain,
     );
 
-    Html(render_shell_with_seo(&state, &lang, "magazine", &seo, &body_html)).into_response()
+    Html(render_shell_with_seo(&state, &lang, "magazine", &seo, &body_html, Some(&csp_nonce.0))).into_response()
 }
 
 /// Derive a URL-safe slug from an author name for matching against the `/yazar/:slug` path segment.
 /// Maps common Turkish characters to ASCII equivalents, lowercases, and strips non-alphanumeric chars.
-fn author_slug_from_name(name: &str) -> String {
+pub fn author_slug_from_name(name: &str) -> String {
     let mapped: String = name
         .chars()
         .map(|c| match c {
@@ -1375,6 +1430,7 @@ pub async fn render_author_profile(
     Path(slug): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     use crate::engine::{
         design::components::article_card,
@@ -1458,6 +1514,7 @@ pub async fn render_author_profile(
         Some(&format!("/yazar/{}", slug)),
         None,
         false,
+        Some(&csp_nonce.0),
     ))
     .into_response()
 }

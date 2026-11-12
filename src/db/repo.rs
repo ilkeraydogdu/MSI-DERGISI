@@ -23,6 +23,7 @@ impl Database {
         let seo_redirects = self.load_seo_redirects_db();
         let subscription_plans = self.load_subscription_plans_db();
         let commerce_products = self.load_commerce_products_db();
+        let users = self.load_users_db();
         let elapsed_us = start.elapsed().as_micros().max(1);
 
         if let Ok(mut guard) = self.l1_cache.write() {
@@ -37,6 +38,7 @@ impl Database {
                 seo_redirects,
                 subscription_plans,
                 commerce_products,
+                users,
                 last_refreshed_us: elapsed_us,
             });
         }
@@ -127,7 +129,7 @@ impl Database {
     }
 
     pub fn insert_category(&self, cat: &CategoryNode) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT OR REPLACE INTO categories (slug, parent_slug, name_tr, name_en, group_type, description_tr, description_en, icon_class, sort_order, is_dynamic)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -186,7 +188,7 @@ impl Database {
     }
 
     pub fn insert_ssb_tag(&self, tag: &SsbInterestTag) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT OR REPLACE INTO ssb_tags (code, name_tr, name_en, category_group, sort_order)
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -351,7 +353,7 @@ impl Database {
     }
 
     pub fn upsert_content(&self, item: &ContentItem) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         if item.id > 0 {
             conn.execute(
                 "UPDATE contents SET
@@ -471,7 +473,7 @@ impl Database {
     }
 
     pub fn delete_content(&self, id: i64) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute("DELETE FROM contents WHERE id = ?1", params![id])?;
         drop(conn);
         self.refresh_l1_cache();
@@ -568,6 +570,10 @@ impl Database {
             .or_else(|| self.get_all_issues().into_iter().next())
     }
 
+    fn load_users_db(&self) -> Vec<UserAccount> {
+        self.get_all_users()
+    }
+
     pub fn get_all_users(&self) -> Vec<UserAccount> {
         let Ok(conn) = self.open_conn() else {
             return Vec::new();
@@ -659,7 +665,7 @@ impl Database {
         user: &UserAccount,
         password_hash: &str,
     ) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let ssb_json =
             serde_json::to_string(&user.ssb_interests).unwrap_or_else(|_| "[]".to_string());
         conn.execute(
@@ -698,7 +704,7 @@ impl Database {
     }
 
     pub fn update_user_password_hash(&self, email: &str, new_hash: &str) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "UPDATE users SET password_hash = ?1 WHERE LOWER(email) = LOWER(?2)",
             params![new_hash, email.trim()],
@@ -742,7 +748,7 @@ impl Database {
         &self,
         req: &CorporateVerificationRequest,
     ) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT INTO corporate_verification_requests (
                 user_id, email, full_name, organization_category, organization_name,
@@ -769,7 +775,7 @@ impl Database {
         status: &str,
         reviewed_by: &str,
     ) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "UPDATE corporate_verification_requests SET status = ?1, reviewed_by = ?2 WHERE id = ?3",
             params![status, reviewed_by, id],
@@ -852,7 +858,7 @@ impl Database {
     }
 
     pub fn upsert_ad(&self, ad: &AdCampaign) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let cat_json =
             serde_json::to_string(&ad.target_categories).unwrap_or_else(|_| "[]".to_string());
         let ssb_json =
@@ -1035,7 +1041,7 @@ impl Database {
     }
 
     pub fn insert_analytics_event(&self, ev: &AnalyticsEvent) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT INTO analytics_events (
                 session_id, user_id, organization_category, organization_name,
@@ -1197,7 +1203,7 @@ impl Database {
     }
 
     pub fn insert_order_invoice(&self, inv: &OrderInvoice) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT INTO order_invoices (
                 invoice_no, user_email, full_name, organization_name,
@@ -1306,7 +1312,7 @@ impl Database {
     }
 
     pub fn record_user_purchase(&self, email: &str, item_code: &str) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
             "INSERT OR IGNORE INTO user_purchased_items (user_email, item_code, created_at) VALUES (?1, ?2, ?3)",
@@ -1346,7 +1352,7 @@ impl Database {
     }
 
     pub fn halt_renewed_reminders(&self) -> rusqlite::Result<usize> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let cutoff = (chrono::Utc::now() + chrono::Duration::days(65))
             .format("%Y-%m-%d")
             .to_string();
@@ -1363,7 +1369,7 @@ impl Database {
     }
 
     pub fn sync_evaluated_reminders(&self, logs: &[RenewalReminderLog]) -> rusqlite::Result<usize> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let mut upserted = 0usize;
         for log in logs {
             let existing_id: Option<i64> = conn
@@ -1442,7 +1448,7 @@ impl Database {
             &nl.target_ssb_tag,
         )
         .len() as i64;
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let sent_at = if nl.sent_at.trim().is_empty() {
             chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string()
         } else {
@@ -1523,7 +1529,7 @@ impl Database {
     }
 
     pub fn insert_seo_redirect(&self, rd: &SeoRedirectRule) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT OR REPLACE INTO seo_redirects (old_path, new_path, status_code, hit_count)
              VALUES (?1, ?2, ?3, ?4)",
@@ -1587,7 +1593,7 @@ impl Database {
     }
 
     pub fn upsert_site_setting(&self, setting: &SiteSetting) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now_str = if setting.updated_at.is_empty() {
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
         } else {
@@ -1683,7 +1689,7 @@ impl Database {
     }
 
     pub fn insert_notification(&self, notif: &SystemNotification) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now_str = if notif.created_at.is_empty() {
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
         } else {
@@ -1725,7 +1731,7 @@ impl Database {
     }
 
     pub fn mark_notification_read(&self, id: i64) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "UPDATE system_notifications SET is_read = 1 WHERE id = ?1",
             params![id],
@@ -1767,7 +1773,7 @@ impl Database {
     }
 
     pub fn insert_security_audit_log(&self, log: &SecurityAuditLog) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT INTO security_audit_logs (
                 client_ip, request_path, event_type, threat_level, details, blocked, created_at
@@ -1819,7 +1825,7 @@ impl Database {
 
     /// Upsert a single translation entry.
     pub fn upsert_translation(&self, entry: &crate::engine::translation_engine::TranslationEntry) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT OR REPLACE INTO translations (key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -1841,7 +1847,7 @@ impl Database {
 
     /// Delete a translation by key.
     pub fn delete_translation(&self, key: &str) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute("DELETE FROM translations WHERE key = ?1", rusqlite::params![key])?;
         drop(conn);
         self.refresh_l1_cache();
@@ -1853,7 +1859,7 @@ impl Database {
     // =========================================================================
 
     pub fn insert_content_version(&self, content_id: i64, title_tr: &str, body_tr: &str, summary_tr: &str, changed_by: &str, change_note: &str) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now = chrono::Utc::now().to_rfc3339();
         let max_ver: i64 = conn.query_row(
             "SELECT COALESCE(MAX(version), 0) FROM content_versions WHERE content_id = ?1",
@@ -1883,7 +1889,7 @@ impl Database {
     // =========================================================================
 
     pub fn insert_media_item(&self, filename: &str, original_name: &str, mime_type: &str, file_size: i64, path: &str, uploaded_by: &str) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO media_library (filename, original_name, mime_type, file_size, path, uploaded_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -1912,7 +1918,7 @@ impl Database {
     // =========================================================================
 
     pub fn insert_audit_log(&self, actor_email: &str, action: &str, entity_type: &str, entity_id: Option<i64>, details_json: &str, ip: &str) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO admin_audit_log (actor_email, action, entity_type, entity_id, details_json, ip_address, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -1952,7 +1958,7 @@ impl Database {
     }
 
     pub fn upsert_user_role(&self, role_code: &str, name_tr: &str, name_en: &str, permissions_json: &str) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT INTO user_roles (role_code, name_tr, name_en, permissions_json, is_system) VALUES (?1, ?2, ?3, ?4, 0) ON CONFLICT(role_code) DO UPDATE SET name_tr=?2, name_en=?3, permissions_json=?4",
             rusqlite::params![role_code, name_tr, name_en, permissions_json])?;
@@ -1979,7 +1985,7 @@ impl Database {
     }
 
     pub fn upsert_custom_field(&self, field_key: &str, label_tr: &str, label_en: &str, field_type: &str, options_json: &str, is_required: bool, sort_order: i64, applies_to: &str) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
             "INSERT INTO custom_fields (field_key, label_tr, label_en, field_type, options_json, is_required, sort_order, applies_to) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(field_key) DO UPDATE SET label_tr=?2, label_en=?3, field_type=?4, options_json=?5, is_required=?6, sort_order=?7, applies_to=?8",
             rusqlite::params![field_key, label_tr, label_en, field_type, options_json, is_required, sort_order, applies_to])?;
@@ -1987,7 +1993,7 @@ impl Database {
     }
 
     pub fn delete_custom_field(&self, field_key: &str) -> rusqlite::Result<()> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute("DELETE FROM custom_fields WHERE field_key = ?1", rusqlite::params![field_key])?;
         Ok(())
     }
@@ -1997,7 +2003,7 @@ impl Database {
     // =========================================================================
 
     pub fn insert_cache_operation(&self, cache_key: &str, operation: &str, actor_email: &str, details: &str) -> rusqlite::Result<i64> {
-        let conn = self.open_conn()?;
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO cache_operations (cache_key, operation, actor_email, details, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -2034,6 +2040,95 @@ impl Database {
             "tables": { "contents": content_count, "users": user_count, "analytics_events": event_count },
             "timestamp": chrono::Utc::now().to_rfc3339()
         })
+    }
+
+    // =========================================================================
+    // FAZ 2: %100 SQL MERKEZİLEŞTİRME — Translation Seed Methods
+    // =========================================================================
+
+    /// Returns the total number of translation records in the database.
+    pub fn count_translations(&self) -> Result<i64, rusqlite::Error> {
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        conn.query_row("SELECT COUNT(*) FROM translations", [], |r| r.get(0))
+    }
+
+    /// Seeds default UI translations into the database if the table is empty.
+    /// Centralized replacement for translation_engine.rs raw SQL.
+    pub fn seed_default_translations(&self) -> Result<(), rusqlite::Error> {
+        let count = self.count_translations()?;
+        if count > 0 {
+            return Ok(());
+        }
+
+        let defaults: Vec<(&str, &str, &str, &str)> = vec![
+            ("nav.home", "Ana Sayfa", "Home", "navigation"),
+            ("nav.search", "Arama", "Search", "navigation"),
+            ("nav.account", "Hesabım", "My Account", "navigation"),
+            ("nav.login", "Giriş yap", "Log in", "navigation"),
+            ("nav.register", "Kayıt ol", "Register", "navigation"),
+            ("nav.logout", "Çıkış", "Log out", "navigation"),
+            ("nav.subscriptions", "Abonelik ve Satış", "Subscriptions & Store", "navigation"),
+            ("nav.edergi", "E-Dergi", "E-Magazine", "navigation"),
+            ("nav.corporate", "Kurumsal", "Corporate", "navigation"),
+            ("search.eyebrow", "MSI ARŞİVİNİ KEŞFEDİN", "EXPLORE THE MSI ARCHIVE", "search"),
+            ("search.heading", "Bir konunun peşinden gidin.", "Follow a topic through.", "search"),
+            ("search.description", "Haberler, analizler, söyleşiler ve dergi arşivi. Hepsi aynı yerde.", "News, analyses, interviews and magazine archive. All in one place.", "search"),
+            ("search.query_label", "Arama kelimesi", "Search term", "search"),
+            ("search.placeholder", "Konu, kurum veya teknoloji…", "Topic, institution or technology…", "search"),
+            ("tier.public_subscriber", "Kamu E-Dergi Abonesi (Ücretsiz)", "Public E-Magazine Subscriber (Free)", "subscriptions"),
+            ("tier.academic", "Akademik / Öğrenci Okur", "Academic / Student Reader", "subscriptions"),
+            ("tier.standard", "Standart Kayıtlı Okur", "Standard Registered Reader", "subscriptions"),
+            ("analytics.campaign_prefix", "Kampanya #", "Campaign #", "analytics"),
+        ];
+
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        for (key, tr, en, group) in &defaults {
+            conn.execute(
+                "INSERT OR IGNORE INTO translations (key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp) VALUES (?1, ?2, ?3, '', '', '', '', ?4)",
+                rusqlite::params![key, tr, en, group],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Seeds API-specific translation keys into the database.
+    /// Centralized replacement for api_response.rs raw SQL.
+    pub fn seed_api_translations(&self) -> Result<(), rusqlite::Error> {
+        let entries: Vec<(&str, &str, &str)> = vec![
+            ("api.error.content_not_found", "İçerik bulunamadı", "Content not found"),
+            ("api.error.invalid_email", "Geçerli bir kurumsal e-posta adresi giriniz.", "Please enter a valid corporate email address."),
+            ("api.error.email_already_exists", "Bu e-posta ile bir hesap zaten var. Lütfen giriş yapın.", "An account with this email already exists. Please log in."),
+            ("api.error.registration_fields_required", "Ad soyad, en az 8 karakterli şifre ve KVKK onayı gerekli.", "Full name, minimum 8-character password and KVKK consent are required."),
+            ("api.error.kvkk_consent_required", "Ad soyad, en az 8 karakterli şifre ve KVKK aydınlatma beyanı gerekli.", "Full name, minimum 8-character password and KVKK disclosure statement are required."),
+            ("api.error.login_failed", "E-posta veya şifre hatalı.", "Invalid email or password."),
+            ("api.error.auth_required_pdf", "E-Dergi PDF indirmek için abone girişi yapınız.", "Subscriber login required to download E-Magazine PDF."),
+            ("api.error.subscriber_access_required", "PDF indirme yetkisi aktif MSI Dergisi abonelerine ve onaylı kamu personeline özeldir.", "PDF download access is exclusive to active MSI Magazine subscribers and verified government personnel."),
+            ("api.error.issue_not_found", "İstenen dergi sayısı bulunamadı.", "Requested magazine issue not found."),
+            ("api.error.checkout_fields_required", "Geçerli ad soyad ve e-posta adresi zorunludur.", "Valid full name and email address are required."),
+            ("api.error.distance_sales_consent_required", "6502 sayılı Kanun gereğince Ön Bilgilendirme Formu ve Mesafeli Satış Sözleşmesi onayı zorunludur.", "Preliminary Information Form and Distance Sales Agreement consent required per Law No. 6502."),
+            ("api.error.plan_not_found", "Seçilen abonelik planı veya yayın katalogda bulunamadı.", "Selected subscription plan or publication not found in catalog."),
+            ("api.error.invalid_file_type", "Yalnızca .webp, .png, .jpg, .svg, .pdf ve .mp4 dosyaları yüklenebilir.", "Only .webp, .png, .jpg, .svg, .pdf and .mp4 files can be uploaded."),
+            ("api.error.file_too_large", "Dosya boş veya 25 MB sınırını aşıyor.", "File is empty or exceeds the 25 MB limit."),
+            ("api.error.upload_no_field", "Yüklenecek dosya alanı bulunamadı.", "No file field found for upload."),
+            ("api.error.server_error_generic", "Bir sunucu hatası oluştu. Lütfen tekrar deneyin.", "A server error occurred. Please try again."),
+            ("api.error.server_error_save", "Kaydedilirken bir sunucu hatası oluştu.", "A server error occurred while saving."),
+            ("api.error.server_error_upload", "Dosya yükleme sırasında bir sunucu hatası oluştu.", "A server error occurred during file upload."),
+            ("api.error.server_error_file_write", "Dosya kaydedilirken bir sunucu hatası oluştu.", "A server error occurred while saving the file."),
+            ("api.error.server_error_order", "Sipariş kaydı oluşturulurken bir sunucu hatası oluştu. Lütfen tekrar deneyin.", "A server error occurred while creating the order record. Please try again."),
+            ("api.error.server_error_ad_save", "Reklam kaydedilirken bir sunucu hatası oluştu.", "A server error occurred while saving the advertisement."),
+            ("api.error.bad_request", "Geçersiz istek.", "Bad request."),
+            ("api.error.validation_error", "Doğrulama hatası. Lütfen girdilerinizi kontrol edin.", "Validation error. Please check your input."),
+            ("api.error.auth_required", "Kimlik doğrulama gerekli.", "Authentication required."),
+        ];
+
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        for (key, tr, en) in &entries {
+            conn.execute(
+                "INSERT OR IGNORE INTO translations (key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp) VALUES (?1, ?2, ?3, '', '', '', '', 'api')",
+                rusqlite::params![key, tr, en],
+            )?;
+        }
+        Ok(())
     }
 }
 

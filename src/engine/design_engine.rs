@@ -1,5 +1,6 @@
 pub use crate::engine::design::account::render as render_reader_account_portal;
 pub use crate::engine::design::shell::render as render_master_shell;
+pub use crate::engine::design::shell::render_with_nonce as render_master_shell_with_nonce;
 
 /// Wrapper that passes the translation cache into the search renderer.
 #[allow(clippy::too_many_arguments)]

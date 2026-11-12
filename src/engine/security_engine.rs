@@ -1,14 +1,35 @@
 use crate::models::SecurityAuditLog;
+use base64::Engine as _;
 use chrono::Utc;
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use std::sync::Mutex;
+
+/// Generates a cryptographically random nonce for Content-Security-Policy headers.
+/// Uses 16 random bytes from `/dev/urandom`, base64-encoded to produce a 24-character string.
+pub fn generate_csp_nonce() -> String {
+    let mut buf = [0u8; 16];
+    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
+        use std::io::Read;
+        let _ = f.read_exact(&mut buf);
+    } else {
+        // Fallback: use uuid v4 randomness if /dev/urandom is unavailable
+        let id = uuid::Uuid::new_v4();
+        buf.copy_from_slice(id.as_bytes());
+    }
+    base64::engine::general_purpose::STANDARD_NO_PAD.encode(buf)
+}
 
 static RATE_LIMIT_STORE: OnceCell<Mutex<HashMap<String, (u32, i64)>>> = OnceCell::new();
 
 /// Default rate limit values for backward compatibility with tests.
 const DEFAULT_MAX_REQUESTS_PER_MINUTE: u32 = 120;
 const DEFAULT_RATE_LIMIT_WINDOW_SECS: i64 = 60;
+
+/// Per-request CSP nonce stored in Axum request extensions.
+/// Controllers extract this to inject `nonce="..."` on inline `<script>` tags.
+#[derive(Clone)]
+pub struct CspNonce(pub String);
 
 pub struct CentralSecurityFilter;
 
@@ -18,11 +39,21 @@ impl CentralSecurityFilter {
     }
 
     /// Inspects incoming HTTP request parameters for rate limiting, SQL injection, XSS, and Path Traversal.
+    ///
+    /// # Arguments
+    /// * `path` - The request path
+    /// * `query` - Optional query string
+    /// * `user_agent` - Optional User-Agent header
+    /// * `client_ip` - Client IP address for rate limiting
+    /// * `max_rpm` - Maximum requests per minute (rate limit threshold)
+    /// * `window_secs` - Rate limit window duration in seconds
     pub fn inspect_request_security(
         path: &str,
         query: Option<&str>,
         user_agent: Option<&str>,
         client_ip: &str,
+        max_rpm: u32,
+        window_secs: i64,
     ) -> Result<(), SecurityAuditLog> {
         let now = Utc::now();
         let now_ts = now.timestamp();
@@ -39,19 +70,19 @@ impl CentralSecurityFilter {
         if !is_static_asset {
             if let Ok(mut map) = Self::bucket_store().lock() {
                 if map.len() > 10_000 {
-                    map.retain(|_, (_, ts)| now_ts - *ts < RATE_LIMIT_WINDOW_SECS * 2);
+                    map.retain(|_, (_, ts)| now_ts - *ts < window_secs * 2);
                 }
                 let entry = map
                     .entry(client_ip.to_string())
                     .or_insert((0, now_ts));
-                if now_ts - entry.1 >= RATE_LIMIT_WINDOW_SECS {
+                if now_ts - entry.1 >= window_secs {
                     entry.0 = 1;
                     entry.1 = now_ts;
                 } else {
                     entry.0 += 1;
                 }
 
-                if entry.0 > MAX_REQUESTS_PER_MINUTE {
+                if entry.0 > max_rpm {
                     return Err(SecurityAuditLog {
                         id: 0,
                         client_ip: client_ip.to_string(),
@@ -60,7 +91,7 @@ impl CentralSecurityFilter {
                         threat_level: "HIGH".to_string(),
                         details: format!(
                             "Rate limit aşıldı: {} istek/dk (Limit: {})",
-                            entry.0, MAX_REQUESTS_PER_MINUTE
+                            entry.0, max_rpm
                         ),
                         blocked: true,
                         created_at: now_str,
@@ -260,7 +291,17 @@ impl CentralSecurityFilter {
     }
 
     /// Returns strict HTTP security headers and engine execution latency telemetry.
-    pub fn security_headers_list(exec_us: u128) -> Vec<(&'static str, String)> {
+    /// When `nonce` is provided, replaces `'unsafe-inline'` in `script-src` with `'nonce-{value}'`.
+    /// The `style-src` directive retains `'unsafe-inline'` temporarily for CSS compatibility.
+    pub fn security_headers_list(exec_us: u128, nonce: Option<&str>) -> Vec<(&'static str, String)> {
+        let csp = if let Some(n) = nonce {
+            format!(
+                "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' 'nonce-{}'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self';",
+                n
+            )
+        } else {
+            "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self';".to_string()
+        };
         vec![
             ("X-Content-Type-Options", "nosniff".to_string()),
             ("X-Frame-Options", "SAMEORIGIN".to_string()),
@@ -278,15 +319,14 @@ impl CentralSecurityFilter {
                 "Permissions-Policy",
                 "geolocation=(), microphone=(), camera=()".to_string(),
             ),
-            (
-                "Content-Security-Policy",
-                "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self';".to_string(),
-            ),
+            ("Content-Security-Policy", csp),
             ("X-Engine-Latency-Us", exec_us.to_string()),
         ]
     }
 }
 
+/// Backward-compatible wrapper using default rate limit values (120 RPM, 60s window).
+/// Retained for existing test compatibility.
 #[allow(dead_code)]
 pub fn inspect_request_security(
     path: &str,
@@ -294,7 +334,26 @@ pub fn inspect_request_security(
     user_agent: Option<&str>,
     client_ip: &str,
 ) -> Result<(), SecurityAuditLog> {
-    CentralSecurityFilter::inspect_request_security(path, query, user_agent, client_ip)
+    CentralSecurityFilter::inspect_request_security(
+        path,
+        query,
+        user_agent,
+        client_ip,
+        DEFAULT_MAX_REQUESTS_PER_MINUTE,
+        DEFAULT_RATE_LIMIT_WINDOW_SECS,
+    )
+}
+
+/// Parameterized inspection with configurable rate limits. Use this in production middleware.
+pub fn inspect_request_security_with_limits(
+    path: &str,
+    query: Option<&str>,
+    user_agent: Option<&str>,
+    client_ip: &str,
+    max_rpm: u32,
+    window_secs: i64,
+) -> Result<(), SecurityAuditLog> {
+    CentralSecurityFilter::inspect_request_security(path, query, user_agent, client_ip, max_rpm, window_secs)
 }
 
 pub fn escape_html(input: &str) -> String {
@@ -312,7 +371,12 @@ pub fn sanitize_slug(input: &str) -> String {
 
 #[allow(dead_code)]
 pub fn security_headers_list(exec_us: u128) -> Vec<(&'static str, String)> {
-    CentralSecurityFilter::security_headers_list(exec_us)
+    CentralSecurityFilter::security_headers_list(exec_us, None)
+}
+
+/// Nonce-aware wrapper for production use.
+pub fn security_headers_list_with_nonce(exec_us: u128, nonce: Option<&str>) -> Vec<(&'static str, String)> {
+    CentralSecurityFilter::security_headers_list(exec_us, nonce)
 }
 
 #[cfg(test)]

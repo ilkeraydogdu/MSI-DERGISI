@@ -404,6 +404,26 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_cache_operations_created ON cache_operations(created_at DESC);
+
+        -- Phase 1: FTS5 Full-Text Search Virtual Table
+        CREATE VIRTUAL TABLE IF NOT EXISTS contents_fts USING fts5(
+            title_tr, title_en, summary_tr, summary_en, body_tr, body_en,
+            content_id UNINDEXED,
+            tokenize='unicode61'
+        );
+
+        -- Phase 1: Functional Index for case-insensitive email lookups
+        CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(email COLLATE NOCASE);
+
+        -- Phase 1: Additional FK constraints (safe re-creation via new indexes)
+        -- Note: SQLite does not support ALTER TABLE ADD CONSTRAINT FOREIGN KEY.
+        -- These are enforced at application level until migration framework (Phase 5).
+        -- Documented here for future migration reference:
+        --   analytics_events.user_id -> users.id
+        --   order_invoices.user_email -> users.email
+        --   corporate_verification_requests.user_id -> users.id
+        --   renewal_reminders.user_email -> users.email
+        --   user_purchased_items.user_email -> users.email
         "#,
     )?;
     Ok(())

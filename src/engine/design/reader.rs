@@ -127,8 +127,29 @@ pub fn article(
         &cat_label,
     );
 
+    let author_slug = crate::controllers::web_controller::author_slug_from_name(&item.author_name);
+    let author_html = if author_slug.is_empty() {
+        format!("<span>{}</span>", esc(&item.author_name))
+    } else {
+        let lang_q = if lang == "en" { "?lang=en" } else { "" };
+        format!(
+            r#"<a href="/yazar/{slug}{lang_q}" class="author-byline-link">{name}</a>"#,
+            slug = esc(&author_slug),
+            lang_q = lang_q,
+            name = esc(&item.author_name)
+        )
+    };
+    let author_role_html = if item.author_title.trim().is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<span class="author-byline-role">{}</span>"#,
+            esc(item.author_title.trim())
+        )
+    };
+
     format!(
-        r#"<div class="article-page" data-msi-content-slug="{slug}"><div class="container">{breadcrumb_html}<div class="article-master-grid"><div class="article-main-col"><div class="msi-section-ribbon"><a href="/kategori/{category}">{cat_label}</a></div><header class="article-header">{sponsor}<h1>{title}</h1><p class="article-summary">{summary}</p><div class="article-byline"><span>{author}</span><time datetime="{date}">{date}</time><span>{minutes} {min_lbl}</span><button class="text-link" data-share-article>{share_lbl} ↗</button></div></header>{cover_figure}{video_block}<article class="msi-article-body">{body}</article>{paywall}{tags_html}<div class="article-end"><span>MSI DERGİSİ · ISSN 1306-0309</span><a href="/e-dergi">{archive_lbl} →</a></div>{inline_ad}</div>{sidebar}</div></div>{recommendations}</div>"#,
+        r#"<div class="article-page" data-msi-content-slug="{slug}"><div class="container">{breadcrumb_html}<div class="article-master-grid"><div class="article-main-col"><div class="msi-section-ribbon"><a href="/kategori/{category}">{cat_label}</a></div><header class="article-header">{sponsor}<h1>{title}</h1><p class="article-summary">{summary}</p><div class="article-byline">{author_html}{author_role_html}<time datetime="{date}">{date}</time><span>{minutes} {min_lbl}</span><button class="text-link" data-share-article>{share_lbl} ↗</button></div></header>{cover_figure}{video_block}<article class="msi-article-body">{body}</article>{paywall}{tags_html}<div class="article-end"><span>MSI DERGİSİ · ISSN 1306-0309</span><a href="/e-dergi">{archive_lbl} →</a></div>{inline_ad}</div>{sidebar}</div></div>{recommendations}</div>"#,
         slug = esc(&item.slug),
         breadcrumb_html = breadcrumb_html,
         category = esc(&item.content_type),
@@ -136,7 +157,8 @@ pub fn article(
         sponsor = sponsor,
         title = title,
         summary = esc(localized(lang, &item.summary_tr, &item.summary_en)),
-        author = esc(&item.author_name),
+        author_html = author_html,
+        author_role_html = author_role_html,
         date = esc(item.published_at.get(..10).unwrap_or(&item.published_at)),
         minutes = item.read_time_min.max(1),
         min_lbl = if lang == "en" { "min read" } else { "dk okuma" },

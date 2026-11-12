@@ -2,7 +2,30 @@
 //! Renders the complete, self-contained HTML5 Operator & B2B Defense Analytics Center (`/admin`)
 //! for UMSA Prodüksiyon — MSI Dergisi & MSI TDR.
 
+/// Renders the admin dashboard HTML with optional CSP nonce injection on inline `<script>` tags.
+pub fn render_admin_dashboard_with_nonce(nonce: Option<&str>) -> String {
+    let mut html = render_admin_dashboard_inner();
+    if let Some(n) = nonce {
+        let nonce_attr = format!(" nonce=\"{}\"", n);
+        // Inject nonce on external script tags (Chart.js and msi-admin.js)
+        html = html.replace(
+            "<script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js\"></script>",
+            &format!("<script{} src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js\"></script>", nonce_attr),
+        );
+        html = html.replace(
+            "<script src=\"/js/msi-admin.js?v=2\" defer></script>",
+            &format!("<script{} src=\"/js/msi-admin.js?v=2\" defer></script>", nonce_attr),
+        );
+    }
+    html
+}
+
+/// Legacy entry point without nonce support (for backward compatibility).
 pub fn render_admin_dashboard() -> String {
+    render_admin_dashboard_with_nonce(None)
+}
+
+fn render_admin_dashboard_inner() -> String {
     r#####"<!DOCTYPE html>
 <html lang="tr">
 <head>

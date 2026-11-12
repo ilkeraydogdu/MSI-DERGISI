@@ -118,33 +118,11 @@ pub fn t(cache: &TranslationCache, lang: &str, key: &str) -> String {
     cache.t(lang, key)
 }
 
-/// Seed default UI translations into the database if the table is empty.
-/// These cover all previously-hardcoded strings found during the audit.
-pub fn seed_default_translations(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM translations", [], |r| r.get(0))?;
-    if count > 0 {
-        return Ok(());
-    }
-
-    // (key, value_tr, value_en, group)
-    let defaults: Vec<(&str, &str, &str, &str)> = vec![
-        // Navigation & Shell
-        ("nav.home", "Ana Sayfa", "Home", "navigation"),
-        ("nav.search", "Arama", "Search", "navigation"),
-        ("nav.account", "Hesabım", "My Account", "navigation"),
-        ("nav.login", "Giriş yap", "Log in", "navigation"),
-        ("nav.register", "Kayıt ol", "Register", "navigation"),
-        ("nav.logout", "Çıkış", "Log out", "navigation"),
-        ("nav.subscriptions", "Abonelik ve Satış", "Subscriptions & Store", "navigation"),
-        ("nav.edergi", "E-Dergi", "E-Magazine", "navigation"),
-        ("nav.corporate", "Kurumsal", "Corporate", "navigation"),
-
-        // Search page
-        ("search.eyebrow", "MSI ARŞİVİNİ KEŞFEDİN", "EXPLORE THE MSI ARCHIVE", "search"),
-        ("search.heading", "Bir konunun peşinden gidin.", "Follow a topic through.", "search"),
-        ("search.description", "Haberler, analizler, söyleşiler ve dergi arşivi. Hepsi aynı yerde.", "News, analyses, interviews and magazine archive. All in one place.", "search"),
-        ("search.query_label", "Arama kelimesi", "Search term", "search"),
-        ("search.placeholder", "Konu, kurum veya teknoloji…", "Topic, institution or technology…", "search"),
+/// Seed default UI translations via centralized repo method.
+/// Raw SQL removed — now delegates to Database::seed_default_translations().
+pub fn seed_default_translations(db: &crate::db::Database) -> Result<(), String> {
+    db.seed_default_translations().map_err(|e| format!("Default translation seed hatası: {}", e))
+}
         ("search.source_label", "Yayın", "Source", "search"),
         ("search.sort_label", "Sıralama", "Sort", "search"),
         ("search.submit", "Ara →", "Search →", "search"),

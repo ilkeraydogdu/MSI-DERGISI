@@ -4,9 +4,10 @@ pub mod seed;
 
 use crate::models::{
     AdCampaign, CategoryNode, CommerceProduct, ContentItem, MagazineIssue, SeoRedirectRule,
-    SiteSetting, SsbInterestTag, SubscriptionPlan, SystemNotification,
+    SiteSetting, SsbInterestTag, SubscriptionPlan, SystemNotification, UserAccount,
 };
-use rusqlite::Connection;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -24,12 +25,14 @@ pub struct L1CacheSnapshot {
     pub seo_redirects: Vec<SeoRedirectRule>,
     pub subscription_plans: Vec<SubscriptionPlan>,
     pub commerce_products: Vec<CommerceProduct>,
+    pub users: Vec<UserAccount>,
     pub last_refreshed_us: u128,
 }
 
 #[derive(Clone, Debug)]
 pub struct Database {
     pub db_path: String,
+    pub pool: Pool<SqliteConnectionManager>,
     pub l1_cache: Arc<RwLock<Option<L1CacheSnapshot>>>,
 }
 
@@ -42,8 +45,26 @@ impl Database {
             }
         }
 
+        let manager = SqliteConnectionManager::file(db_path)
+            .with_init(|conn| {
+                conn.execute_batch(
+                    "PRAGMA journal_mode = WAL;
+                     PRAGMA synchronous = NORMAL;
+                     PRAGMA foreign_keys = ON;
+                     PRAGMA busy_timeout = 5000;",
+                )?;
+                Ok(())
+            });
+
+        let pool = Pool::builder()
+            .max_size(16)
+            .min_idle(Some(4))
+            .build(manager)
+            .map_err(|e| format!("Connection pool oluşturulamadı: {}", e))?;
+
         let db = Self {
             db_path: db_path.to_string(),
+            pool,
             l1_cache: Arc::new(RwLock::new(None)),
         };
 
@@ -109,14 +130,7 @@ impl Database {
         Ok(db)
     }
 
-    pub fn open_conn(&self) -> rusqlite::Result<Connection> {
-        let conn = Connection::open(&self.db_path)?;
-        conn.execute_batch(
-            "PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = NORMAL;
-             PRAGMA foreign_keys = ON;
-             PRAGMA busy_timeout = 5000;",
-        )?;
-        Ok(conn)
+    pub fn open_conn(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, r2d2::Error> {
+        self.pool.get()
     }
 }

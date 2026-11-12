@@ -28,11 +28,11 @@ use tracing::info;
 use crate::config::AppConfig;
 use crate::controllers::{api_controller, web_controller, AppState};
 use crate::db::Database;
-use crate::engine::security_engine::CentralSecurityFilter;
+use crate::engine::security_engine::{self, CentralSecurityFilter, CspNonce};
 
 async fn central_waf_and_telemetry_middleware(
     State(state): State<AppState>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
     let t0 = Instant::now();
@@ -61,6 +61,8 @@ async fn central_waf_and_telemetry_middleware(
         query_opt.as_deref(),
         ua_opt.as_deref(),
         &client_ip,
+        state.config.rate_limit_max_requests_per_minute,
+        state.config.rate_limit_window_secs,
     ) {
         let _ = state.db.insert_security_audit_log(&log_entry);
         let status = if log_entry.event_type == "RATE_LIMIT_EXCEEDED" {
@@ -110,10 +112,14 @@ async fn central_waf_and_telemetry_middleware(
             .into_response();
         }
     }
+    // Generate a unique CSP nonce per request for script-src enforcement.
+    let csp_nonce = security_engine::generate_csp_nonce();
+    req.extensions_mut().insert(CspNonce(csp_nonce.clone()));
+
     let mut response = next.run(req).await;
     let exec_us = t0.elapsed().as_micros();
 
-    for (k, v) in CentralSecurityFilter::security_headers_list(exec_us) {
+    for (k, v) in security_engine::security_headers_list_with_nonce(exec_us, Some(&csp_nonce)) {
         if let (Ok(h_name), Ok(h_val)) = (
             HeaderName::from_bytes(k.as_bytes()),
             HeaderValue::from_str(&v),
@@ -235,8 +241,7 @@ async fn main() {
 
     // Initialize translation engine: seed defaults if empty, then load into memory cache
     {
-        let conn = database.open_conn().expect("Failed to open DB for translation seeding");
-        let _ = crate::engine::translation_engine::seed_default_translations(&conn);
+        let _ = crate::engine::translation_engine::seed_default_translations(&database);
     }
     let translations = crate::engine::translation_engine::TranslationCache::new();
     translations.load(database.load_all_translations());

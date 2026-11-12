@@ -87,6 +87,7 @@ impl CentralContentQueryEngine {
             &snap.data.categories,
             &snap.data.ssb_tags,
             &snap.data.issues,
+            &snap.data.site_settings,
         );
 
         let total_count = facet_res.total_matches;

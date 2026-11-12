@@ -44,6 +44,64 @@ impl Database {
         }
     }
 
+    /// Selectively reload only the named L1 cache sections.
+    /// Supported section names: "categories", "ssb_tags", "contents", "issues",
+    /// "ads", "site_settings", "notifications", "seo_redirects",
+    /// "subscription_plans", "commerce_products", "users".
+    pub fn refresh_l1_sections(&self, sections: &[&str]) {
+        // Clone current snapshot; if none exists, do a full refresh instead.
+        let mut snap = match self.l1_cache.read() {
+            Ok(guard) => match guard.as_ref() {
+                Some(s) => s.clone(),
+                None => {
+                    drop(guard);
+                    self.refresh_l1_cache();
+                    return;
+                }
+            },
+            Err(_) => {
+                self.refresh_l1_cache();
+                return;
+            }
+        };
+
+        for section in sections {
+            match *section {
+                "categories" => snap.categories = self.load_categories_db(),
+                "ssb_tags" => snap.ssb_tags = self.load_ssb_tags_db(),
+                "contents" => {
+                    snap.contents = self.load_contents_db();
+                    // Issues depend on contents for spread enrichment
+                    let mut issues = self.load_issues_db();
+                    Self::enrich_issue_spreads_from_contents(&mut issues, &snap.contents);
+                    snap.issues = issues;
+                }
+                "issues" => {
+                    let mut issues = self.load_issues_db();
+                    Self::enrich_issue_spreads_from_contents(&mut issues, &snap.contents);
+                    snap.issues = issues;
+                }
+                "ads" => snap.ads = self.load_ads_db(),
+                "site_settings" => snap.site_settings = self.load_site_settings_db(),
+                "notifications" => snap.notifications = self.load_notifications_db(),
+                "seo_redirects" => snap.seo_redirects = self.load_seo_redirects_db(),
+                "subscription_plans" => snap.subscription_plans = self.load_subscription_plans_db(),
+                "commerce_products" => snap.commerce_products = self.load_commerce_products_db(),
+                "users" => snap.users = self.load_users_db(),
+                _ => {}
+            }
+        }
+
+        if let Ok(mut guard) = self.l1_cache.write() {
+            *guard = Some(snap);
+        }
+
+        // Invalidate L2 content query cache when contents change
+        if sections.iter().any(|s| *s == "contents") {
+            crate::engine::content_query_engine::CentralContentQueryEngine::invalidate_cache();
+        }
+    }
+
     fn enrich_issue_spreads_from_contents(
         issues: &mut [MagazineIssue],
         contents: &[ContentItem],
@@ -53,7 +111,7 @@ impl Database {
                 issue.spreads = contents
                     .iter()
                     .filter(|c| c.issue_number == Some(issue.issue_number))
-                    .take(8)
+                    .take(crate::db::constants::PDF_SPREADS_LIMIT)
                     .enumerate()
                     .map(|(idx, c)| {
                         let start_p = 8 + idx * 10;
@@ -139,7 +197,7 @@ impl Database {
         )?;
         let rowid = conn.last_insert_rowid();
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["categories"]);
         Ok(rowid)
     }
 
@@ -184,7 +242,7 @@ impl Database {
         )?;
         let rowid = conn.last_insert_rowid();
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["ssb_tags"]);
         Ok(rowid)
     }
 
@@ -314,24 +372,140 @@ impl Database {
             .collect()
     }
 
+    /// Sanitize a user search query into a safe FTS5 MATCH expression.
+    /// Splits on whitespace, strips unsafe characters (keeping alphanumeric,
+    /// underscore, and Turkish letters), wraps each token in quotes with '*'
+    /// prefix-match suffix, and joins with OR. Returns empty string if no
+    /// valid tokens remain.
+    #[cfg(test)]
+    fn sanitize_fts_query(query: &str) -> String {
+        let tokens: Vec<String> = query
+            .split_whitespace()
+            .map(|tok| {
+                tok.chars()
+                    .filter(|c| {
+                        c.is_ascii_alphanumeric()
+                            || *c == '_'
+                            || matches!(*c,
+                                'ç' | 'Ç' | 'ğ' | 'Ğ' | 'ı' | 'İ' |
+                                'ö' | 'Ö' | 'ş' | 'Ş' | 'ü' | 'Ü' |
+                                'â' | 'Â' | 'ê' | 'Ê' | 'î' | 'Î' |
+                                'ô' | 'Ô' | 'û' | 'Û')
+                    })
+                    .collect::<String>()
+            })
+            .filter(|t| !t.is_empty())
+            .map(|t| format!("\"{}\"*", t))
+            .collect();
+        if tokens.is_empty() {
+            String::new()
+        } else {
+            tokens.join(" OR ")
+        }
+    }
+
     pub fn search_contents(&self, query: &str) -> Vec<ContentItem> {
-        let q = query.trim().to_lowercase();
+        let q = query.trim();
         if q.is_empty() {
             return self.get_all_contents();
         }
-        self.get_all_contents()
-            .into_iter()
-            .filter(|c| {
-                c.title_tr.to_lowercase().contains(&q)
-                    || c.title_en.to_lowercase().contains(&q)
-                    || c.summary_tr.to_lowercase().contains(&q)
-                    || c.summary_en.to_lowercase().contains(&q)
-                    || c.body_tr.to_lowercase().contains(&q)
-                    || c.author_name.to_lowercase().contains(&q)
-                    || c.ssb_tags.iter().any(|t| t.to_lowercase().contains(&q))
-                    || c.placements.iter().any(|p| p.to_lowercase().contains(&q))
+
+        // Try AND first for precision, fall back to OR
+        let fts_and = Self::sanitize_fts_query_with_join(q, " AND ");
+        let fts_or = Self::sanitize_fts_query_with_join(q, " OR ");
+
+        let mut fts_ids: Vec<i64> = Vec::new();
+
+        // Attempt AND query first
+        if !fts_and.is_empty() {
+            let sql = format!(
+                "SELECT c.id FROM contents_fts f JOIN contents c ON c.id = f.content_id \
+                 WHERE contents_fts MATCH ?1 ORDER BY rank LIMIT {}",
+                crate::db::constants::SEARCH_MAX_RESULTS
+            );
+            let ids: Vec<i64> = super::query_helpers::query_all(
+                self, &sql, params![fts_and.as_str()], |r| r.get(0),
+            );
+            if !ids.is_empty() {
+                fts_ids = ids;
+            }
+        }
+
+        // Fall back to OR if AND yielded nothing
+        if fts_ids.is_empty() && !fts_or.is_empty() {
+            let sql = format!(
+                "SELECT c.id FROM contents_fts f JOIN contents c ON c.id = f.content_id \
+                 WHERE contents_fts MATCH ?1 ORDER BY rank LIMIT {}",
+                crate::db::constants::SEARCH_MAX_RESULTS
+            );
+            fts_ids = super::query_helpers::query_all(
+                self, &sql, params![fts_or.as_str()], |r| r.get(0),
+            );
+        }
+
+        // Hydrate from L1 cache (preserves placements/ssb_tags)
+        let all_contents = self.get_all_contents();
+        let q_lower = q.to_lowercase();
+
+        // Collect FTS-matched items first (in rank order)
+        let mut result: Vec<ContentItem> = Vec::new();
+        let mut seen_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
+
+        for id in &fts_ids {
+            if let Some(item) = all_contents.iter().find(|c| c.id == *id) {
+                result.push(item.clone());
+                seen_ids.insert(*id);
+            }
+        }
+
+        // Union with legacy in-memory matches (author, ssb_tags, placements, slug)
+        for item in &all_contents {
+            if seen_ids.contains(&item.id) {
+                continue;
+            }
+            if item.author_name.to_lowercase().contains(&q_lower)
+                || item.ssb_tags.iter().any(|t| t.to_lowercase().contains(&q_lower))
+                || item.placements.iter().any(|p| p.to_lowercase().contains(&q_lower))
+                || item.slug.to_lowercase().contains(&q_lower)
+            {
+                result.push(item.clone());
+                seen_ids.insert(item.id);
+            }
+        }
+
+        // If FTS returned nothing and legacy also nothing, fall back to full list
+        if result.is_empty() {
+            return all_contents;
+        }
+
+        result
+    }
+
+    /// Build an FTS query with a specific join operator (AND or OR).
+    fn sanitize_fts_query_with_join(query: &str, joiner: &str) -> String {
+        let tokens: Vec<String> = query
+            .split_whitespace()
+            .map(|tok| {
+                tok.chars()
+                    .filter(|c| {
+                        c.is_ascii_alphanumeric()
+                            || *c == '_'
+                            || matches!(*c,
+                                'ç' | 'Ç' | 'ğ' | 'Ğ' | 'ı' | 'İ' |
+                                'ö' | 'Ö' | 'ş' | 'Ş' | 'ü' | 'Ü' |
+                                'â' | 'Â' | 'ê' | 'Ê' | 'î' | 'Î' |
+                                'ô' | 'Ô' | 'û' | 'Û')
+                    })
+                    .collect::<String>()
             })
-            .collect()
+            .filter(|t| !t.is_empty())
+            .map(|t| format!("\"{}\"*", t))
+            .collect();
+        if tokens.is_empty() {
+            String::new()
+        } else {
+            tokens.join(joiner)
+        }
     }
 
     pub fn upsert_content(&self, item: &ContentItem) -> rusqlite::Result<i64> {
@@ -454,7 +628,7 @@ impl Database {
         tx.commit()?;
 
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["contents"]);
         Ok(content_id)
     }
 
@@ -462,7 +636,7 @@ impl Database {
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute("DELETE FROM contents WHERE id = ?1", params![id])?;
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["contents"]);
         Ok(())
     }
 
@@ -550,89 +724,110 @@ impl Database {
     }
 
     fn load_users_db(&self) -> Vec<UserAccount> {
-        self.get_all_users()
-    }
-
-    pub fn get_all_users(&self) -> Vec<UserAccount> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT id, email, full_name, role, organization_category, organization_name,
                     job_title, is_gov_verified, subscription_tier, subscription_expires_at,
                     reminders_halted, kvkk_consent_at, kvkk_consent_ip, kvkk_consent_hash,
                     email_consent, ssb_interests_json, created_at
              FROM users ORDER BY id ASC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            let ssb_raw: String = r.get(15)?;
-            let ssb_interests: Vec<String> = serde_json::from_str(&ssb_raw).unwrap_or_default();
-            Ok(UserAccount {
-                id: r.get(0)?,
-                email: r.get(1)?,
-                full_name: r.get(2)?,
-                role: r.get(3)?,
-                organization_category: r.get(4)?,
-                organization_name: r.get(5)?,
-                job_title: r.get(6)?,
-                is_gov_verified: r.get::<_, i32>(7)? != 0,
-                subscription_tier: r.get(8)?,
-                subscription_expires_at: r.get(9)?,
-                reminders_halted: r.get::<_, i32>(10)? != 0,
-                kvkk_consent_at: r.get(11)?,
-                kvkk_consent_ip: r.get(12)?,
-                kvkk_consent_hash: r.get(13)?,
-                email_consent: r.get::<_, i32>(14)? != 0,
-                ssb_interests,
-                created_at: r.get(16)?,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
+            [],
+            |r| {
+                let ssb_raw: String = r.get(15)?;
+                let ssb_interests: Vec<String> = serde_json::from_str(&ssb_raw).unwrap_or_default();
+                Ok(UserAccount {
+                    id: r.get(0)?,
+                    email: r.get(1)?,
+                    full_name: r.get(2)?,
+                    role: r.get(3)?,
+                    organization_category: r.get(4)?,
+                    organization_name: r.get(5)?,
+                    job_title: r.get(6)?,
+                    is_gov_verified: r.get::<_, i32>(7)? != 0,
+                    subscription_tier: r.get(8)?,
+                    subscription_expires_at: r.get(9)?,
+                    reminders_halted: r.get::<_, i32>(10)? != 0,
+                    kvkk_consent_at: r.get(11)?,
+                    kvkk_consent_ip: r.get(12)?,
+                    kvkk_consent_hash: r.get(13)?,
+                    email_consent: r.get::<_, i32>(14)? != 0,
+                    ssb_interests,
+                    created_at: r.get(16)?,
+                })
+            },
+        )
+    }
+
+    pub fn get_all_users(&self) -> Vec<UserAccount> {
+        if let Ok(guard) = self.l1_cache.read() {
+            if let Some(ref snap) = *guard {
+                return snap.users.clone();
+            }
         }
+        self.load_users_db()
     }
 
     pub fn get_user_by_email(&self, email: &str) -> Option<(UserAccount, String)> {
         let norm = email.trim().to_lowercase();
-        let conn = self.open_conn().ok()?;
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, email, password_hash, full_name, role, organization_category,
-                        organization_name, job_title, is_gov_verified, subscription_tier,
-                        subscription_expires_at, reminders_halted, kvkk_consent_at,
-                        kvkk_consent_ip, kvkk_consent_hash, email_consent, ssb_interests_json, created_at
-                 FROM users WHERE LOWER(email) = ?1",
-            )
-            .ok()?;
-        stmt.query_row(params![norm], |r| {
-            let ssb_raw: String = r.get(16)?;
-            let ssb_interests: Vec<String> = serde_json::from_str(&ssb_raw).unwrap_or_default();
-            let user = UserAccount {
-                id: r.get(0)?,
-                email: r.get(1)?,
-                full_name: r.get(3)?,
-                role: r.get(4)?,
-                organization_category: r.get(5)?,
-                organization_name: r.get(6)?,
-                job_title: r.get(7)?,
-                is_gov_verified: r.get::<_, i32>(8)? != 0,
-                subscription_tier: r.get(9)?,
-                subscription_expires_at: r.get(10)?,
-                reminders_halted: r.get::<_, i32>(11)? != 0,
-                kvkk_consent_at: r.get(12)?,
-                kvkk_consent_ip: r.get(13)?,
-                kvkk_consent_hash: r.get(14)?,
-                email_consent: r.get::<_, i32>(15)? != 0,
-                ssb_interests,
-                created_at: r.get(17)?,
-            };
-            let pw_hash: String = r.get(2)?;
-            Ok((user, pw_hash))
-        })
-        .ok()
+        // Try L1 cache first for the account data
+        let cached_user = if let Ok(guard) = self.l1_cache.read() {
+            if let Some(ref snap) = *guard {
+                snap.users.iter().find(|u| u.email.to_lowercase() == norm).cloned()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Password hash always requires a targeted SQL query (not in cache)
+        let pw_hash: Option<String> = super::query_helpers::query_one(
+            self,
+            "SELECT password_hash FROM users WHERE LOWER(email) = ?1",
+            params![norm.as_str()],
+            |r| r.get(0),
+        );
+
+        match (cached_user, pw_hash) {
+            (Some(user), Some(hash)) => Some((user, hash)),
+            (None, Some(hash)) => {
+                // Cache miss but user exists — load from DB
+                let user_opt: Option<UserAccount> = super::query_helpers::query_one(
+                    self,
+                    "SELECT id, email, full_name, role, organization_category, organization_name,
+                            job_title, is_gov_verified, subscription_tier, subscription_expires_at,
+                            reminders_halted, kvkk_consent_at, kvkk_consent_ip, kvkk_consent_hash,
+                            email_consent, ssb_interests_json, created_at
+                     FROM users WHERE LOWER(email) = ?1",
+                    params![norm.as_str()],
+                    |r| {
+                        let ssb_raw: String = r.get(15)?;
+                        let ssb_interests: Vec<String> = serde_json::from_str(&ssb_raw).unwrap_or_default();
+                        Ok(UserAccount {
+                            id: r.get(0)?,
+                            email: r.get(1)?,
+                            full_name: r.get(2)?,
+                            role: r.get(3)?,
+                            organization_category: r.get(4)?,
+                            organization_name: r.get(5)?,
+                            job_title: r.get(6)?,
+                            is_gov_verified: r.get::<_, i32>(7)? != 0,
+                            subscription_tier: r.get(8)?,
+                            subscription_expires_at: r.get(9)?,
+                            reminders_halted: r.get::<_, i32>(10)? != 0,
+                            kvkk_consent_at: r.get(11)?,
+                            kvkk_consent_ip: r.get(12)?,
+                            kvkk_consent_hash: r.get(13)?,
+                            email_consent: r.get::<_, i32>(14)? != 0,
+                            ssb_interests,
+                            created_at: r.get(16)?,
+                        })
+                    },
+                );
+                user_opt.map(|u| (u, hash))
+            }
+            _ => None,
+        }
     }
 
     pub fn get_user_by_id(&self, id: i64) -> Option<UserAccount> {
@@ -679,6 +874,8 @@ impl Database {
             params![user.email.trim().to_lowercase()],
             |r| r.get(0),
         )?;
+        drop(conn);
+        self.refresh_l1_sections(&["users"]);
         Ok(uid)
     }
 
@@ -688,6 +885,8 @@ impl Database {
             "UPDATE users SET password_hash = ?1 WHERE LOWER(email) = LOWER(?2)",
             params![new_hash, email.trim()],
         )?;
+        // Password hash is not in L1 cache; no refresh needed for cache correctness.
+        // However, if other user fields were changed alongside, caller should refresh.
         Ok(())
     }
 
@@ -773,6 +972,11 @@ impl Database {
                     params![user_id, email, dynamic_exp],
                 );
             }
+        }
+        drop(conn);
+        // If approved, users table was modified; refresh users section
+        if status == "approved" {
+            self.refresh_l1_sections(&["users"]);
         }
         Ok(())
     }
@@ -916,7 +1120,7 @@ impl Database {
             conn.last_insert_rowid()
         };
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["ads"]);
         Ok(result_id)
     }
 
@@ -1200,24 +1404,51 @@ impl Database {
                 "basili-dijital" => "subscriber_print_digital",
                 _ => "subscriber_digital",
             };
+            // Wrap cross-table writes in one transaction
             if let Ok(conn) = self.open_conn() {
-                let _ = conn.execute(
-                    "UPDATE renewal_reminders SET status = 'halted_by_renewal' WHERE LOWER(user_email) = LOWER(?1) AND status = 'scheduled'",
-                    params![inv.user_email],
-                );
-                let _ = conn.execute(
-                    "UPDATE users SET reminders_halted = 1, role = CASE WHEN role IN ('site_operator', 'admin') THEN role ELSE ?1 END, subscription_tier = ?2, subscription_expires_at = ?3 WHERE LOWER(email) = LOWER(?4)",
-                    params![assigned_role, inv.item_title, dynamic_exp, inv.user_email],
-                );
+                if let Ok(tx) = conn.unchecked_transaction() {
+                    let _ = tx.execute(
+                        "UPDATE renewal_reminders SET status = 'halted_by_renewal' WHERE LOWER(user_email) = LOWER(?1) AND status = 'scheduled'",
+                        params![inv.user_email],
+                    );
+                    let _ = tx.execute(
+                        "UPDATE users SET reminders_halted = 1, role = CASE WHEN role IN ('site_operator', 'admin') THEN role ELSE ?1 END, subscription_tier = ?2, subscription_expires_at = ?3 WHERE LOWER(email) = LOWER(?4)",
+                        params![assigned_role, inv.item_title, dynamic_exp, inv.user_email],
+                    );
+                    let _ = tx.commit();
+                }
             }
+            // Users table was modified; refresh users section
+            self.refresh_l1_sections(&["users"]);
         }
     }
 
     pub fn finalize_paid_invoice(&self, merchant_oid: &str) -> Option<OrderInvoice> {
-        let mut target = self
-            .get_order_invoices()
-            .into_iter()
-            .find(|inv| crate::services::payment_service::matches_merchant_oid(&inv.invoice_no, merchant_oid))?;
+        // Targeted SELECT instead of full-table load + in-memory find
+        let mut target: OrderInvoice = super::query_helpers::query_one(
+            self,
+            "SELECT id, invoice_no, user_email, full_name, organization_name,
+                    item_type, item_code, item_title, amount_try, payment_status,
+                    created_at, pdf_watermark_code
+             FROM order_invoices WHERE invoice_no LIKE ?1 LIMIT 1",
+            params![format!("%{}%", merchant_oid)],
+            |r| {
+                Ok(OrderInvoice {
+                    id: r.get(0)?,
+                    invoice_no: r.get(1)?,
+                    user_email: r.get(2)?,
+                    full_name: r.get(3)?,
+                    organization_name: r.get(4)?,
+                    item_type: r.get(5)?,
+                    item_code: r.get(6)?,
+                    item_title: r.get(7)?,
+                    amount_try: r.get(8)?,
+                    payment_status: r.get(9)?,
+                    created_at: r.get(10)?,
+                    pdf_watermark_code: r.get(11)?,
+                })
+            },
+        )?;
 
         if target.payment_status != "paid" {
             if let Ok(conn) = self.open_conn() {
@@ -1233,11 +1464,31 @@ impl Database {
     }
 
     pub fn mark_invoice_failed(&self, merchant_oid: &str) -> bool {
-        let Some(target) = self
-            .get_order_invoices()
-            .into_iter()
-            .find(|inv| crate::services::payment_service::matches_merchant_oid(&inv.invoice_no, merchant_oid))
-        else {
+        // Targeted SELECT instead of full-table load + in-memory find
+        let Some(target) = super::query_helpers::query_one::<OrderInvoice, _>(
+            self,
+            "SELECT id, invoice_no, user_email, full_name, organization_name,
+                    item_type, item_code, item_title, amount_try, payment_status,
+                    created_at, pdf_watermark_code
+             FROM order_invoices WHERE invoice_no LIKE ?1 LIMIT 1",
+            params![format!("%{}%", merchant_oid)],
+            |r| {
+                Ok(OrderInvoice {
+                    id: r.get(0)?,
+                    invoice_no: r.get(1)?,
+                    user_email: r.get(2)?,
+                    full_name: r.get(3)?,
+                    organization_name: r.get(4)?,
+                    item_type: r.get(5)?,
+                    item_code: r.get(6)?,
+                    item_title: r.get(7)?,
+                    amount_try: r.get(8)?,
+                    payment_status: r.get(9)?,
+                    created_at: r.get(10)?,
+                    pdf_watermark_code: r.get(11)?,
+                })
+            },
+        ) else {
             return false;
         };
         if target.payment_status != "paid" {
@@ -1326,42 +1577,37 @@ impl Database {
 
     pub fn sync_evaluated_reminders(&self, logs: &[RenewalReminderLog]) -> rusqlite::Result<usize> {
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
-        let mut upserted = 0usize;
+        let tx = conn.unchecked_transaction()?;
+        // Ensure unique constraint exists for UPSERT conflict target
+        let _ = tx.execute_batch(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_renewal_reminders_user_stage ON renewal_reminders(user_id, stage_label)"
+        );
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO renewal_reminders (
+                user_id, user_email, full_name, organization_name,
+                stage_label, days_remaining, status, sent_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(user_id, stage_label) DO UPDATE SET
+                days_remaining = excluded.days_remaining,
+                status = excluded.status,
+                sent_at = excluded.sent_at"
+        )?;
+        let mut affected = 0usize;
         for log in logs {
-            let existing_id: Option<i64> = conn
-                .query_row(
-                    "SELECT id FROM renewal_reminders WHERE user_id = ?1 AND stage_label = ?2",
-                    params![log.user_id, log.stage_label],
-                    |r| r.get(0),
-                )
-                .ok();
-
-            if let Some(eid) = existing_id {
-                conn.execute(
-                    "UPDATE renewal_reminders SET days_remaining = ?1, status = ?2, sent_at = ?3 WHERE id = ?4",
-                    params![log.days_remaining, log.status, log.sent_at, eid],
-                )?;
-            } else {
-                conn.execute(
-                    "INSERT INTO renewal_reminders (
-                        user_id, user_email, full_name, organization_name,
-                        stage_label, days_remaining, status, sent_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![
-                        log.user_id,
-                        log.user_email,
-                        log.full_name,
-                        log.organization_name,
-                        log.stage_label,
-                        log.days_remaining,
-                        log.status,
-                        log.sent_at
-                    ],
-                )?;
-                upserted += 1;
-            }
+            affected += stmt.execute(params![
+                log.user_id,
+                log.user_email,
+                log.full_name,
+                log.organization_name,
+                log.stage_label,
+                log.days_remaining,
+                log.status,
+                log.sent_at
+            ])?;
         }
-        Ok(upserted)
+        drop(stmt);
+        tx.commit()?;
+        Ok(affected)
     }
 
     pub fn get_newsletter_campaigns(&self) -> Vec<NewsletterCampaign> {
@@ -1397,13 +1643,32 @@ impl Database {
     }
 
     pub fn insert_newsletter_campaign(&self, nl: &NewsletterCampaign) -> rusqlite::Result<i64> {
-        let all_users = self.get_all_users();
-        let matched_count = crate::services::email_service::filter_newsletter_recipients(
-            &all_users,
-            &nl.target_institution,
-            &nl.target_ssb_tag,
-        )
-        .len() as i64;
+        // Use targeted COUNT query instead of loading all users into memory
+        let matched_count: i64 = {
+            let inst = nl.target_institution.trim();
+            let tag = nl.target_ssb_tag.trim();
+            if inst.is_empty() && tag.is_empty() {
+                super::query_helpers::query_scalar(self, "SELECT COUNT(*) FROM users WHERE email_consent = 1", [])
+            } else if !inst.is_empty() && tag.is_empty() {
+                super::query_helpers::query_scalar(
+                    self,
+                    "SELECT COUNT(*) FROM users WHERE email_consent = 1 AND LOWER(organization_name) = LOWER(?1)",
+                    params![inst],
+                )
+            } else if inst.is_empty() && !tag.is_empty() {
+                super::query_helpers::query_scalar(
+                    self,
+                    "SELECT COUNT(*) FROM users WHERE email_consent = 1 AND ssb_interests_json LIKE ?1",
+                    params![format!("%{}%", tag)],
+                )
+            } else {
+                super::query_helpers::query_scalar(
+                    self,
+                    "SELECT COUNT(*) FROM users WHERE email_consent = 1 AND LOWER(organization_name) = LOWER(?1) AND ssb_interests_json LIKE ?2",
+                    params![inst, format!("%{}%", tag)],
+                )
+            }
+        };
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let sent_at = if nl.sent_at.trim().is_empty() {
             chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string()
@@ -1446,28 +1711,21 @@ impl Database {
     }
 
     fn load_seo_redirects_db(&self) -> Vec<SeoRedirectRule> {
-        let Ok(conn) = self.open_conn() else {
-            return Vec::new();
-        };
-        let Ok(mut stmt) = conn.prepare(
+        super::query_helpers::query_all(
+            self,
             "SELECT id, old_path, new_path, status_code, hit_count
              FROM seo_redirects ORDER BY id DESC",
-        ) else {
-            return Vec::new();
-        };
-        let rows = stmt.query_map([], |r| {
-            Ok(SeoRedirectRule {
-                id: r.get(0)?,
-                old_path: r.get(1)?,
-                new_path: r.get(2)?,
-                status_code: r.get::<_, u16>(3)?,
-                hit_count: r.get(4)?,
-            })
-        });
-        match rows {
-            Ok(iter) => iter.filter_map(Result::ok).collect(),
-            Err(_) => Vec::new(),
-        }
+            [],
+            |r| {
+                Ok(SeoRedirectRule {
+                    id: r.get(0)?,
+                    old_path: r.get(1)?,
+                    new_path: r.get(2)?,
+                    status_code: r.get::<_, u16>(3)?,
+                    hit_count: r.get(4)?,
+                })
+            },
+        )
     }
 
     pub fn find_seo_redirect(&self, old_path: &str) -> Option<SeoRedirectRule> {
@@ -1493,7 +1751,7 @@ impl Database {
         )?;
         let rowid = conn.last_insert_rowid();
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["seo_redirects"]);
         Ok(rowid)
     }
 
@@ -1566,7 +1824,7 @@ impl Database {
             ],
         )?;
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["site_settings"]);
         Ok(())
     }
 
@@ -1664,7 +1922,7 @@ impl Database {
         )?;
         let rowid = conn.last_insert_rowid();
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["notifications"]);
         Ok(rowid)
     }
 
@@ -1675,7 +1933,7 @@ impl Database {
             params![id],
         )?;
         drop(conn);
-        self.refresh_l1_cache();
+        self.refresh_l1_sections(&["notifications"]);
         Ok(())
     }
 
@@ -2161,6 +2419,58 @@ impl Database {
             )?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod fts_tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_fts_query_basic() {
+        let result = Database::sanitize_fts_query("hello world");
+        assert_eq!(result, "\"hello\"* OR \"world\"*");
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_turkish_chars() {
+        let result = Database::sanitize_fts_query("uçak gemisi");
+        assert_eq!(result, "\"uçak\"* OR \"gemisi\"*");
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_strips_punctuation() {
+        let result = Database::sanitize_fts_query("hello! @world# test...");
+        assert_eq!(result, "\"hello\"* OR \"world\"* OR \"test\"*");
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_quotes_removed() {
+        let result = Database::sanitize_fts_query("\"quoted\" 'single'");
+        assert_eq!(result, "\"quoted\"* OR \"single\"*");
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_empty_input() {
+        assert_eq!(Database::sanitize_fts_query(""), "");
+        assert_eq!(Database::sanitize_fts_query("   "), "");
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_only_special_chars() {
+        assert_eq!(Database::sanitize_fts_query("!@#$%^&*()"), "");
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_with_join_and() {
+        let result = Database::sanitize_fts_query_with_join("foo bar baz", " AND ");
+        assert_eq!(result, "\"foo\"* AND \"bar\"* AND \"baz\"*");
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_underscore_preserved() {
+        let result = Database::sanitize_fts_query("my_test query");
+        assert_eq!(result, "\"my_test\"* OR \"query\"*");
     }
 }
 

@@ -21,3 +21,9 @@ Thumbs.db
 
 # Generated artifacts
 artifacts/design-review/browser-report.json
+# Customer request files and design artifacts (not part of source)
+musteriIstekleri/
+artifacts/
+
+# Large media binaries
+images/tour.mp4

@@ -135,41 +135,103 @@
     storage.set("msi_theme", next);
   });
 
-  function portal(mode) {
-    document.body.classList.toggle("show-news", mode === "news");
+  let currentPortalMode = null;
+  function portal(mode, animate = false) {
+    const normalized = mode === "news" ? "news" : "magazine";
+    const changed =
+      currentPortalMode !== null && currentPortalMode !== normalized;
+    currentPortalMode = normalized;
+    document.body.classList.toggle("show-news", normalized === "news");
+    $$("[data-mode-switch]").forEach((sw) => {
+      sw.dataset.activeMode = normalized;
+    });
     $$("[data-portal]").forEach((a) => {
-      const active = a.dataset.portal === mode;
+      const active = a.dataset.portal === normalized;
       a.classList.toggle("active", active);
       if (active) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
+    if (animate && changed && !reducedMotion) {
+      const activeView = $(
+        normalized === "news" ? "#view-news" : "#view-magazine",
+      );
+      if (window.scrollY > 240) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      if (activeView) {
+        if (window.gsap) {
+          window.gsap.killTweensOf(activeView);
+          window.gsap.fromTo(
+            activeView,
+            { opacity: 0.01, y: 14 },
+            {
+              opacity: 1,
+              y: 0,
+              duration: 0.36,
+              ease: "power3.out",
+              clearProps: "transform,opacity",
+            },
+          );
+          const leadCards = $$(
+            ".magazine-hero, .news-lead, .story-card",
+            activeView,
+          ).slice(0, 6);
+          if (leadCards.length) {
+            window.gsap.killTweensOf(leadCards);
+            window.gsap.fromTo(
+              leadCards,
+              { opacity: 0.01, y: 12 },
+              {
+                opacity: 1,
+                y: 0,
+                duration: 0.34,
+                stagger: 0.035,
+                ease: "power2.out",
+                clearProps: "transform,opacity",
+              },
+            );
+          }
+        } else if (activeView.animate) {
+          activeView.animate(
+            [
+              { opacity: 0.01, transform: "translate3d(0, 12px, 0)" },
+              { opacity: 1, transform: "translate3d(0, 0, 0)" },
+            ],
+            { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          );
+        }
+      }
+    }
     if (window.ScrollTrigger) {
-      setTimeout(() => window.ScrollTrigger.refresh(), 50);
+      setTimeout(() => window.ScrollTrigger.refresh(), 60);
     }
   }
   const hasPortals = !!$("#view-magazine");
-  function fromURL() {
+  function fromURL(animate = false) {
     const mode =
       location.hash === "#haber"
         ? "news"
         : location.hash === "#dergi"
           ? "magazine"
           : new URL(location.href).searchParams.get("mode") || boot.mode;
-    portal(mode);
+    portal(mode, animate);
   }
-  fromURL();
-  window.addEventListener("popstate", fromURL);
-  window.addEventListener("hashchange", fromURL);
+  fromURL(false);
+  window.addEventListener("popstate", () => fromURL(true));
+  window.addEventListener("hashchange", () => fromURL(true));
   $$("[data-portal]").forEach((a) =>
     a.addEventListener("click", (e) => {
+      const mode = a.dataset.portal;
+      $$("[data-mode-switch]").forEach((sw) => {
+        sw.dataset.activeMode = mode === "news" ? "news" : "magazine";
+      });
       if (!hasPortals) return;
       e.preventDefault();
-      const mode = a.dataset.portal;
       const url = new URL(location.href);
       url.searchParams.set("mode", mode);
       url.hash = mode === "news" ? "haber" : "dergi";
       history.pushState(null, "", url);
-      portal(mode);
+      portal(mode, true);
     }),
   );
 

@@ -9,7 +9,7 @@ use crate::engine::security_engine::CentralSecurityFilter;
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /// Maximum file upload size in bytes (25 MB)
-pub const MAX_UPLOAD_SIZE: usize = 25 * 1024 * 1024;
+pub const MAX_UPLOAD_SIZE: usize = crate::db::constants::MAX_UPLOAD_SIZE_BYTES;
 
 /// Minimum password length
 pub const MIN_PASSWORD_LEN: usize = 8;

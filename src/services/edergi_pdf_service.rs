@@ -267,7 +267,7 @@ fn build_cover_page_stream(
     s.push_str("BT\n0.12 0.16 0.24 rg\n/F1 10 Tf\n42 662 Td\n(KAPAK DOSYASI VE SAYI OZETI:) Tj\nET\n");
     let summary_lines = wrap_text(&sanitize_pdf_text(&issue.summary_tr), 78);
     let mut y_cursor = 644;
-    for line in summary_lines.iter().take(6) {
+    for line in summary_lines.iter().take(crate::db::constants::PDF_SUMMARY_LINES_LIMIT) {
         s.push_str(&format!(
             "BT\n0.18 0.22 0.30 rg\n/F2 9.5 Tf\n42 {} Td\n({}) Tj\nET\n",
             y_cursor,
@@ -285,7 +285,7 @@ fn build_cover_page_stream(
     ));
     y_cursor -= 18;
 
-    for spread in issue.spreads.iter().take(8) {
+    for spread in issue.spreads.iter().take(crate::db::constants::PDF_SPREADS_LIMIT) {
         if y_cursor < 250 {
             break;
         }
@@ -366,7 +366,7 @@ fn build_spread_page_stream(
     // Turkish Title (Wrapped)
     let title_lines = wrap_text(&sanitize_pdf_text(&spread.title_tr), 62);
     let mut y = 706;
-    for tl in title_lines.iter().take(3) {
+    for tl in title_lines.iter().take(crate::db::constants::PDF_TITLE_LINES_TR_LIMIT) {
         s.push_str(&format!(
             "BT\n0.06 0.10 0.18 rg\n/F1 14 Tf\n42 {} Td\n({}) Tj\nET\n",
             y,
@@ -378,7 +378,7 @@ fn build_spread_page_stream(
     // English Title
     y -= 4;
     let en_title = format!("EN: {}", sanitize_pdf_text(&spread.title_en));
-    for tl in wrap_text(&en_title, 74).iter().take(2) {
+    for tl in wrap_text(&en_title, 74).iter().take(crate::db::constants::PDF_TITLE_LINES_EN_LIMIT) {
         s.push_str(&format!(
             "BT\n0.35 0.42 0.52 rg\n/F2 10 Tf\n42 {} Td\n({}) Tj\nET\n",
             y,
@@ -404,7 +404,7 @@ fn build_spread_page_stream(
 
     for line in wrap_text(&sanitize_pdf_text(&spread.excerpt_tr), 78)
         .iter()
-        .take(12)
+        .take(crate::db::constants::PDF_BODY_LINES_LIMIT)
     {
         s.push_str(&format!(
             "BT\n0.14 0.18 0.25 rg\n/F2 9.5 Tf\n42 {} Td\n({}) Tj\nET\n",
@@ -423,7 +423,7 @@ fn build_spread_page_stream(
 
     for line in wrap_text(&sanitize_pdf_text(&spread.excerpt_en), 78)
         .iter()
-        .take(10)
+        .take(crate::db::constants::PDF_TOC_LINES_LIMIT)
     {
         s.push_str(&format!(
             "BT\n0.24 0.29 0.38 rg\n/F2 9.5 Tf\n42 {} Td\n({}) Tj\nET\n",

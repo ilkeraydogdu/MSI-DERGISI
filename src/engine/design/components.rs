@@ -221,11 +221,20 @@ pub fn advertisement(ad: &AdCampaign, lang: &str, id: &str) -> String {
                 h = h
             );
         }
+        let cta_lbl = if lang == "en" { "Explore" } else { "İncele" };
+        let collab_lbl = if lang == "en" {
+            "Advertising & sponsorship"
+        } else {
+            "Reklam ve iş birliği"
+        };
+        let disc_lbl = if lang == "en" { "SPONSORED" } else { "REKLAM" };
         return format!(
-            r#"<aside class="advertisement ad-hybrid" id="{id}" data-ad-id="{ad_id}" aria-label="Reklam"><div class="ad-disclosure">REKLAM · {sponsor}<a href="/kurumsal/reklam-ve-sponsorluk">Reklam ve iş birliği</a></div><a class="ad-content ad-content-media" href="{href}" data-ad-click-id="{ad_id}"><span class="ad-thumb"><img src="{img}" alt="{title}" loading="lazy" decoding="async" width="{w}" height="{h}"></span><div class="ad-copy"><span class="eyebrow">{badge}</span><h3>{title}</h3><p>{desc}</p></div><span class="ad-arrow">{arrow}</span></a></aside>"#,
+            r#"<aside class="advertisement ad-hybrid" id="{id}" data-ad-id="{ad_id}" aria-label="Reklam"><div class="ad-disclosure"><span>{disc_lbl} · <strong>{sponsor}</strong></span><a href="/kurumsal/reklam-ve-sponsorluk">{collab_lbl}</a></div><a class="ad-content ad-content-media" href="{href}" data-ad-click-id="{ad_id}"><span class="ad-thumb"><img src="{img}" alt="{title}" loading="lazy" decoding="async" width="{w}" height="{h}"></span><div class="ad-copy"><span class="eyebrow">{badge}</span><h3>{title}</h3><p>{desc}</p></div><span class="ad-cta">{cta_lbl} {arrow}</span></a></aside>"#,
             id = esc(id),
             ad_id = ad.id,
+            disc_lbl = disc_lbl,
             sponsor = esc(&ad.sponsor_name),
+            collab_lbl = collab_lbl,
             href = link(&ad.target_url),
             img = asset(img_path),
             title = esc(localized(lang, &ad.title_tr, &ad.title_en)),
@@ -233,6 +242,7 @@ pub fn advertisement(ad: &AdCampaign, lang: &str, id: &str) -> String {
             h = h,
             badge = esc(&ad.badge_label),
             desc = esc(localized(lang, &ad.desc_tr, &ad.desc_en)),
+            cta_lbl = cta_lbl,
             arrow = icon("arrow")
         );
     }
@@ -298,7 +308,7 @@ pub fn editorial_sidebar(
         };
         let cards: String = related
             .iter()
-            .take(5)
+            .take(crate::db::constants::COMPONENTS_HIGHLIGHT_LIMIT)
             .map(|c| {
                 let t = esc(localized(lang, &c.title_tr, &c.title_en));
                 let img = asset(&c.cover_image);
@@ -330,10 +340,24 @@ pub fn editorial_sidebar(
         )
     };
 
-    let tower_ad = ads
+    let tower_pool: Vec<&AdCampaign> = ads
         .iter()
-        .find(|a| a.is_active && a.slot_code.starts_with("ad-live-home-right"))
-        .or_else(|| ads.iter().find(|a| a.is_active && a.image_url.is_some()))
+        .filter(|a| a.is_active && a.slot_code.starts_with("ad-live-home-right"))
+        .collect();
+    let seed_key = format!(
+        "{}:{}",
+        active_category,
+        related.first().map(|c| c.slug.as_str()).unwrap_or("")
+    );
+    let seed_idx: usize = seed_key
+        .bytes()
+        .fold(0usize, |acc, b| acc.wrapping_mul(31).wrapping_add(b as usize));
+    let selected_tower = if !tower_pool.is_empty() {
+        Some(tower_pool[seed_idx % tower_pool.len()])
+    } else {
+        ads.iter().find(|a| a.is_active && a.image_url.is_some())
+    };
+    let tower_ad = selected_tower
         .map(|a| {
             let img = a
                 .image_url
@@ -532,7 +556,7 @@ fn render_section(
                     heading(s)
                 );
             };
-            let preview_spreads: Vec<_> = i.spreads.iter().take(4).collect();
+            let preview_spreads: Vec<_> = i.spreads.iter().take(crate::db::constants::COMPONENTS_PREVIEW_SPREADS_LIMIT).collect();
             let spread_tabs = if preview_spreads.is_empty() {
                 String::new()
             } else {

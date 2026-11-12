@@ -114,7 +114,7 @@ pub fn render_with_nonce(
         .collect();
     let notification_items: String = public_notifications
         .iter()
-        .take(20)
+        .take(crate::db::constants::SHELL_NAV_CONTENT_LIMIT)
         .map(|n| notification_item(n, lang))
         .collect();
     let announcement = settings
@@ -147,7 +147,7 @@ pub fn render_with_nonce(
     } else {
         let primary_items: String = ticker_pool
             .iter()
-            .take(10)
+            .take(crate::db::constants::SHELL_TRENDING_LIMIT)
             .enumerate()
             .map(|(idx, c)| {
                 format!(
@@ -161,7 +161,7 @@ pub fn render_with_nonce(
             .collect();
         let clone_items: String = ticker_pool
             .iter()
-            .take(10)
+            .take(crate::db::constants::SHELL_LATEST_ISSUES_LIMIT)
             .map(|c| {
                 format!(
                     r#"<a class="ticker-item is-clone" href="/icerik/{slug}" tabindex="-1" aria-hidden="true"><span class="ticker-sep" aria-hidden="true">◆</span>{title}</a>"#,
@@ -245,8 +245,6 @@ pub fn render_with_nonce(
         user = icon("user"),
         arrow = icon("arrow"),
         menu = icon("menu"),
-        book = icon("book"),
-        news_icon = icon("book"),
         close = icon("close"),
         notification_count = public_notifications.len(),
         notification_content = if notification_items.is_empty() {

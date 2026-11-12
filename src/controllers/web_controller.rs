@@ -486,11 +486,11 @@ pub async fn render_category_page(
         .collect();
     let mut sidebar_related: Vec<_> = snap_for_counts.data.contents
         .iter()
-        .filter(|c| c.content_type != "yeni-sayi-kapak" && !page_items.iter().take(6).any(|x| x.id == c.id))
+        .filter(|c| c.content_type != "yeni-sayi-kapak" && !page_items.iter().take(crate::db::constants::RELATED_CONTENT_LIMIT).any(|x| x.id == c.id))
         .cloned()
         .collect();
     sidebar_related.sort_by(|a, b| b.published_at.cmp(&a.published_at).then(b.id.cmp(&a.id)));
-    sidebar_related.truncate(5);
+    sidebar_related.truncate(crate::db::constants::SIDEBAR_RELATED_CONTENT_LIMIT);
     let all_ads = state.db.get_all_ads();
     let sidebar = editorial_sidebar(&slug, &sidebar_related, &all_ads, &lang);
 
@@ -684,6 +684,7 @@ pub async fn render_search_page(
         &snap.data.categories,
         &snap.data.ssb_tags,
         &snap.data.issues,
+        &snap.data.site_settings,
     );
 
     let body_html = design_engine::render_search_and_filter_page(

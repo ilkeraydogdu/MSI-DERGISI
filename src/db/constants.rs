@@ -78,3 +78,77 @@ pub const PASSWORD_MIN_LENGTH: usize = 8;
 pub const DB_POOL_MAX_SIZE: u32 = 16;
 pub const DB_POOL_MIN_IDLE: u32 = 4;
 pub const DB_BUSY_TIMEOUT_MS: u32 = 5000;
+
+// =========================================================================
+// SHELL / UI LIMITS (used by shell.rs, web_controller, api_controller)
+// =========================================================================
+/// Maximum contents shown in shell navigation panels
+pub const SHELL_NAV_CONTENT_LIMIT: usize = 20;
+/// Maximum trending items in shell sidebar
+pub const SHELL_TRENDING_LIMIT: usize = 10;
+/// Maximum latest issues shown in shell
+pub const SHELL_LATEST_ISSUES_LIMIT: usize = 10;
+/// Preview limit for refresh log entries
+pub const REFRESH_LOG_PREVIEW_LIMIT: usize = 8;
+/// API feed content pagination limit
+pub const API_FEED_CONTENT_LIMIT: usize = 20;
+/// Related content suggestions per article
+pub const RELATED_CONTENT_LIMIT_SHELL: usize = 6;
+/// Max filename length for media uploads
+pub const MEDIA_FILENAME_MAX_LEN: usize = 64;
+
+// =========================================================================
+// PDF GENERATION LIMITS (edergi_pdf_service.rs)
+// =========================================================================
+/// Lines of summary text included in PDF issue preview
+pub const PDF_SUMMARY_LINES_LIMIT: usize = 6;
+/// Number of page spreads rendered in PDF
+pub const PDF_SPREADS_LIMIT: usize = 8;
+/// Max lines for Turkish title in PDF
+pub const PDF_TITLE_LINES_TR_LIMIT: usize = 3;
+/// Max lines for English title in PDF
+pub const PDF_TITLE_LINES_EN_LIMIT: usize = 2;
+/// Max body text lines per PDF section
+pub const PDF_BODY_LINES_LIMIT: usize = 12;
+/// Max table-of-contents lines in PDF
+pub const PDF_TOC_LINES_LIMIT: usize = 10;
+
+// =========================================================================
+// READER & COMPONENTS LIMITS
+// =========================================================================
+/// Related articles shown in reader view
+pub const READER_RELATED_LIMIT: usize = 3;
+/// Highlight items in components panel
+pub const COMPONENTS_HIGHLIGHT_LIMIT: usize = 5;
+/// Preview spreads in components panel
+pub const COMPONENTS_PREVIEW_SPREADS_LIMIT: usize = 4;
+
+// =========================================================================
+// SEO / SITEMAP LIMITS (for seo_router_engine.rs audit)
+// =========================================================================
+/// Featured items on homepage (SEO context)
+pub const HOMEPAGE_FEATURED_LIMIT: usize = 10;
+/// Newsletter recipients cap for sitemap/SEO contexts
+pub const SITEMAP_NEWSLETTER_LIMIT: usize = 50;
+
+// =========================================================================
+// ADDITIONAL LIMITS (blocker fixes from sub-agent sweeps)
+// =========================================================================
+/// Sidebar related-content display limit (post-filter truncate)
+pub const SIDEBAR_RELATED_CONTENT_LIMIT: usize = 5;
+/// Ticker / latest-headlines items in shell
+pub const SHELL_TICKER_HEADLINES_LIMIT: usize = 8;
+/// llms.txt full issue listing limit
+pub const LLMS_FULL_ISSUE_LIMIT: usize = 25;
+/// llms.txt preview issue listing limit
+pub const LLMS_PREVIEW_ISSUE_LIMIT: usize = 10;
+
+// =========================================================================
+// CONTENT TYPE / FACET SLUG CONSTANTS
+// =========================================================================
+/// Content type slug for video content
+pub const CONTENT_TYPE_VIDEO: &str = "video";
+/// Facet slug for multimedia source group
+pub const FACET_SLUG_MULTIMEDIA: &str = "multimedya";
+/// Facet slug for video source group
+pub const FACET_SLUG_VIDEO: &str = "video";

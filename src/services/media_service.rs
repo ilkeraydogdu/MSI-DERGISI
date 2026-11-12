@@ -30,7 +30,7 @@ pub const DEFAULT_AD_SIDEBAR: &str = "images/msi/msi-dergisi-reklam-home-right-1
 pub const ALLOWED_EXTENSIONS: &[&str] = &["webp", "png", "jpg", "jpeg", "svg", "pdf", "mp4"];
 
 /// Maximum upload size in bytes (25 MB).
-pub const MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024;
+pub const MAX_UPLOAD_BYTES: usize = crate::db::constants::MAX_UPLOAD_SIZE_BYTES;
 
 /// MIME type mapping for allowed extensions.
 pub fn mime_for_ext(ext: &str) -> &'static str {
@@ -91,7 +91,7 @@ pub fn generate_upload_path(
     } else {
         raw_stem
             .chars()
-            .take(64)
+            .take(crate::db::constants::MEDIA_FILENAME_MAX_LEN)
             .collect::<String>()
             .trim_matches('-')
             .to_string()

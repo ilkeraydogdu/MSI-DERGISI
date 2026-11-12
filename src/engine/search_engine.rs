@@ -1,7 +1,8 @@
 use crate::models::{
     CategoryNode, ContentItem, FacetBucket, MagazineIssue, SearchFacetResponse, SearchFilterQuery,
-    SsbInterestTag,
+    SiteSetting, SsbInterestTag,
 };
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 pub struct CentralSearchEngine;
@@ -47,8 +48,8 @@ impl CentralSearchEngine {
             return true;
         }
         // Dynamic: match video/multimedia by content_type or video_url presence
-        if (slug.eq_ignore_ascii_case("multimedya") || slug.eq_ignore_ascii_case("video"))
-            && (item.content_type == "video" || item.video_url.is_some())
+        if (slug.eq_ignore_ascii_case(crate::db::constants::FACET_SLUG_MULTIMEDIA) || slug.eq_ignore_ascii_case(crate::db::constants::FACET_SLUG_VIDEO))
+            && (item.content_type == crate::db::constants::CONTENT_TYPE_VIDEO || item.video_url.is_some())
         {
             return true;
         }
@@ -84,6 +85,39 @@ impl CentralSearchEngine {
         true
     }
 
+    /// Derives a human-readable label for a source_group code from site_settings
+    /// (keys: `source_label.{code}.tr` / `source_label.{code}.en`).
+    /// Falls back to title-casing the code when no override exists.
+    fn resolve_source_label(code: &str, settings: &[SiteSetting], lang: &str) -> String {
+        let suffix = if lang.eq_ignore_ascii_case("en") { "en" } else { "tr" };
+        let key = format!("source_label.{}.{}", code, suffix);
+        if let Some(s) = settings.iter().find(|s| s.key == key) {
+            let val = if lang.eq_ignore_ascii_case("en") {
+                &s.value_en
+            } else {
+                &s.value_tr
+            };
+            if !val.trim().is_empty() {
+                return val.clone();
+            }
+        }
+        // Title-case fallback: replace hyphens/underscores with spaces, capitalize first letter of each word
+        code.replace(['-', '_'], " ")
+            .split_whitespace()
+            .map(|w| {
+                let mut chars = w.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => {
+                        let upper: String = first.to_uppercase().collect();
+                        format!("{}{}", upper, chars.as_str())
+                    }
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     /// Executes multi-dimensional faceted search over the Single Source of Truth content pool with microsecond telemetry.
     pub fn execute_faceted_search(
         query: &SearchFilterQuery,
@@ -91,6 +125,7 @@ impl CentralSearchEngine {
         categories: &[CategoryNode],
         ssb_tags: &[SsbInterestTag],
         issues: &[MagazineIssue],
+        site_settings: &[SiteSetting],
     ) -> SearchFacetResponse {
         let start = Instant::now();
 
@@ -297,20 +332,16 @@ impl CentralSearchEngine {
             })
             .collect();
 
-        // Source Group Facets — dynamically derived from live content data (no hardcoded slugs)
-        let mut source_groups: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+        // Source Group Facets — dynamically derived from live content data with labels from site_settings
+        let mut source_counts: BTreeMap<String, usize> = BTreeMap::new();
         for item in all_contents.iter() {
             if !item.source_group.is_empty() {
-                *source_groups.entry(item.source_group.clone()).or_insert(0) += 1;
+                *source_counts.entry(item.source_group.clone()).or_insert(0) += 1;
             }
         }
-        let source_defs: Vec<(String, String, String)> = source_groups
-            .keys()
-            .map(|code| (code.clone(), code.clone(), code.clone()))
-            .collect();
-        let source_facets: Vec<FacetBucket> = source_defs
+        let source_facets: Vec<FacetBucket> = source_counts
             .iter()
-            .map(|(code, tr, en)| {
+            .map(|(code, &_raw_count)| {
                 let count = all_contents
                     .iter()
                     .filter(|item| {
@@ -318,10 +349,12 @@ impl CentralSearchEngine {
                             && item.source_group.eq_ignore_ascii_case(code)
                     })
                     .count();
+                let label_tr = Self::resolve_source_label(code, site_settings, "tr");
+                let label_en = Self::resolve_source_label(code, site_settings, "en");
                 FacetBucket {
-                    code: (*code).to_string(),
-                    label_tr: (*tr).to_string(),
-                    label_en: (*en).to_string(),
+                    code: code.clone(),
+                    label_tr,
+                    label_en,
                     count,
                 }
             })
@@ -348,6 +381,7 @@ pub fn execute_faceted_search(
     categories: &[CategoryNode],
     ssb_tags: &[SsbInterestTag],
     issues: &[MagazineIssue],
+    site_settings: &[SiteSetting],
 ) -> SearchFacetResponse {
-    CentralSearchEngine::execute_faceted_search(query, all_contents, categories, ssb_tags, issues)
+    CentralSearchEngine::execute_faceted_search(query, all_contents, categories, ssb_tags, issues, site_settings)
 }

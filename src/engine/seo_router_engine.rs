@@ -750,7 +750,7 @@ impl CentralSeoEngine {
 
         let has_part: Vec<Value> = sorted_issues
             .into_iter()
-            .take(crate::db::constants::HOMEPAGE_HERO_LIMIT + 4)
+            .take(crate::db::constants::HOMEPAGE_FEATURED_LIMIT)
             .map(|iss| {
                 json!({
                     "@type": "PublicationIssue",
@@ -1351,7 +1351,7 @@ Sitemap: {base}/rss.xml?lang=en
         let items: Vec<Value> = contents
             .iter()
             .filter(|c| !is_en || !c.title_en.is_empty())
-            .take(crate::db::constants::NEWSLETTER_RECIPIENT_LIMIT)
+            .take(crate::db::constants::SITEMAP_NEWSLETTER_LIMIT)
             .map(|c| {
                 let title = if is_en && !c.title_en.is_empty() {
                     &c.title_en
@@ -1450,7 +1450,7 @@ Sitemap: {base}/rss.xml?lang=en
         let mut sorted_issues: Vec<&MagazineIssue> = issues.iter().collect();
         sorted_issues.sort_by(|a, b| b.issue_number.cmp(&a.issue_number));
         out.push_str("## Güncel Dergi Sayıları (MSI Dergisi & MSI TDR Dijital Kütüphane)\n");
-        for iss in sorted_issues.iter().take(if full { 25 } else { 10 }) {
+        for iss in sorted_issues.iter().take(if full { crate::db::constants::LLMS_FULL_ISSUE_LIMIT } else { crate::db::constants::LLMS_PREVIEW_ISSUE_LIMIT }) {
             out.push_str(&format!(
                 "- [{}]({}/e-dergi?issue={}): {}\n",
                 iss.title_tr, clean_base, iss.issue_number, iss.summary_tr

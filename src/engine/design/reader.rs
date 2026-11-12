@@ -42,7 +42,7 @@ pub fn article(
             "<section class=\"container section-space\"><div class=\"section-heading\"><div><div class=\"eyebrow\">OKUMAYA DEVAM EDİN</div><h2>İlginizi çekebilir</h2></div></div><div class=\"stories\">{}</div></section>",
             related
                 .iter()
-                .take(3)
+                .take(crate::db::constants::READER_RELATED_LIMIT)
                 .map(|c| article_card(c, lang, false))
                 .collect::<String>()
         )
@@ -67,10 +67,36 @@ pub fn article(
             r#"<div class="article-tags-bar" aria-label="Teknoloji etiketleri"><span class="eyebrow">TEKNOLOJİ ETİKETLERİ</span><div class="article-tag-pills">{chips}</div></div>"#
         )
     };
-    let inline_ad = ads
+    let inline_pool: Vec<&AdCampaign> = ads
         .iter()
-        .find(|a| a.is_active && !a.slot_code.starts_with("ad-live-home-right"))
-        .or_else(|| ads.first())
+        .filter(|a| {
+            a.is_active
+                && !a.is_floating_popup
+                && !a.slot_code.starts_with("ad-live-home-right")
+                && !a.slot_code.starts_with("ad-live-home-")
+        })
+        .collect();
+    let matched_inline: Vec<&AdCampaign> = inline_pool
+        .iter()
+        .copied()
+        .filter(|a| {
+            a.target_categories
+                .iter()
+                .any(|c| c == "*" || c == &item.content_type)
+                || a.target_ssb_tags
+                    .iter()
+                    .any(|t| t == "*" || item.ssb_tags.contains(t))
+        })
+        .collect();
+    let chosen_ad = if !matched_inline.is_empty() {
+        Some(matched_inline[(item.id.unsigned_abs() as usize) % matched_inline.len()])
+    } else if !inline_pool.is_empty() {
+        Some(inline_pool[(item.id.unsigned_abs() as usize) % inline_pool.len()])
+    } else {
+        ads.iter()
+            .find(|a| a.is_active && !a.slot_code.starts_with("ad-live-home-right"))
+    };
+    let inline_ad = chosen_ad
         .map(|a| advertisement(a, lang, "article-sponsor"))
         .unwrap_or_default();
     let safe_body = crate::engine::security_engine::sanitize_rich_html(body);

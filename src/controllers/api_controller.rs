@@ -858,7 +858,7 @@ pub async fn admin_ping_indexnow(State(state): State<AppState>) -> Response {
         "/sitemap-news.xml".to_string(),
         "/llms.txt".to_string(),
     ];
-    for c in state.db.get_all_contents().into_iter().take(20) {
+    for c in state.db.get_all_contents().into_iter().take(crate::db::constants::API_FEED_CONTENT_LIMIT) {
         urls.push(crate::engine::url_builder::article_url(&c.slug));
     }
     let key = crate::services::indexnow_service::resolve_indexnow_key(&state.config);

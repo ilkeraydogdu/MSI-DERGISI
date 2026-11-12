@@ -1043,7 +1043,7 @@ pub async fn handle_fallback_or_redirect(
     uri: axum::http::Uri,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
-    Extension(csp_nonce): Extension<CspNonce>,
+    Extension(_csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let path = uri.path();
 

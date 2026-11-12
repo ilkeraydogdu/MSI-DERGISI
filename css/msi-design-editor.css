@@ -1,0 +1,337 @@
+/* Editor chrome is intentionally independent of the draft palette. */
+:root {
+  --msi-bg-body: #f5f4f1;
+  --msi-bg-surface: #fff;
+  --msi-bg-subtle: #edece8;
+  --msi-text-primary: #242b35;
+  --msi-text-muted: #5b626c;
+  --msi-border: #dcdedc;
+  --msi-red: #b51230;
+  --radius: 4px;
+  --base-size: 16px;
+  --site-width: 1280px;
+}
+.design-editor {
+  height: 100vh;
+  overflow: hidden;
+}
+.editor-header {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--msi-border);
+  padding: 16px 24px;
+  background: var(--msi-bg-surface);
+}
+.editor-brand {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  white-space: nowrap;
+}
+.editor-brand span {
+  font-size: 14px;
+  letter-spacing: 0;
+  font-weight: 500;
+  margin-left: 14px;
+}
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.editor-actions > span {
+  font-size: 12px;
+  color: var(--msi-text-muted);
+}
+.editor-workspace {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  height: calc(100vh - 76px);
+}
+.editor-sidebar {
+  overflow: auto;
+  padding: 28px 24px;
+  border-right: 1px solid var(--msi-border);
+  background: var(--msi-bg-surface);
+}
+.editor-intro h1 {
+  font-size: 28px;
+  margin: 0 0 12px;
+}
+.editor-intro p {
+  font-size: 13px;
+  color: var(--msi-text-muted);
+}
+.editor-tabs {
+  display: flex;
+  margin: 24px -24px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--msi-border);
+}
+.editor-tabs button {
+  flex: 1;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 14px 0;
+  font-size: 13px;
+  color: var(--msi-text-muted);
+}
+.editor-tabs button[aria-selected="true"] {
+  border-color: var(--msi-red);
+  color: var(--msi-text-primary);
+  font-weight: 700;
+}
+.editor-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.editor-row .button {
+  font-size: 12px;
+  padding: 10px 14px;
+}
+.field-help {
+  font-size: 11px;
+  color: var(--msi-text-muted);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.editor-section-heading {
+  margin-top: 28px;
+  margin-bottom: 16px;
+}
+.editor-section-heading h2,
+.editor-sidebar h2 {
+  font-size: 17px;
+}
+.editor-section-heading span {
+  font-size: 11px;
+  color: var(--msi-text-muted);
+}
+.section-editor {
+  border: 1px solid var(--msi-border);
+  margin: 10px 0;
+  border-radius: 4px;
+}
+.section-editor > summary {
+  cursor: pointer;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.section-editor .ui-form {
+  padding: 12px;
+  border-top: 1px solid var(--msi-border);
+}
+.section-editor .ui-form label {
+  font-size: 11px;
+}
+.section-editor .ui-form input,
+.section-editor .ui-form select,
+.section-editor .ui-form textarea {
+  font-size: 13px;
+}
+.section-controls {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--msi-border);
+}
+.section-controls button {
+  background: var(--msi-bg-subtle);
+  color: var(--msi-text-primary);
+  border: 1px solid var(--msi-border);
+  padding: 6px 10px;
+  font-size: 12px;
+  min-height: 36px;
+}
+.section-controls .remove {
+  margin-left: auto;
+}
+.section-editor.is-disabled {
+  opacity: 0.6;
+}
+.editor-add {
+  margin-top: 20px;
+}
+.danger {
+  color: var(--msi-red);
+  margin-top: 16px;
+}
+.editor-tools {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--msi-border);
+  font-size: 13px;
+}
+.editor-tools summary {
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+.editor-tools .text-link {
+  font-size: 11px;
+}
+.palette-group {
+  padding-top: 24px;
+}
+.palette-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 12px;
+  gap: 12px;
+}
+.palette-row input[type="color"] {
+  height: 36px;
+  width: 48px;
+  padding: 2px;
+  background: none;
+  border: 1px solid var(--msi-border);
+}
+.palette-row input[type="text"] {
+  width: 90px;
+  font-size: 12px;
+  border: 1px solid var(--msi-border);
+  padding: 8px;
+}
+.palette-row span {
+  margin-right: auto;
+}
+.navigation-editor {
+  border: 1px solid var(--msi-border);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.navigation-editor .editor-row {
+  margin-top: 12px;
+}
+.navigation-editor button {
+  font-size: 12px;
+}
+.editor-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  background: #e4e5e7;
+}
+.preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: #fff;
+  border-bottom: 1px solid var(--msi-border);
+  width: 100%;
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+.preview-toolbar button {
+  font-size: 11px;
+  padding: 7px 12px;
+  background: transparent;
+  border: 1px solid var(--msi-border);
+  color: var(--msi-text-primary);
+}
+.preview-toolbar button[aria-pressed="true"] {
+  background: var(--msi-text-primary);
+  color: #fff;
+}
+.editor-preview iframe {
+  background: #fff;
+  flex: 1;
+  width: 100%;
+  border: 0;
+  max-width: 100%;
+  transition: width 0.2s;
+}
+#editor-feedback {
+  width: 100%;
+  background: #fff;
+  font-size: 13px;
+  color: var(--msi-red);
+  padding: 0 20px;
+}
+#editor-feedback:not(:empty) {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--msi-border);
+}
+.editor-preview iframe:focus {
+  outline: 2px solid var(--msi-red);
+}
+@media (max-width: 1000px) {
+  .editor-workspace {
+    grid-template-columns: 320px 1fr;
+  }
+  .editor-actions > span {
+    display: none;
+  }
+  .editor-header {
+    padding: 12px 16px;
+  }
+  .editor-brand span {
+    display: none;
+  }
+  .preview-toolbar > span {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .design-editor {
+    overflow: auto;
+    height: auto;
+  }
+  .editor-header {
+    height: auto;
+    flex-wrap: wrap;
+  }
+  .editor-actions {
+    gap: 8px;
+  }
+  .editor-actions .button {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+  .editor-workspace {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+  }
+  .editor-sidebar {
+    overflow: visible;
+    border-right: 0;
+  }
+  .editor-preview {
+    min-height: 750px;
+  }
+  .editor-preview iframe {
+    min-height: 680px;
+    flex: auto;
+  }
+  .editor-intro br {
+    display: none;
+  }
+  .editor-sidebar {
+    padding: 20px;
+  }
+  .editor-tabs {
+    margin-inline: -20px;
+  }
+  .preview-toolbar {
+    padding: 12px;
+  }
+  .editor-actions {
+    flex: 1;
+    justify-content: flex-end;
+  }
+}

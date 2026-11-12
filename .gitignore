@@ -1,0 +1,23 @@
+# Rust build artifacts
+target/
+
+# SQLite database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Environment variables and secrets - NEVER commit credentials
+.env
+
+# Log files
+*.log
+
+# Node.js dependencies
+node_modules/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Generated artifacts
+artifacts/design-review/browser-report.json

@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KAAN Programında Mevcut Durum ve Yol Haritası - MSI Dergisi</title>
+    <!-- Favicon -->
+    <link rel="shortcut icon" type="image/x-icon" href="images/favicon.png">
+    <!-- Bootstrap core CSS -->
+    <link href="css/bootstrap.min.css" rel="stylesheet" type="text/css">
+    <!--Custom CSS-->
+    <link href="css/style.css" rel="stylesheet" type="text/css">
+    <!--Plugin CSS-->
+    <link href="css/plugin.css" rel="stylesheet" type="text/css">
+    <!--Flaticons CSS-->
+    <link href="fonts/flaticon.css" rel="stylesheet" type="text/css">
+    <!--Font Awesome-->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/all.min.css">
+    <link rel="stylesheet" href="fonts/line-icons.css" type="text/css">
+    <!-- MSI Modern Design System & Magazine Showcase -->
+    <link href="css/msi-modern.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+
+    <!-- Preloader -->
+    <div id="preloader">
+        <div id="status"></div>
+    </div>
+    <!-- Preloader Ends -->
+
+    <!-- header starts -->
+    <header class="main_header_area">
+        <!-- Elite Top Ticker Bar -->
+        <div class="header-top-bar">
+            <div class="container d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center flex-shrink-0 me-3">
+                    <span class="badge-live-ticker"><span class="blink-dot"></span>FLAŞ GELİŞME</span>
+                </div>
+                <div class="header-ticker-marquee flex-grow-1 overflow-hidden">
+                    <marquee scrolldelay="60" behavior="scroll" onmouseover="this.stop();" onmouseleave="this.start();">
+                        <a href="detail-1.html"><i class="fa fa-fighter-jet text-danger me-1"></i> KAAN Programında 5. Nesil Aviyonik Entegrasyonu ve Yeni Uçuş Test Takvimi Değerlendirildi</a>
+                        <span class="text-white-50 me-3">•</span>
+                        <a href="detail-2.html"><i class="fa fa-crosshairs text-danger me-1"></i> AKINCI TİHA, İHA-300 Füzesi ile 250 Km Uzaktaki Hedefi Tam İsabetle Vurdu</a>
+                        <span class="text-white-50 me-3">•</span>
+                        <a href="detail-3.html"><i class="fa fa-ship text-danger me-1"></i> CTech’ten Sürü İnsansız Deniz Araçları için Hibrit ve Kesintisiz Haberleşme Konsepti</a>
+                        <span class="text-white-50 me-3">•</span>
+                        <a href="detail-1.html"><i class="fa fa-shield-alt text-danger me-1"></i> MKE ve PGZ Arasında Yakın Hava Savunma Sistemleri Alanında Stratejik İş Birliği</a>
+                        <span class="text-white-50 me-3">•</span>
+                        <a href="#modal-magazine" data-bs-toggle="modal"><i class="fa fa-book text-warning me-1"></i> <strong>MSI Dergisi 280. Sayısı Yayında! Sayfaları Çevirerek İnceleyin</strong></a>
+                    </marquee>
+                </div>
+                <div class="header-top-right d-none d-lg-flex align-items-center flex-shrink-0 ms-4">
+                    <span><i class="far fa-calendar-alt text-danger me-1"></i> 14 Eylül 2026</span>
+                    <span class="text-white-50">|</span>
+                    <a href="#modal-magazine" data-bs-toggle="modal"><i class="fas fa-newspaper text-warning me-1"></i> E-Bülten</a>
+                    <span class="text-white-50">|</span>
+                    <div class="header-social-links">
+                        <a href="#" title="X (Twitter)"><i class="fab fa-twitter"></i></a>
+                        <a href="#" title="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="#" title="YouTube"><i class="fab fa-youtube"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Navigation Bar -->
+        <div class="header_menu" id="header_menu">
+            <nav class="navbar navbar-default">
+                <div class="container">
+                    <div class="navbar-flex d-flex align-items-center justify-content-between w-100">
+                        <!-- Brand Logo -->
+                        <div class="navbar-header">
+                            <a class="navbar-brand" href="index.html">
+                                <img src="images/logo.svg" alt="MSI Dergisi">
+                            </a>
+                        </div>
+                        
+                        <!-- Nav links -->
+                        <div class="navbar-collapse1 d-flex align-items-center" id="bs-example-navbar-collapse-1">
+                            <ul class="nav navbar-nav" id="responsive-menu">
+                                <li><a href="index.html">Ana Sayfa</a></li>
+
+                                <!-- 1. İÇERİKLER -->
+                                <li class="dropdown submenu active">
+                                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                                        İçerikler <i class="fa fa-angle-down" aria-hidden="true"></i>
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        <li><a href="index.html#haber"><i class="fas fa-newspaper text-danger me-2"></i> Haberler</a></li>
+                                        <li><a href="post-list-1.html"><i class="fas fa-star text-danger me-2"></i> Özel Haberler</a></li>
+                                        <li><a href="lifestyle.html"><i class="fas fa-microphone-alt text-danger me-2"></i> Söyleşiler</a></li>
+                                        <li><a href="detail-3.html"><i class="fas fa-bullhorn text-danger me-2"></i> Mesajlar</a></li>
+                                        <li><a href="post-list-2.html"><i class="fas fa-file-alt text-danger me-2"></i> Tanıtıcı Makaleler</a></li>
+                                        <li><a href="technology.html"><i class="fas fa-chart-line text-danger me-2"></i> Makaleler/Analizler</a></li>
+                                        <li><a href="detail-2.html"><i class="fas fa-ad text-danger me-2"></i> Advertorial</a></li>
+                                        <li><a href="detail-1.html"><i class="fas fa-pen-fancy text-danger me-2"></i> Başyazı</a></li>
+                                    </ul>
+                                </li>
+
+                                <!-- 2. GRUPLANDIRILMIŞ İÇERİKLER -->
+                                <li class="dropdown submenu">
+                                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                                        Özel Dosyalar <i class="fa fa-angle-down" aria-hidden="true"></i>
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        <li><a href="post-grid-1.html"><i class="fas fa-folder-open text-danger me-2"></i> Özel Dosyalar</a></li>
+                                        <li><a href="gallery.html"><i class="fas fa-bookmark text-danger me-2"></i> Kapak Dosyaları</a></li>
+                                        <li><a href="travel.html"><i class="fas fa-shield-alt text-danger me-2"></i> TSK’dan Haberler</a></li>
+                                        <li><a href="gallery1.html"><i class="fas fa-book-open text-danger me-2"></i> Dergi İçerikleri</a></li>
+                                        <li class="dropdown submenu">
+                                            <a href="gallery.html" class="d-flex align-items-center justify-content-between">
+                                                <span><i class="fas fa-calendar-alt text-danger me-2"></i> Etkinlikler</span>
+                                                <i class="fa fa-angle-right ms-auto"></i>
+                                            </a>
+                                            <ul class="dropdown-menu">
+                                                <li><a href="gallery.html"><i class="fas fa-certificate text-danger me-2"></i> Etkinlik Özel Sayıları</a></li>
+                                                <li><a href="post-grid-2.html"><i class="fas fa-file-invoice text-danger me-2"></i> Etkinlik Sonrası Özel Dosyalar</a></li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                </li>
+
+                                <!-- 3. ABONELİK VE KAYIT -->
+                                <li class="dropdown submenu">
+                                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                                        E-Dergi &amp; Abonelik <i class="fa fa-angle-down" aria-hidden="true"></i>
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        <li><a href="#modal-magazine" data-bs-toggle="modal"><i class="fas fa-tablet-alt text-danger me-2"></i> <strong>E-Dergi (Dijital Kiosk)</strong></a></li>
+                                        <li><a href="index.html#msi-mag-pricing-sec"><i class="fas fa-shopping-cart text-danger me-2"></i> Abonelik ve Satış (Dergi, Kitap)</a></li>
+                                        <li><a href="#modal-login" data-bs-toggle="modal"><i class="fas fa-user-lock text-danger me-2"></i> Kayıt Ol / Hesabım</a></li>
+                                    </ul>
+                                </li>
+
+                                <!-- 4. KURUMSAL SAYFALAR -->
+                                <li class="dropdown submenu">
+                                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                                        Kurumsal <i class="fa fa-angle-down" aria-hidden="true"></i>
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        <li class="dropdown submenu">
+                                            <a href="about.html" class="d-flex align-items-center justify-content-between">
+                                                <span><i class="fas fa-info-circle text-danger me-2"></i> Hakkımızda</span>
+                                                <i class="fa fa-angle-right ms-auto"></i>
+                                            </a>
+                                            <ul class="dropdown-menu">
+                                                <li><a href="about.html#biz-kimiz"><i class="fas fa-users text-danger me-2"></i> Biz Kimiz?</a></li>
+                                                <li><a href="about.html#kunye"><i class="fas fa-id-badge text-danger me-2"></i> Künye</a></li>
+                                                <li><a href="about.html#tarihce"><i class="fas fa-history text-danger me-2"></i> Yolculuğumuz (Tarihçe)</a></li>
+                                                <li><a href="about.html#ortaklar"><i class="fas fa-handshake text-danger me-2"></i> Çözüm Ortaklarımız</a></li>
+                                            </ul>
+                                        </li>
+                                        <li><a href="contact.html"><i class="fas fa-envelope text-danger me-2"></i> İletişim</a></li>
+                                    </ul>
+                                </li>
+
+                                <!-- 5. İLETİŞİM (DOĞRUDAN ERİŞİM) -->
+                                <li><a href="contact.html">İletişim</a></li>
+                            </ul>
+                        </div>
+
+                        <!-- Right CTA Actions -->
+                        <div class="register-login d-flex align-items-center gap-2">
+                            <!-- Glowing E-Dergi Luxury Pill -->
+                            <a href="#modal-magazine" data-bs-toggle="modal" class="btn-nav-edergi" title="280. Sayı Dijital E-Dergiyi İncele">
+                                <i class="fas fa-book-reader"></i> 280. SAYI <span class="badge-edergi">E-DERGİ</span>
+                            </a>
+
+                            <!-- Kayıt Ol / Hesabım Butonu -->
+                            <a href="#modal-login" data-bs-toggle="modal" class="btn-nav-account d-none d-lg-inline-flex" title="Kayıt Ol / Hesabım">
+                                <i class="fas fa-user-circle"></i> <span>Hesabım</span>
+                            </a>
+
+                            <!-- Action Icons -->
+                            
+                            <div class="search-main">
+                                <a href="#search1" class="header-action-btn mt_search" title="Haberlerde Ara"><i class="fa fa-search"></i></a>
+                            </div>
+                        </div> 
+
+                        <div id="slicknav-mobile"></div>
+                    </div>
+                </div>
+            </nav>
+        </div>
+    </header>
+    <!-- header ends -->
+
+    <!-- Breadcrumb -->
+    <div class="breadcrumb-main pb-2 pt-2 bg-grey">
+        <div class="container">
+            <ul class="breadcrumb m-0">
+                <li><a href="index.html">Ana Sayfa</a></li>
+                <li><a href="detail-1.html">Havacılık &amp; Uzay</a></li>
+                <li class="active">KAAN Programında Mevcut Durum</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- blog starts -->
+    <section class="blog blog-left pt-4 pb-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-md-12 col-sm-12">
+                    <div class="blog-single">
+
+                        <!-- Modern Article Header -->
+                        <div class="msi-article-header-modern mb-3">
+                            <div class="badge-wrap mb-2">
+                                <span class="msi-badge msi-badge-red">Havacılık &amp; Uzay</span>
+                                <span class="msi-badge msi-badge-navy">MSI Dergisi 280. Sayı Kapak Dosyası</span>
+                            </div>
+                            <h1 class="article-main-title">KAAN Programında Mevcut Durum ve 5. Nesil Uçak Yol Haritası Değerlendirildi</h1>
+                            <div class="msi-article-meta-row">
+                                <span><i class="far fa-calendar-alt"></i> 11 Eylül 2026</span>
+                                <span><i class="far fa-clock"></i> 6 Dakika Okuma</span>
+                                <span><i class="far fa-user"></i> MSI Savunma Masası</span>
+                                <span><i class="far fa-eye"></i> 4.280 Okunma</span>
+                                <span class="text-danger fw-bold ms-md-auto"><i class="fas fa-bookmark"></i> Sayı: 280 • Sayfa 34-42</span>
+                            </div>
+                        </div>
+
+                        <div class="blog-wrapper msi-article-reading">
+                            <div class="blog-content">
+                                <div class="blog-imagelist mb-4">
+                                    <div class="msi-img-wrap-16-9 shadow-sm">
+                                        <img src="images/msi/kaan.webp" alt="Milli Muharip Uçak KAAN">
+                                    </div>
+                                    <small class="text-muted mt-2 d-block fst-italic"><i class="fas fa-camera me-1"></i> TUSAŞ / KAAN Prototipi Uçuş Hattında Aviyonik Entegrasyon Testleri</small>
+                                </div>
+                                <p class="lead mb-4 fw-bold">
+                                    Türk Havacılık ve Uzay Sanayii (TUSAŞ) ana yükleniciliğinde yürütülen Milli Muharip Uçak KAAN projesinde, ikinci ve üçüncü prototiplerin üretim takvimi ile aviyonik entegrasyon safhaları hızla ilerliyor. Savunma Sanayii Başkanlığı (SSB) koordinasyonundaki kritik değerlendirme toplantısında KAAN'ın 2026-2030 yol haritası masaya yatırıldı.
+                                </p>
+                                <p class="mb-3">
+                                    Türkiye'nin en büyük teknoloji ve savunma hamlelerinden biri olan KAAN, 5'inci nesil çok rollü savaş uçağı sınıfında yer alıyor. İlk uçuş testlerini başarıyla tamamlayan hava aracı, gövde içi silah istasyonları, düşük radar kesit alanı (stealth), süperseyir (supercruise) yeteneği ve gelişmiş sensör füzyonu ile Türk Hava Kuvvetleri'nin gelecekteki vurucu gücünün omurgasını oluşturacak.
+                                </p>
+                                <p class="mb-4">
+                                    Savunma Sanayii İcra Komitesi (SSİK) kararları doğrultusunda, seri üretim fazı için gerekli olan yerli aviyonik ve alt sistemlerin geliştirilmesinde ASELSAN, HAVELSAN, TÜBİTAK SAGE ve ROKETSAN gibi öncü kurumların katkıları kritik bir aşamaya ulaştı. ASELSAN tarafından geliştirilen MURAD AESA burun radarı, KAAN'ın durumsal farkındalığını en üst seviyeye taşıyacak.
+                                </p>
+                            </div>
+
+                            <!-- blog blockquote -->
+                            <div class="blog-quote mb-4">
+                                <p class="white">“KAAN sadece bir savaş uçağı değil; Türkiye'nin bağımsız havacılık ekosisteminin, kompozit malzeme teknolojisinin ve elektronik harp kabiliyetinin doruk noktasıdır.”</p>
+                                <span class="white">MSI Dergisi Özel Analizi, Sayı 280</span>
+                                <i class="fas fa-quote-left"></i>
+                            </div>
+
+                            <div class="blog-imagelist mb-4">
+                                <div class="row">
+                                    <div class="col-md-6 col-sm-6 col-xs-12 mb-3">
+                                        <img src="images/msi/akinci-iha300.webp" alt="AKINCI İHA-300" class="img-fluid rounded w-100">
+                                        <small class="text-muted mt-1 d-block">İnsansız ve insanlı platformların ortak harekat konsepti (MUM-T)</small>
+                                    </div>
+                                    <div class="col-md-6 col-sm-6 col-xs-12 mb-3">
+                                        <img src="images/msi/saha-kara.webp" alt="Milli Savunma Sistemleri" class="img-fluid rounded w-100">
+                                        <small class="text-muted mt-1 d-block">Milli ağ merkezli harp altyapısı ve müşterek harekat kabiliyeti</small>
+                                    </div>
+                                </div>
+                            </div>    
+
+                            <h3 class="mb-3">Yerli Motor ve Entegrasyon Süreci</h3>
+                            <p class="mb-4">
+                                TRMotor ve TEI iş birliğinde yürütülen özgün motor projesi, KAAN'ın tam bağımsızlığı için en kritik bileşen olarak öne çıkıyor. İlk etapta F110 motorlarıyla uçuş testlerini sürdüren uçak, Blok 20 konfigürasyonundan itibaren yerli ve milli çift akılı turbofan motor ile göklere yükselecek. Yüksek ısıya dayanıklı türbin kanatçıkları ve monokristal döküm teknolojisinde elde edilen ilerlemeler takvimin öngörülen sürede tamamlanacağını gösteriyor.
+                            </p>
+
+                            <!-- blog share -->
+                            <div class="blog-share d-flex justify-content-between align-items-center mb-4 bg-lgrey border p-3">
+                                <div class="blog-share-tag">
+                                    <ul class="inline m-0 list-inline">
+                                        <li class="list-inline-item"><strong>Etiketler:</strong></li>    
+                                        <li class="list-inline-item"><a href="#" class="badge bg-secondary text-white">#KAAN</a></li>
+                                        <li class="list-inline-item"><a href="#" class="badge bg-secondary text-white">#TUSAŞ</a></li>
+                                        <li class="list-inline-item"><a href="#" class="badge bg-secondary text-white">#Havacılık</a></li>
+                                        <li class="list-inline-item"><a href="#" class="badge bg-secondary text-white">#ASELSAN</a></li>
+                                        <li class="list-inline-item"><a href="#" class="badge bg-secondary text-white">#SavunmaSanayii</a></li>
+                                    </ul>
+                                </div>
+                                <div class="header-social">
+                                    <ul class="m-0">
+                                        <li><a href="#"><i class="fab fa-facebook-f"></i></a></li>
+                                        <li><a href="#"><i class="fab fa-twitter"></i></a></li>
+                                        <li><a href="#"><i class="fab fa-linkedin-in"></i></a></li>
+                                        <li><a href="#"><i class="fab fa-whatsapp"></i></a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- author detail -->
+                        <div class="blog-author mb-4 bg-grey border p-4">
+                            <div class="blog-author-item">
+                                <div class="row d-flex justify-content-between align-items-center">
+                                    <div class="col-md-3 col-sm-3 col-xs-12 mb-3 mb-md-0">
+                                        <div class="blog-thumb text-center position-relative">
+                                            <img src="images/reviewer/1.jpg" alt="MSI Savunma Masası" class="rounded-circle img-fluid">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-9 col-sm-9 col-xs-12">
+                                        <h4 class="title theme mb-1"><a href="#">MSI Savunma Masası <span>Havacılık ve Savunma Analizleri</span></a></h4>
+                                        <p class="m-0 text-muted">2004 yılından bu yana Türk savunma ve havacılık sektörünün gelişmelerini, teknolojik atılımlarını ve uluslararası pazar trendlerini tarafsız ve derinlemesine habercilik anlayışıyla takip etmektedir.</p>
+                                    </div>
+                                </div>        
+                            </div>
+                        </div>
+
+                        <!-- blog next prev -->
+                        <div class="blog-next mb-4 d-flex align-items-center justify-content-between">
+                            <a href="detail-3.html" class="w-50 me-2 text-decoration-none">
+                                <div class="prev p-3 bg-navy rounded">
+                                    <i class="fa fa-arrow-left white mb-1"></i> 
+                                    <p class="m-0 white small">Önceki Haber</p>
+                                    <p class="m-0 white fw-bold text-truncate">CTech Sürü İDA Hibrit Haberleşme Konsepti</p>
+                                </div>
+                            </a>
+                            <a href="detail-2.html" class="w-50 ms-2 text-decoration-none">
+                                <div class="next p-3 bg-grey border rounded text-end">
+                                    <i class="fa fa-arrow-right theme mb-1"></i>
+                                    <p class="m-0 text-muted small">Sonraki Haber</p>
+                                    <p class="m-0 theme fw-bold text-truncate">AKINCI, İHA-300 Füzesi ile 250 Km'yi Vurdu</p>
+                                </div>
+                            </a>
+                        </div>
+
+                        <!-- Comments Section -->
+                        <div class="single-comments single-box mb-4 p-4 border rounded">
+                            <h4 class="mb-4">Okur Yorumları (2)</h4>
+                            <div class="comment-box mb-4 pb-3 border-bottom">
+                                <div class="comment-image mt-1 me-3 float-start">
+                                    <img src="images/reviewer/1.jpg" alt="Ahmet Yılmaz" class="rounded-circle" width="50" height="50">
+                                </div>
+                                <div class="comment-content overflow-hidden">
+                                    <h5 class="mb-1">Ahmet Yılmaz</h5>
+                                    <p class="comment-date text-muted small mb-2">12 Eylül 2026, 10:14</p>
+                                    <p class="comment mb-2">AESA radarın entegrasyon süreci ve KAAN'ın ANKA-3 ile ortak görev icra edebilme yeteneği gerçekten 5. nesil ötesi bir vizyon ortaya koyuyor. Emeği geçen tüm mühendislerimizi tebrik ediyorum.</p>
+                                    <a href="#" class="btn btn-sm btn-outline-danger">Yanıtla</a>
+                                </div>
+                            </div>
+                            <div class="comment-box">
+                                <div class="comment-image mt-1 me-3 float-start">
+                                    <img src="images/reviewer/2.jpg" alt="Selim Demir" class="rounded-circle" width="50" height="50">
+                                </div>
+                                <div class="comment-content overflow-hidden">
+                                    <h5 class="mb-1">Selim Demir</h5>
+                                    <p class="comment-date text-muted small mb-2">13 Eylül 2026, 14:30</p>
+                                    <p class="comment mb-2">MSI Dergisi'nin havacılık alanındaki detaylı teknik analizlerini yıllardır ilgiyle okuyoruz. Yeni site tasarımı ve güncel haber akışı harika olmuş.</p>
+                                    <a href="#" class="btn btn-sm btn-outline-danger">Yanıtla</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Review Form -->
+                        <div class="single-add-review p-4 border rounded bg-light">
+                            <h4 class="mb-3">Yorum Yapın</h4>
+                            <p class="text-muted small mb-3">E-posta adresiniz yayınlanmayacaktır. Gerekli alanlar işaretlenmiştir *</p>
+                            <form>
+                                <div class="row">
+                                    <div class="col-lg-6 mb-3">
+                                        <input type="text" class="form-control" placeholder="Adınız Soyadınız *">
+                                    </div>
+                                    <div class="col-lg-6 mb-3">
+                                        <input type="email" class="form-control" placeholder="E-posta Adresiniz *">
+                                    </div>
+                                    <div class="col-lg-12 mb-3">
+                                        <textarea class="form-control" rows="4" placeholder="Yorumunuzu buraya yazın..."></textarea>
+                                    </div>
+                                    <div class="col-lg-12">
+                                        <button type="submit" class="nir-btn">Yorumu Gönder</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar starts -->
+                <div class="col-lg-4 col-md-12">
+                    <div class="sidebar-sticky">
+                        <div class="list-sidebar">
+                            
+                            <!-- Dergi Tanıtımı Box (3D Mini Showcase) -->
+                            <div class="msi-sidebar-mag-card text-center">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="msi-badge msi-badge-magazine"><i class="fas fa-fire me-1"></i> YENİ SAYI</span>
+                                    <span class="text-warning small">Sayı 280</span>
+                                </div>
+                                <div class="msi-sidebar-mag-thumb">
+                                    <a href="javascript:void(0)" data-bs-toggle="modal" data-bs-target="#modal-magazine">
+                                        <img src="images/msi/dergi-280.webp" alt="MSI Dergisi 280. Sayı">
+                                    </a>
+                                </div>
+                                <h4 class="msi-sidebar-mag-title">MSI Dergisi • Sayı 280</h4>
+                                <p class="msi-sidebar-mag-desc">Türk Savunma Teknolojileri ve Havacılık Dergisi Eylül 2026 sayısı yayında!</p>
+                                <ul class="msi-sidebar-mag-list">
+                                    <li><i class="fas fa-chevron-right"></i> KAAN 5. Nesil Aviyonik Entegrasyonu</li>
+                                    <li><i class="fas fa-chevron-right"></i> CTech Sürü İDA Hibrit Haberleşme</li>
+                                    <li><i class="fas fa-chevron-right"></i> AKINCI &amp; İHA-300 Süpersonik Test</li>
+                                </ul>
+                                <button type="button" class="msi-sidebar-mag-btn" data-bs-toggle="modal" data-bs-target="#modal-magazine">
+                                    <i class="fas fa-book-open"></i> E-Dergiyi Çevir &amp; Oku
+                                </button>
+                                <a href="about.html" class="msi-sidebar-mag-sublink">Basılı Abonelik &amp; Arşiv Bilgisi</a>
+                            </div>
+
+                            <!-- Kategoriler -->
+                            <div class="sidebar-item mb-4 p-4 border rounded bg-white">
+                                <h4 class="border-bottom pb-2 mb-3">Sektörler</h4>
+                                <ul class="sidebar-category list-unstyled m-0">
+                                    <li class="d-flex justify-content-between py-1 border-bottom"><a href="technology.html">Kara Sistemleri</a> <span>(48)</span></li>
+                                    <li class="d-flex justify-content-between py-1 border-bottom"><a href="travel.html">Deniz Sistemleri</a> <span>(35)</span></li>
+                                    <li class="d-flex justify-content-between py-1 border-bottom"><a href="detail-1.html">Havacılık &amp; Uzay</a> <span>(62)</span></li>
+                                    <li class="d-flex justify-content-between py-1 border-bottom"><a href="technology.html">Elektronik Harp &amp; Radar</a> <span>(29)</span></li>
+                                    <li class="d-flex justify-content-between py-1 border-bottom"><a href="lifestyle.html">Söyleşiler &amp; Röportajlar</a> <span>(41)</span></li>
+                                    <li class="d-flex justify-content-between py-1"><a href="post-grid-1.html">Özel Dosyalar</a> <span>(18)</span></li>
+                                </ul>
+                            </div>
+
+                            <!-- Popüler / Son Haberler Tabs -->
+                            <div class="popular-post sidebar-item mb-4 p-4 border rounded bg-white">
+                                <div class="sidebar-tabs">
+                                    <div class="post-tabs">
+                                        <ul class="nav nav-tabs nav-pills nav-fill mb-3" id="postsTab" role="tablist">
+                                            <li class="nav-item" role="presentation">
+                                                <button aria-controls="popular" aria-selected="true" class="nav-link active" data-bs-target="#popular" data-bs-toggle="tab" id="popular-tab" role="tab" type="button">Popüler</button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button aria-controls="recent" aria-selected="false" class="nav-link" data-bs-target="#recent" data-bs-toggle="tab" id="recent-tab" role="tab" type="button">Son Eklenen</button>
+                                            </li>
+                                        </ul>
+                                        <div class="tab-content" id="postsTabContent">
+                                            <!-- Popüler -->
+                                            <div aria-labelledby="popular-tab" class="tab-pane fade active show" id="popular" role="tabpanel">
+                                                <article class="post mb-3 border-bottom pb-2">
+                                                    <div class="s-content d-flex align-items-center">
+                                                        <div class="sidebar-image me-3" style="width:85px; height:60px; flex-shrink:0; border-radius:6px; overflow:hidden;">
+                                                            <a href="detail-2.html"><img src="images/msi/akinci-iha300.webp" alt="AKINCI" class="w-100 h-100 object-fit-cover"></a>
+                                                        </div>
+                                                        <div class="content-list">
+                                                            <h6 class="mb-1 line-clamp-2"><a href="detail-2.html" class="text-dark">AKINCI, İHA-300 ile 250 Km'deki Hedefi Vurdu</a></h6>
+                                                            <small class="text-muted"><i class="far fa-calendar-alt"></i> 11 Eylül 2026</small>
+                                                        </div>    
+                                                    </div> 
+                                                </article>
+
+                                                <article class="post mb-3 border-bottom pb-2">
+                                                    <div class="s-content d-flex align-items-center">
+                                                        <div class="sidebar-image me-3" style="width:85px; height:60px; flex-shrink:0; border-radius:6px; overflow:hidden;">
+                                                            <a href="detail-3.html"><img src="images/msi/ctech-ida.webp" alt="CTech" class="w-100 h-100 object-fit-cover"></a>
+                                                        </div>
+                                                        <div class="content-list">
+                                                            <h6 class="mb-1 line-clamp-2"><a href="detail-3.html" class="text-dark">CTech Sürü İDA Hibrit Haberleşme Konsepti</a></h6>
+                                                            <small class="text-muted"><i class="far fa-calendar-alt"></i> 14 Eylül 2026</small>
+                                                        </div>    
+                                                    </div> 
+                                                </article>
+
+                                                <article class="post">
+                                                    <div class="s-content d-flex align-items-center">
+                                                        <div class="sidebar-image me-3" style="width:85px; height:60px; flex-shrink:0; border-radius:6px; overflow:hidden;">
+                                                            <a href="detail-1.html"><img src="images/msi/mke-pgz.webp" alt="MKE PGZ" class="w-100 h-100 object-fit-cover"></a>
+                                                        </div>
+                                                        <div class="content-list">
+                                                            <h6 class="mb-1 line-clamp-2"><a href="detail-1.html" class="text-dark">MKE ve PGZ Arasında Hava Savunma İş Birliği</a></h6>
+                                                            <small class="text-muted"><i class="far fa-calendar-alt"></i> 10 Eylül 2026</small>
+                                                        </div>    
+                                                    </div> 
+                                                </article>
+                                            </div>
+
+                                            <!-- Son Eklenen -->
+                                            <div aria-labelledby="recent-tab" class="tab-pane fade" id="recent" role="tabpanel">
+                                                <article class="post mb-3 border-bottom pb-2">
+                                                    <div class="s-content d-flex align-items-center">
+                                                        <div class="sidebar-image me-3" style="width:85px; height:60px; flex-shrink:0; border-radius:6px; overflow:hidden;">
+                                                            <a href="detail-1.html"><img src="images/msi/yaltes-tayland.webp" alt="YALTES" class="w-100 h-100 object-fit-cover"></a>
+                                                        </div>
+                                                        <div class="content-list">
+                                                            <h6 class="mb-1 line-clamp-2"><a href="detail-1.html" class="text-dark">YALTES'ten Tayland Fırkateyn Modernizasyonu</a></h6>
+                                                            <small class="text-muted"><i class="far fa-calendar-alt"></i> 08 Eylül 2026</small>
+                                                        </div>    
+                                                    </div> 
+                                                </article>
+
+                                                <article class="post mb-3 border-bottom pb-2">
+                                                    <div class="s-content d-flex align-items-center">
+                                                        <div class="sidebar-image me-3" style="width:85px; height:60px; flex-shrink:0; border-radius:6px; overflow:hidden;">
+                                                            <a href="detail-1.html"><img src="images/msi/sedec.webp" alt="SEDEC" class="w-100 h-100 object-fit-cover"></a>
+                                                        </div>
+                                                        <div class="content-list">
+                                                            <h6 class="mb-1 line-clamp-2"><a href="detail-1.html" class="text-dark">SEDEC 2026 İç Güvenlik Zirvesi Başlıyor</a></h6>
+                                                            <small class="text-muted"><i class="far fa-calendar-alt"></i> 06 Eylül 2026</small>
+                                                        </div>    
+                                                    </div> 
+                                                </article>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Etiket Bulutu -->
+                            <div class="sidebar-item mb-4 p-4 border rounded bg-white">
+                                <h4 class="border-bottom pb-2 mb-3">Popüler Konular</h4>
+                                <div class="sidebar-tags">
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">Havacılık</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">KAAN</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">İHA / SİHA</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">Mavi Vatan</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">ASELSAN</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">ROKETSAN</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">TUSAŞ</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">Hava Savunma</a>
+                                    <a href="#" class="badge bg-light text-dark border p-2 m-1">SAHA EXPO</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- blog Ends -->  
+
+    <!-- cta-horizon starts (E-Bülten) -->
+    <section class="cta-horizon pt-5 pb-5" style="background-color:#fff5ef;">
+        <div class="container">
+            <div class="row align-items-center justify-content-between">
+                <div class="col-lg-6">
+                    <div class="section-title mb-3">
+                        <h2 class="mb-1">Savunma Gündeminden <span>Haberdar Olun</span></h2>
+                    </div>
+                    <p class="text-muted">Haftalık savunma sanayii gelişmelerini, özel analizleri ve yeni sayı duyurularını e-posta kutunuza gönderelim.</p>
+                    <div class="newsletter-form">
+                        <form class="d-flex align-items-center">
+                            <input type="email" placeholder="E-posta adresinizi girin..." class="form-control me-2">
+                            <input type="submit" class="nir-btn" value="Abone Ol">
+                        </form>
+                    </div> 
+                </div>
+                <div class="col-lg-5 text-center mt-4 mt-lg-0">
+                    <div class="newsletter-image">
+                        <img src="images/msi/dergi-280.webp" alt="MSI Dergisi Son Sayı" class="img-fluid rounded shadow" style="max-height:240px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- cta-horizon Ends -->
+
+    <!-- footer starts -->
+    <footer class="pt-8 footermain">
+        <div class="footer-upper pb-4">
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-4 col-md-6 col-sm-12 mb-4">
+                        <div class="footer-about">
+                            <img src="images/logo-white.svg" alt="MSI Dergisi" class="mb-3" style="max-height:50px;">
+                            <p class="mt-2 mb-3 white">
+                                2004 yılından bu yana Türk savunma, havacılık ve uzay sanayiinin güvenilir referans yayın organı olan MSI Dergisi; yerli ve milli sistemlerin gelişimini, uluslararası iş birliklerini ve teknolojik atılımları okuyucularıyla buluşturur.
+                            </p>
+                            <ul>
+                                <li class="white"><strong>Adres:</strong> Çankaya, Ankara / Türkiye</li>
+                                <li class="white"><strong>Telefon:</strong> +90 (312) 441 50 00</li>
+                                <li class="white"><strong>E-posta:</strong> info@msidergisi.com</li>
+                                <li class="white"><strong>Web:</strong> www.msidergisi.com</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-6 col-sm-12 mb-4">
+                        <div class="footer-links">
+                            <h3 class="white">Hızlı Bağlantılar</h3>
+                            <ul>
+                                <li><a href="about.html">Hakkımızda</a></li>
+                                <li><a href="technology.html">Kara Sistemleri</a></li>
+                                <li><a href="travel.html">Deniz Sistemleri</a></li>
+                                <li><a href="detail-1.html">Havacılık &amp; Uzay</a></li>
+                                <li><a href="lifestyle.html">Söyleşiler</a></li>
+                                <li><a href="contact.html">İletişim &amp; Künye</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-6 col-sm-12 mb-4">
+                        <div class="footer-links">
+                            <h3 class="white">Öne Çıkanlar</h3>
+                            <div class="tagcloud">
+                                <a class="tag-cloud-link bg-white black p-2 mb-1" href="detail-1.html">KAAN</a>
+                                <a class="tag-cloud-link bg-white black p-2 mb-1" href="detail-2.html">AKINCI</a>
+                                <a class="tag-cloud-link bg-white black p-2 mb-1" href="technology.html">İDA Sistemleri</a>
+                                <a class="tag-cloud-link bg-white black p-2 mb-1" href="travel.html">Mavi Vatan</a>
+                                <a class="tag-cloud-link bg-white black p-2 mb-1" href="about.html">280. Sayı</a>
+                                <a class="tag-cloud-link bg-white black p-2 mb-1" href="technology.html">Elektronik Harp</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4 col-md-6 col-sm-12 mb-4">
+                        <div class="footer-links">
+                            <h3 class="white">Öne Çıkan Başlıklar</h3>
+                            <div class="trend-main">
+                                <div class="trend-item d-flex align-items-center mb-2">
+                                    <div class="trend-image w-25 me-3">
+                                        <img src="images/msi/kaan.webp" alt="KAAN" class="img-fluid rounded">
+                                    </div>
+                                    <div class="trend-content-main w-75">
+                                        <div class="trend-content">
+                                            <h5 class="mb-1"><a href="detail-1.html" class="white">KAAN Programında Mevcut Durum</a></h5>
+                                            <small><a href="detail-1.html" class="white opacity-75"><i class="fa fa-calendar"></i> 11 Eylül 2026</a></small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="trend-item d-flex align-items-center mb-2">
+                                    <div class="trend-image w-25 me-3">
+                                        <img src="images/msi/akinci-iha300.webp" alt="AKINCI" class="img-fluid rounded">
+                                    </div>
+                                    <div class="trend-content-main w-75">
+                                        <div class="trend-content">
+                                            <h5 class="mb-1"><a href="detail-2.html" class="white">AKINCI, İHA-300 Füzesi ile 250 Km'yi Vurdu</a></h5>
+                                            <small><a href="detail-2.html" class="white opacity-75"><i class="fa fa-calendar"></i> 11 Eylül 2026</a></small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="trend-item d-flex align-items-center mb-2">
+                                    <div class="trend-image w-25 me-3">
+                                        <img src="images/msi/ctech-ida.webp" alt="CTech" class="img-fluid rounded">
+                                    </div>
+                                    <div class="trend-content-main w-75">
+                                        <div class="trend-content">
+                                            <h5 class="mb-1"><a href="detail-3.html" class="white">CTech Sürü İDA Hibrit Haberleşme</a></h5>
+                                            <small><a href="detail-3.html" class="white opacity-75"><i class="fa fa-calendar"></i> 14 Eylül 2026</a></small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>     
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="footer-copyright pt-2 pb-2">
+            <div class="container">
+                <div class="copyright-inner d-md-flex align-items-center justify-content-between">
+                    <div class="copyright-text">
+                        <p class="m-0 white">&copy; 2026 MSI Dergisi (Military Science &amp; Intelligence). Tüm hakları saklıdır.</p>
+                    </div>
+                    <div class="social-links">
+                        <ul>  
+                            <li><a href="https://facebook.com/msidergisi" target="_blank"><i class="fab fa-facebook" aria-hidden="true"></i></a></li>
+                            <li><a href="https://twitter.com/msidergisi" target="_blank"><i class="fab fa-twitter" aria-hidden="true"></i></a></li>
+                            <li><a href="https://instagram.com/msidergisi" target="_blank"><i class="fab fa-instagram" aria-hidden="true"></i></a></li>
+                            <li><a href="https://linkedin.com/company/msidergisi" target="_blank"><i class="fab fa-linkedin" aria-hidden="true"></i></a></li>
+                        </ul>
+                    </div>
+                </div>    
+            </div>
+        </div>
+    </footer>
+    <!-- footer ends -->
+    
+    <!-- Back to top start -->
+    <div id="back-to-top">
+        <a href="#"></a>
+    </div>
+
+    <div class="view-port">
+        <div class="dark-mode"><a href="#"><i class="fa fa-moon"></i> Gece</a></div>
+        <div class="light-mode"><a href="#"><i class="fa fa-sun"></i> Gündüz</a></div>
+    </div>
+
+        <!-- MSI MODERN TACTICAL SEARCH CONSOLE -->
+    <div id="search1" class="msi-search-overlay">
+        <div class="msi-search-box">
+            <div class="msi-search-header">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="msi-badge msi-badge-red"><i class="fas fa-search me-1"></i> ARAMA MERKEZİ</span>
+                    <span class="msi-search-subtitle">Savunma Sanayii &amp; Havacılık Portalı</span>
+                </div>
+                <button type="button" class="close msi-search-close" title="Kapat (ESC)">&times;</button>
+            </div>
+            <form action="post-list-1.html" method="get" class="msi-search-form">
+                <div class="msi-search-input-group">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="search" name="s" placeholder="Savunma haberleri, makale, sayı veya konu arayın (Örn: KAAN, HÜRJET, İHA)..." autocomplete="off" />
+                    <button type="submit" class="btn-search-submit"><i class="fas fa-arrow-right me-1"></i> ARA</button>
+                </div>
+            </form>
+            <div class="msi-search-quick-tags">
+                <span class="tags-title"><i class="fas fa-fire text-danger me-1"></i> Popüler Başlıklar:</span>
+                <div class="tags-list">
+                    <a href="post-list-1.html?s=KAAN" class="search-tag">KAAN</a>
+                    <a href="post-list-1.html?s=HÜRJET" class="search-tag">HÜRJET</a>
+                    <a href="post-list-1.html?s=İHA" class="search-tag">SİHA / İHA</a>
+                    <a href="post-list-1.html?s=MİLGEM" class="search-tag">MİLGEM</a>
+                    <a href="post-list-1.html?s=ALTAY" class="search-tag">ALTAY</a>
+                    <a href="gallery1.html" class="search-tag">280. Sayı</a>
+                    <a href="post-list-1.html?s=ROKETSAN" class="search-tag">ROKETSAN</a>
+                    <a href="post-list-1.html?s=ASELSAN" class="search-tag">ASELSAN</a>
+                    <a href="lifestyle.html" class="search-tag">Söyleşiler</a>
+                </div>
+            </div>
+            <div class="msi-search-footer">
+                <span><i class="fas fa-keyboard me-1 text-muted"></i> Aramayı kapatmak için <strong>ESC</strong> tuşuna basabilir veya arka plana tıklayabilirsiniz.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- header side menu --> 
+    <div class="header_sidemenu">
+        <div class="header_sidemenu_in">
+            <div class="menu bg-navy py-5 px-4">
+                <div class="close-menu">
+                    <i class="fa fa-times white"></i>
+                </div>
+                <div class="m-contentmain">
+                    <div class="m-logo mb-5">
+                        <img src="images/logo-white.svg" alt="MSI Dergisi">
+                    </div>
+                    <div class="content-box mb-5">
+                        <h3 class="white">İletişime Geçin</h3>
+                        <p class="white mb-2">Türk savunma, havacılık ve uzay sanayiinin nabzını tutan MSI Dergisi ile haber, basın bülteni ve reklam iş birlikleriniz için bize ulaşabilirsiniz.</p>
+                        <a href="contact.html" class="nir-btn">Bize Ulaşın</a>
+                    </div>
+                    <div class="contact-info">
+                        <h3 class="white">İletişim Bilgileri</h3>
+                        <ul>
+                            <li class="white d-block mb-1"><i class="fa fa-map-marker-alt me-1"></i> Çankaya, Ankara / Türkiye</li>
+                            <li class="white d-block mb-1"><i class="fa fa-phone-alt me-1"></i> +90 (312) 441 50 00</li>
+                            <li class="white d-block mb-1"><i class="fa fa-envelope-open me-1"></i> info@msidergisi.com</li>
+                            <li class="white d-block"><i class="fa fa-clock me-1"></i> Hafta İçi: 09.00 - 18.00 Cumartesi - Pazar: Kapalı</li>
+                        </ul>
+                    </div>
+                </div>    
+            </div>
+            <div class="overlay hide"></div>
+        </div>
+    </div>
+
+    <!-- DIGITAL MAGAZINE INTERACTIVE MODAL (E-DERGİ ÇEVİR & OKU) -->
+    <div class="modal fade" id="modal-magazine" tabindex="-1" aria-labelledby="modalMagazineLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="background:#0f192b; color:#fff; border-radius:16px; overflow:hidden;">
+                <div class="modal-header border-bottom border-secondary pb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="msi-badge msi-badge-magazine">DİJİTAL KÜTÜPHANE</span>
+                        <h5 class="modal-title text-white mb-0" id="modalMagazineLabel">MSI Dergisi • Sayı 280 (Eylül 2026)</h5>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-5 text-center mb-3 mb-md-0">
+                            <img src="images/msi/dergi-280.webp" alt="280. Sayı" class="img-fluid rounded shadow" style="max-height:320px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
+                            <div class="mt-2 text-warning small">ISSN: 1305-6743 • 116 Sayfa</div>
+                        </div>
+                        <div class="col-md-7">
+                            <h4 class="text-white mb-2">Bu Sayının Öne Çıkan Başlıkları:</h4>
+                            <ul class="list-unstyled text-white-50 small mb-4">
+                                <li class="mb-2"><i class="fas fa-check-circle text-danger me-2"></i> <strong>KAAN:</strong> 5. Nesil Aviyonik Entegrasyonu ve Test Süreci</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-danger me-2"></i> <strong>Sürü İDA:</strong> CTech Hibrit Haberleşme ve Mavi Vatan Operasyonları</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-danger me-2"></i> <strong>AKINCI &amp; İHA-300:</strong> Süpersonik Balistik Taarruz Testi</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-danger me-2"></i> <strong>Özel Söyleşi:</strong> Dr. M. Cüneyd Fırat (CTech Genel Müdürü)</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-danger me-2"></i> <strong>Küresel Fuarlar:</strong> MSPO 2026 Polonya ve Türk Firmaları</li>
+                            </ul>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a href="detail-1.html" class="btn-msi-primary">
+                                    <i class="fas fa-book-reader"></i> Sayıyı Oku
+                                </a>
+                                <a href="about.html" class="btn-msi-outline">
+                                    <i class="fas fa-shopping-basket"></i> Abone Ol
+                                </a>
+                                <a href="gallery1.html" class="btn-msi-outline">
+                                    <i class="fas fa-history"></i> Arşiv
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/jquery-3.5.1.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/plugin.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/custom-swiper.js"></script>
+    <script src="js/custom-nav.js"></script>
+</body>
+</html>

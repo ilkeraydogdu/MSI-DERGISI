@@ -1,0 +1,380 @@
+<dialog
+  id="issue-dialog"
+  class="ui-dialog issue-dialog"
+  aria-labelledby="issue-dialog-title"
+>
+  <div class="dialog-heading">
+    <div>
+      <div class="eyebrow" id="issue-dialog-meta"></div>
+      <h2 id="issue-dialog-title">E-Dergi</h2>
+    </div>
+    <button class="icon-button" data-close-dialog aria-label="Kapat">×</button>
+  </div>
+  <div class="issue-reader">
+    <img id="issue-dialog-cover" alt="" />
+    <div>
+      <p id="issue-dialog-summary"></p>
+      <div class="reader-toolbar">
+        <button
+          class="button secondary"
+          data-reader-prev
+          aria-label="Önceki bölüm"
+        >
+          ←</button
+        ><span id="reader-position" aria-live="polite"></span
+        ><button
+          class="button secondary"
+          data-reader-next
+          aria-label="Sonraki bölüm"
+        >
+          →
+        </button>
+      </div>
+      <article id="reader-spread"></article>
+      <a
+        id="issue-download"
+        class="button primary"
+        target="_blank"
+        rel="noopener"
+        >PDF'yi aç ↗</a
+      >
+      <p class="reader-hint">
+        Sayıdaki bölümleri oklarla inceleyebilirsiniz. PDF erişimi abonelik
+        koşullarına bağlıdır.
+      </p>
+    </div>
+  </div>
+</dialog>
+<dialog
+  id="auth-dialog"
+  class="ui-dialog auth-dialog"
+  aria-labelledby="auth-title"
+>
+  <div class="dialog-heading">
+    <div>
+      <div class="eyebrow">MSI OKUYUCU MERKEZİ</div>
+      <h2 id="auth-title">Hoş geldiniz</h2>
+    </div>
+    <button class="icon-button" data-close-dialog aria-label="Kapat">×</button>
+  </div>
+  <div class="auth-tabs" role="tablist" aria-label="Hesap işlemleri">
+    <button
+      id="login-tab"
+      role="tab"
+      aria-selected="true"
+      aria-controls="login-form"
+      data-auth-tab="login"
+    >
+      Giriş yap</button
+    ><button
+      id="register-tab"
+      role="tab"
+      aria-selected="false"
+      aria-controls="register-form"
+      tabindex="-1"
+      data-auth-tab="register"
+    >
+      Hesap oluştur
+    </button>
+  </div>
+  <form
+    id="login-form"
+    role="tabpanel"
+    aria-labelledby="login-tab"
+    class="ui-form"
+  >
+    <label
+      >E-posta<input
+        name="email"
+        type="email"
+        autocomplete="email"
+        required /></label
+    ><label
+      >Şifre<input
+        name="password"
+        type="password"
+        autocomplete="current-password"
+        required
+    /></label>
+    <p class="form-feedback" role="status"></p>
+    <button class="button primary" type="submit">Giriş yap →</button>
+  </form>
+  <form
+    id="register-form"
+    role="tabpanel"
+    aria-labelledby="register-tab"
+    class="ui-form"
+    hidden
+  >
+    <div class="form-grid-2">
+      <label
+        >Ad soyad<input
+          name="full_name"
+          autocomplete="name"
+          required
+          maxlength="100" /></label
+      ><label
+        >Kurumsal e-posta<input
+          name="email"
+          type="email"
+          autocomplete="email"
+          required
+      /></label>
+    </div>
+    <div id="gov-domain-hint" class="gov-domain-hint" hidden>
+      ✓ Resmi kamu / akademik e-posta uzantısı algılandı — ücretsiz dijital
+      E-Dergi yetkisi otomatik tanımlanacaktır.
+    </div>
+    <div class="form-grid-2">
+      <label
+        >Şifre (en az 8 karakter)<input
+          name="password"
+          type="password"
+          autocomplete="new-password"
+          minlength="8"
+          required /></label
+      ><label
+        >Görev / Ünvan<input
+          name="job_title"
+          autocomplete="organization-title"
+          placeholder="Örn: Sistem Mühendisi, Proje Subayı"
+          maxlength="100"
+      /></label>
+    </div>
+    <div class="form-grid-2">
+      <label
+        >Kurum adı<input
+          name="organization_name"
+          autocomplete="organization"
+          required /></label
+      ><label
+        >Kurum kategorisi (Resmi Taksonomi)<select name="organization_category">
+          <option value="Sektör Kuruluşları">Sektör Kuruluşları</option>
+          <option value="MSB">MSB (Millî Savunma Bakanlığı)</option>
+          <option value="SSB">SSB (Savunma Sanayii Başkanlığı)</option>
+          <option value="K.K.K.lığı">K.K.K.lığı (Kara Kuvvetleri)</option>
+          <option value="Dz.K.K.lığı">Dz.K.K.lığı (Deniz Kuvvetleri)</option>
+          <option value="Hv.K.K.lığı">Hv.K.K.lığı (Hava Kuvvetleri)</option>
+          <option value="J.G.K.lığı">J.G.K.lığı (Jandarma Genel K.)</option>
+          <option value="EGM">EGM (Emniyet Genel Müdürlüğü)</option>
+          <option value="S.G.K.lığı">S.G.K.lığı (Sahil Güvenlik K.)</option>
+          <option value="MİT">MİT (Millî İstihbarat Teşkilatı)</option>
+          <option value="Diğer Kamu Kurumları">Diğer Kamu Kurumları</option>
+          <option value="Üniversite / Öğrenci">Üniversite / Öğrenci</option>
+          <option value="Yurt Dışı Paydaş">Yurt Dışı Paydaş</option>
+        </select></label
+      >
+    </div>
+    <fieldset class="ssb-fieldset">
+      <legend>SSB Teknoloji İlgi Alanları (Kişiselleştirilmiş Akış)</legend>
+      <div id="register-ssb-tags" class="ssb-tag-picks"></div>
+    </fieldset>
+    <label
+      >Kurumsal doğrulama notu (Opsiyonel)<input
+        name="request_message"
+        maxlength="240"
+        placeholder="Kamu e-postası dışındaki başvurular için birim / sicil referansı" /></label
+    ><label class="check-label"
+      ><input type="checkbox" name="kvkk_consent" required /><span
+        ><a href="/kurumsal/kvkk" target="_blank" rel="noopener"
+          >6698 sayılı KVKK Aydınlatma Metni</a
+        >'ni ve
+        <a href="/kurumsal/kullanim-kosullari" target="_blank" rel="noopener"
+          >Üyelik / Kullanım Koşulları</a
+        >'nı okudum; kişisel verilerimin işlenmesine ilişkin aydınlatıldım.</span
+      ></label
+    ><label class="check-label"
+      ><input type="checkbox" name="email_consent" /><span
+        ><a
+          href="/kurumsal/ticari-ileti-aydinlatma"
+          target="_blank"
+          rel="noopener"
+          >6563 sayılı ETK Ticari Elektronik İleti Metni</a
+        >
+        kapsamında yeni sayılar, özel dosyalar ve savunma bültenleri hakkında
+        e-posta ile bilgilendirilmek istiyorum (İsteğe bağlı).</span
+      ></label
+    >
+    <p class="form-feedback" role="status"></p>
+    <button class="button primary" type="submit">Hesap oluştur →</button>
+  </form>
+</dialog>
+
+<dialog id="offer-dialog" class="ui-dialog offer-dialog" aria-labelledby="offer-title">
+  <div class="dialog-heading">
+    <div>
+      <div class="eyebrow">ABONELİK VE YAYINLAR</div>
+      <h2 id="offer-title"></h2>
+    </div>
+    <button class="icon-button" data-close-dialog aria-label="Kapat">×</button>
+  </div>
+  <p id="offer-description"></p>
+  <div class="plan-price" id="offer-price"></div>
+  <ul id="offer-features" class="offer-features"></ul>
+  <form id="offer-checkout-form" class="ui-form offer-checkout-form">
+    <input type="hidden" name="item_type" value="subscription" />
+    <input type="hidden" name="item_code" value="" />
+    <div class="form-grid-2">
+      <label
+        >Ad soyad<input
+          name="full_name"
+          autocomplete="name"
+          required
+          maxlength="100" /></label
+      ><label
+        >Kurumsal e-posta<input
+          name="email"
+          type="email"
+          autocomplete="email"
+          required
+      /></label>
+    </div>
+    <label
+      >Kurum / Şirket adı<input
+        name="organization_name"
+        autocomplete="organization"
+        required
+        maxlength="120"
+    /></label>
+    <label class="check-label"
+      ><input type="checkbox" name="distance_sales_consent" required /><span
+        ><a
+          href="/kurumsal/mesafeli-satis-sozlesmesi"
+          target="_blank"
+          rel="noopener"
+          >Ön Bilgilendirme Formu ve Mesafeli Satış Sözleşmesi</a
+        >
+        ile
+        <a
+          href="/kurumsal/iptal-ve-iade-kosullari"
+          target="_blank"
+          rel="noopener"
+          >İptal ve İade Koşulları</a
+        >'nı okudum, kabul ediyorum.</span
+      ></label
+    >
+    <p class="form-feedback" id="offer-feedback" role="status"></p>
+    <div id="paytr-iframe-wrap" class="paytr-iframe-wrap" hidden></div>
+    <button class="button primary" type="submit">
+      Online sipariş &amp; proforma oluştur →
+    </button>
+  </form>
+  <div class="offer-secondary-actions">
+    <a id="offer-contact" class="button secondary">E-posta ile bilgi al ↗</a>
+    <a href="/kurumsal/iletisim" class="text-link"
+      >Diğer iletişim seçenekleri →</a
+    >
+  </div>
+</dialog>
+
+<aside
+  id="cookie-consent-bar"
+  class="cookie-consent-bar"
+  aria-label="Çerez tercih bildirimi"
+  hidden
+>
+  <div class="cookie-bar-eyebrow">6698 SAYILI KVKK · ÇEREZ TERCİHLERİ</div>
+  <p class="cookie-bar-copy">
+    Zorunlu oturum ve güvenlik çerezleri dışındaki birinci taraf okuma analitiği
+    ve sponsorluk ölçümlemesi yalnızca açık rızanızla etkinleştirilir. Detaylar:
+    <a href="/kurumsal/cerez-politikasi">Çerez Politikası</a>.
+  </p>
+  <div class="cookie-bar-actions">
+    <button
+      type="button"
+      class="button primary cookie-btn"
+      data-cookie-accept="all"
+    >
+      Tümünü kabul et
+    </button>
+    <button
+      type="button"
+      class="button secondary cookie-btn"
+      data-cookie-accept="necessary"
+    >
+      Yalnızca zorunlu
+    </button>
+    <button
+      type="button"
+      class="text-link cookie-manage-btn"
+      data-open-dialog="cookie-dialog"
+    >
+      Tercihleri yönet
+    </button>
+  </div>
+</aside>
+
+<dialog
+  id="cookie-dialog"
+  class="ui-dialog cookie-dialog"
+  aria-labelledby="cookie-dialog-title"
+>
+  <div class="dialog-heading">
+    <div>
+      <div class="eyebrow">6698 SAYILI KVKK &amp; ÇEREZ REHBERİ UYUMU</div>
+      <h2 id="cookie-dialog-title">Çerez ve Gizlilik Tercihleri</h2>
+    </div>
+    <button class="icon-button" data-close-dialog aria-label="Kapat">×</button>
+  </div>
+  <p class="cookie-dialog-intro">
+    MSI Dergisi platformunda yurt dışı merkezli üçüncü taraf reklam veya
+    profilleme takipçileri (Google Analytics, Meta Pixel vb.) kullanılmaz.
+    Zorunlu olmayan birinci taraf ölçüm kategorilerini aşağıdan dilediğiniz an
+    açıp kapatabilirsiniz (<a href="/kurumsal/cerez-politikasi"
+      >Çerez Politikası</a
+    >).
+  </p>
+  <form id="cookie-preferences-form" class="ui-form cookie-preferences-form">
+    <div class="cookie-category-item">
+      <label class="check-label">
+        <input type="checkbox" checked disabled />
+        <span>
+          <strong>Zorunlu Oturum, Tema ve Güvenlik Çerezleri</strong>
+          <small>
+            HttpOnly güvenli oturum (<code>msi_session</code>), dil tercihi
+            (<code>msi_lang</code>), tema (<code>msi_theme</code>) ve çerez rıza
+            kaydı. KVKK m.5/2-(c) ve (f) uyarınca her zaman aktiftir.
+          </small>
+        </span>
+      </label>
+    </div>
+    <div class="cookie-category-item">
+      <label class="check-label">
+        <input type="checkbox" name="analytics" />
+        <span>
+          <strong>Birinci Taraf Okuma Derinliği Analitiği (İsteğe Bağlı)</strong>
+          <small>
+            Makale okuma süresi ve sayfa kaydırma oranının anonimleştirilmiş
+            olarak ölçülmesini sağlar (KVKK m.5/1 açık rıza).
+          </small>
+        </span>
+      </label>
+    </div>
+    <div class="cookie-category-item">
+      <label class="check-label">
+        <input type="checkbox" name="marketing" />
+        <span>
+          <strong>Kurumsal Sponsorluk Gösterim Ölçümü (İsteğe Bağlı)</strong>
+          <small>
+            Savunma sanayii kurumsal tanıtım alanlarının gösterim ve tıklama
+            sayımını etkinleştirir; davranışsal profilleme yapılmaz (KVKK m.5/1
+            açık rıza).
+          </small>
+        </span>
+      </label>
+    </div>
+    <div class="cookie-dialog-actions">
+      <button type="submit" class="button primary">Seçimlerimi kaydet</button>
+      <button type="button" class="button secondary" data-cookie-accept="all">
+        Tümünü kabul et
+      </button>
+      <button
+        type="button"
+        class="button secondary"
+        data-cookie-accept="necessary"
+      >
+        Yalnızca zorunlu
+      </button>
+    </div>
+  </form>
+</dialog>

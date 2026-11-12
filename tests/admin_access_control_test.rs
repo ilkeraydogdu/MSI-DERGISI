@@ -13,6 +13,8 @@ fn admin_waf_blocks_sql_injection_attempts() {
         Some("id=1' OR '1'='1"),
         Some("Mozilla/5.0"),
         "127.0.0.1",
+        120, // max_rpm (default)
+        60,    // window_secs (default)
     );
     assert!(result.is_err(), "SQL injection in query params should be blocked by WAF");
 }
@@ -26,6 +28,8 @@ fn admin_waf_blocks_xss_in_user_agent() {
         None,
         Some("<script>alert(document.cookie)</script>"),
         "127.0.0.1",
+        120, // max_rpm (default)
+        60,  // window_secs (default)
     );
     assert!(result.is_err(), "XSS in User-Agent should be blocked by WAF");
 }
@@ -39,6 +43,8 @@ fn admin_waf_allows_legitimate_requests() {
         Some("page=1&lang=tr"),
         Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
         "192.168.1.100",
+        120, // max_rpm (default)
+        60,  // window_secs (default)
     );
     assert!(result.is_ok(), "Legitimate requests should pass WAF inspection");
 }
@@ -52,6 +58,8 @@ fn admin_waf_blocks_path_traversal() {
         None,
         Some("curl/7.68.0"),
         "10.0.0.1",
+        120, // max_rpm (default)
+        60,  // window_secs (default)
     );
     assert!(result.is_err(), "Path traversal attempts should be blocked by WAF");
 }
@@ -60,7 +68,7 @@ fn admin_waf_blocks_path_traversal() {
 fn admin_security_headers_are_generated() {
     use msi_dergisi_platform::engine::security_engine::CentralSecurityFilter;
 
-    let headers = CentralSecurityFilter::security_headers_list(1500);
+    let headers = CentralSecurityFilter::security_headers_list(1500, None);
     assert!(!headers.is_empty(), "Security headers list should not be empty");
 
     // Verify key security headers are present

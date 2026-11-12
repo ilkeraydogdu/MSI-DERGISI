@@ -20,6 +20,28 @@ pub fn render(
     body: &str,
     _exec_us: u128,
 ) -> String {
+    render_with_nonce(
+        lang, mode, settings, seo, categories, tags, issues, contents, notifications, body, _exec_us, None,
+    )
+}
+
+/// Nonce-aware shell renderer. When `nonce` is provided, injects `nonce="..."` on all inline
+/// `<script>` tags in the rendered HTML output for CSP script-src enforcement.
+#[allow(clippy::too_many_arguments)]
+pub fn render_with_nonce(
+    lang: &str,
+    mode: &str,
+    settings: &HashMap<String, String>,
+    seo: &SeoMetaBundle,
+    categories: &[CategoryNode],
+    tags: &[SsbInterestTag],
+    issues: &[MagazineIssue],
+    contents: &[ContentItem],
+    notifications: &[SystemNotification],
+    body: &str,
+    _exec_us: u128,
+    nonce: Option<&str>,
+) -> String {
     let design = config::load(settings);
     let nav: String = design
         .navigation
@@ -145,7 +167,7 @@ pub fn render(
         }),
     );
     let dialogs = include_str!("dialogs.html");
-    format!(
+    let html = format!(
         include_str!("shell.html"),
         announcement_html = announcement_html,
         ticker_html = ticker_html,
@@ -195,5 +217,20 @@ pub fn render(
         magazine_active = if mode == "news" { "" } else { "active" },
         news_active = if mode == "news" { "active" } else { "" },
         year = chrono::Utc::now().format("%Y")
-    )
+    );
+
+    // Inject nonce attribute on all inline <script> tags when CSP nonce is provided.
+    // External scripts (with src=) are unaffected; only inline scripts need the nonce.
+    if let Some(n) = nonce {
+        let nonce_attr = format!(" nonce=\"{}\"", n);
+        html.replace("<script id=\"msi-bootstrap\"", &format!("<script{} id=\"msi-bootstrap\"", nonce_attr))
+            .replace("<script type=\"speculationrules\">", &format!("<script{} type=\"speculationrules\">", nonce_attr))
+            .replace("<script src=\"/js/msi-theme.js", &format!("<script{} src=\"/js/msi-theme.js", nonce_attr))
+            .replace("<script src=\"/js/vendor/lenis.min.js\"", &format!("<script{} src=\"/js/vendor/lenis.min.js\"", nonce_attr))
+            .replace("<script src=\"/js/vendor/gsap.min.js\"", &format!("<script{} src=\"/js/vendor/gsap.min.js\"", nonce_attr))
+            .replace("<script src=\"/js/vendor/ScrollTrigger.min.js\"", &format!("<script{} src=\"/js/vendor/ScrollTrigger.min.js\"", nonce_attr))
+            .replace("<script src=\"/js/msi-ui.js", &format!("<script{} src=\"/js/msi-ui.js", nonce_attr))
+    } else {
+        html
+    }
 }

@@ -366,7 +366,7 @@
             comments : $('textarea[name="comments"]').val(),
           },
           success : function( result ){
-            $('#contactform-error-msg').html( result );
+            $('#contactform-error-msg').text( result );
             $("#contactform")[0].reset();
           }     
         });
@@ -472,11 +472,6 @@
      $('.niceSelect').niceSelect();
 
      /* DUPLICATE REMOVED: search handler already registered at lines 27-36 */
-     //Do not include! This prevents the form from submitting for DEMO purposes only!
-     $('form').submit(function(event) {
-         event.preventDefault();
-         return false;
-     });
 
  })(jQuery);
 

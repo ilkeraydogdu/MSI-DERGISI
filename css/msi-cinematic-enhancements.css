@@ -1,0 +1,263 @@
+/* ==========================================================================
+   MSI DERGİSİ & MSI TDR — CORPORATE DESIGN SYSTEM & MODAL ENHANCEMENTS
+   File: css/msi-cinematic-enhancements.css
+   Harmonized with Central Corporate Red (#C4122F) & White (#FFFFFF) + Soft Dark Mode
+   ========================================================================== */
+
+:root {
+    --msi-cine-crimson: #C4122F;
+    --msi-cine-crimson-dark: #9B0E24;
+    --msi-cine-surface: var(--msi-bg-surface, #FFFFFF);
+    --msi-cine-subtle: var(--msi-bg-subtle, #F8FAFC);
+    --msi-cine-border: var(--msi-border, #E2E8F0);
+    --msi-cine-text: var(--msi-text-heading, #0F172A);
+    --msi-cine-muted: var(--msi-text-muted, #64748B);
+}
+
+/* 1. Top Reading Progress Line (Editorial Polish) */
+#msi-reading-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 0%;
+    background: linear-gradient(90deg, #C4122F 0%, #E11D48 100%);
+    z-index: 100050;
+    transition: width 0.15s ease-out;
+    pointer-events: none;
+}
+
+/* 2. Subtle Card Hover Elevation */
+.msi-cursor-glow-card {
+    position: relative;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.msi-cursor-glow-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(196, 18, 47, 0.35) !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* 3. Corporate Modal System (#modal-login & #modal-magazine) */
+.msi-fs-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 100060;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.msi-fs-modal-backdrop.open {
+    display: flex;
+    animation: msiModalFadeIn 0.2s ease;
+}
+
+@keyframes msiModalFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.msi-fs-modal-dialog {
+    background: var(--msi-bg-surface, #FFFFFF);
+    border: 1px solid var(--msi-border, #E2E8F0);
+    border-top: 4px solid var(--msi-red, #C4122F);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 820px;
+    max-height: 92vh;
+    overflow-y: auto;
+    color: var(--msi-text-heading, #0F172A);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    padding: 28px 30px;
+    position: relative;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.msi-fs-modal-dialog.modal-xl {
+    max-width: 1100px;
+}
+
+.msi-fs-modal-close {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--msi-border, #E2E8F0);
+    background: var(--msi-bg-subtle, #F8FAFC);
+    color: var(--msi-text-heading, #0F172A);
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.msi-fs-modal-close:hover {
+    background: var(--msi-red, #C4122F);
+    border-color: var(--msi-red, #C4122F);
+    color: #FFFFFF;
+}
+
+/* Gov/Military Email Detection Alert inside #modal-login */
+.msi-gov-detected-banner {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: #F0FDF4;
+    border: 1px solid #BBF7D0;
+    border-left: 4px solid #16A34A;
+    color: #166534;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin: 10px 0 14px;
+}
+
+body.msi-dark-mode .msi-gov-detected-banner {
+    background: rgba(22, 163, 74, 0.14);
+    border-color: rgba(22, 163, 74, 0.4);
+    color: #DCFCE7;
+}
+
+.msi-gov-detected-banner.visible {
+    display: flex;
+}
+
+/* Form Elements inside Modals */
+.msi-modal-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+@media (max-width: 720px) {
+    .msi-modal-grid-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.msi-field-group {
+    margin-bottom: 13px;
+}
+
+.msi-field-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--msi-text-heading, #0F172A);
+    margin-bottom: 5px;
+}
+
+.msi-field-input,
+.msi-field-select,
+.msi-field-textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--msi-border, #CBD5E1);
+    background: var(--msi-bg-surface, #FFFFFF);
+    color: var(--msi-text-heading, #0F172A);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.msi-field-input:focus,
+.msi-field-select:focus,
+.msi-field-textarea:focus {
+    border-color: var(--msi-red, #C4122F);
+    box-shadow: 0 0 0 3px rgba(196, 18, 47, 0.12);
+}
+
+.msi-ssb-grid-14 {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+    gap: 7px;
+    background: var(--msi-bg-subtle, #F8FAFC);
+    border: 1px solid var(--msi-border, #E2E8F0);
+    border-radius: 8px;
+    padding: 10px;
+    max-height: 175px;
+    overflow-y: auto;
+}
+
+.msi-ssb-check-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--msi-text-body, #334155);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 5px;
+}
+
+.msi-ssb-check-item:hover {
+    background: var(--msi-red-soft, #FFF1F3);
+    color: var(--msi-red, #C4122F);
+}
+
+/* 4. E-Dergi Flipbook & Dynamic Watermark PDF Bar (#modal-magazine) */
+.msi-flipbook-stage {
+    background: var(--msi-bg-subtle, #F8FAFC);
+    border: 1px solid var(--msi-border, #E2E8F0);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 14px 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.msi-flipbook-spread-card {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 24px;
+    align-items: center;
+    background: var(--msi-bg-surface, #FFFFFF);
+    border: 1px solid var(--msi-border, #E2E8F0);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+}
+
+@media (max-width: 768px) {
+    .msi-flipbook-spread-card {
+        grid-template-columns: 1fr;
+    }
+}
+
+.msi-watermark-stamp-overlay {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--msi-red-soft, #FFF1F3);
+    border: 1px dashed var(--msi-border-accent, rgba(196, 18, 47, 0.35));
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--msi-red, #C4122F);
+    letter-spacing: 0.02em;
+}
+
+.msi-pdf-download-bar {
+    background: var(--msi-bg-subtle, #F8FAFC);
+    border: 1px solid var(--msi-border, #E2E8F0);
+    border-left: 4px solid var(--msi-red, #C4122F);
+    border-radius: 8px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}

@@ -1,0 +1,345 @@
+/* ==========================================================================
+   MSI DERGİSİ - TIME MAGAZINE INSPIRED EDITORIAL THEME
+   Scoped entirely under: body.msi-time-editorial
+   Easily toggleable & reversible
+   ========================================================================== */
+
+:root {
+  --time-red: #c4122f;          /* Iconic TIME Crimson */
+  --time-red-soft: #fdf2f4;
+  --time-red-border: rgba(196, 18, 47, 0.35);
+  --time-black: #0f141e;
+  --time-body: #2d3748;
+  --time-muted: #5a6578;
+  --time-hairline: #e2e8f0;
+  --time-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --time-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* --------------------------------------------------------------------------
+   1. GLOBAL EDITORIAL TYPOGRAPHY
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial {
+  background-color: #fafbfd !important;
+  color: var(--time-body) !important;
+  font-family: var(--time-sans) !important;
+}
+
+/* Iconic Serif Headlines */
+body.msi-time-editorial h1,
+body.msi-time-editorial h2,
+body.msi-time-editorial h3,
+body.msi-time-editorial h4,
+body.msi-time-editorial .font-heading,
+body.msi-time-editorial .msi-mag-hero-title,
+body.msi-time-editorial .subcard-title,
+body.msi-time-editorial .msi-mag-newslist-title,
+body.msi-time-editorial .msi-mag-dossier-card h4 a {
+  font-family: var(--time-serif) !important;
+  color: var(--time-black) !important;
+  letter-spacing: -0.02em !important;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+/* Subheadings and Italics */
+body.msi-time-editorial .msi-mag-hero-title em,
+body.msi-time-editorial .msi-mag-hero-title span {
+  font-family: var(--time-serif) !important;
+  font-style: italic !important;
+  font-weight: 400 !important;
+  color: var(--time-muted) !important;
+}
+
+/* --------------------------------------------------------------------------
+   2. SWITCHER BAR: TIME PREVIEW BUTTON
+   -------------------------------------------------------------------------- */
+.btn-time-style-toggle {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.2;
+}
+
+.btn-time-style-toggle:hover {
+  background: #fdf2f4;
+  color: var(--time-red);
+  border-color: var(--time-red);
+}
+
+.btn-time-style-toggle.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+}
+
+.btn-time-style-toggle.active .badge {
+  background: var(--time-red) !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. TIME COVER PRESENTATION (ICONIC REFINED CRIMSON ACCENT)
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial .msi-mag-cover-holder {
+  padding: 6px;
+  background: #ffffff;
+  border: 2px solid var(--time-red);
+  box-shadow: 0 22px 50px -10px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(196, 18, 47, 0.15);
+  border-radius: 4px;
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+body.msi-time-editorial .msi-mag-cover-holder:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 28px 60px -12px rgba(196, 18, 47, 0.25), 0 0 0 1px var(--time-red);
+}
+
+body.msi-time-editorial .msi-mag-cover-img {
+  border: 1px solid #e2e8f0;
+  border-radius: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   4. JOURNALISTIC HERO SECTION
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial .msi-mag-hero {
+  background: #ffffff !important;
+  border-bottom: 2px solid var(--time-black) !important;
+  padding: 40px 0 50px 0 !important;
+}
+
+/* Editorial Kicker with Crimson Dash */
+body.msi-time-editorial .msi-mag-hero-left-card .text-danger {
+  font-family: var(--time-sans) !important;
+  text-transform: uppercase;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.12em !important;
+  color: var(--time-red) !important;
+  display: inline-flex;
+  align-items: center;
+}
+
+body.msi-time-editorial .msi-mag-hero-title {
+  font-size: 32px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  margin-top: 6px !important;
+  margin-bottom: 16px !important;
+}
+
+body.msi-time-editorial .msi-mag-hero-lead {
+  font-size: 14.5px !important;
+  line-height: 1.7 !important;
+  color: #4b5563 !important;
+  font-family: var(--time-sans) !important;
+}
+
+/* Journalistic Metadata Bar */
+body.msi-time-editorial .msi-mag-hero-left-card .border-top.border-bottom {
+  border-top: 1px solid var(--time-hairline) !important;
+  border-bottom: 1px solid var(--time-hairline) !important;
+  padding: 10px 0 !important;
+  font-family: var(--time-sans) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   5. TIME COLUMN GRID (3 SUBCARDS UNDER HERO)
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial .msi-mag-subcard {
+  border: none !important;
+  border-top: 2px solid var(--time-black) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 14px 0 0 0 !important;
+  transition: border-color 0.2s ease, transform 0.2s ease !important;
+}
+
+body.msi-time-editorial .msi-mag-subcard:hover {
+  border-top-color: var(--time-red) !important;
+  transform: translateY(-2px) !important;
+}
+
+body.msi-time-editorial .msi-mag-subcard-thumb {
+  border-radius: 4px !important;
+  overflow: hidden;
+  border: 1px solid var(--time-hairline) !important;
+  margin-bottom: 10px;
+}
+
+body.msi-time-editorial .subcard-title {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  color: var(--time-black) !important;
+  margin: 6px 0 !important;
+}
+
+body.msi-time-editorial .msi-mag-subcard:hover .subcard-title {
+  color: var(--time-red) !important;
+}
+
+body.msi-time-editorial .subcard-excerpt {
+  font-family: var(--time-sans) !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+  color: #64748b !important;
+}
+
+/* --------------------------------------------------------------------------
+   6. RIGHT COLUMN: TIME INDEX & SPECIAL REVEALS
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial .msi-mag-hero-right-card {
+  border: 1px solid var(--time-hairline) !important;
+  border-top: 3px solid var(--time-black) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  background: #ffffff !important;
+  padding: 18px !important;
+}
+
+body.msi-time-editorial .msi-mag-newslist-item {
+  border-bottom: 1px solid var(--time-hairline) !important;
+  padding: 12px 0 !important;
+  background: transparent !important;
+  transition: all 0.2s ease;
+}
+
+body.msi-time-editorial .msi-mag-newslist-item:hover {
+  background: #fafafa !important;
+  padding-left: 4px !important;
+}
+
+body.msi-time-editorial .msi-mag-newslist-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  color: var(--time-black) !important;
+}
+
+body.msi-time-editorial .msi-mag-newslist-item:hover .msi-mag-newslist-title {
+  color: var(--time-red) !important;
+}
+
+/* --------------------------------------------------------------------------
+   7. SECTION 2: KAPAK DOSYALARI (SPECIAL REPORTS)
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial .msi-mag-dossier-card {
+  border: 1px solid var(--time-hairline) !important;
+  border-top: 3px solid var(--time-black) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  background: #ffffff !important;
+  transition: all 0.25s ease !important;
+}
+
+body.msi-time-editorial .msi-mag-dossier-card:hover {
+  border-top-color: var(--time-red) !important;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07) !important;
+  transform: translateY(-2px);
+}
+
+body.msi-time-editorial .msi-mag-dossier-thumb {
+  border-radius: 3px !important;
+  border: 1px solid var(--time-hairline);
+}
+
+body.msi-time-editorial .msi-mag-dossier-card h4 a {
+  font-size: 19px !important;
+  line-height: 1.35 !important;
+  font-weight: 700 !important;
+  color: var(--time-black) !important;
+  transition: color 0.2s ease;
+}
+
+body.msi-time-editorial .msi-mag-dossier-card:hover h4 a {
+  color: var(--time-red) !important;
+}
+
+/* --------------------------------------------------------------------------
+   8. SECTION 3: AYIN SÖYLEŞİSİ (THE TIME INTERVIEW)
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial blockquote {
+  font-family: var(--time-serif) !important;
+  font-style: italic !important;
+  font-size: 17px !important;
+  line-height: 1.6 !important;
+  color: var(--time-black) !important;
+  border-left: 3px solid var(--time-red) !important;
+  background: #fafafb !important;
+  padding: 16px 22px !important;
+  border-radius: 0 6px 6px 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   9. BUTTONS: TIME CLASSIC STYLING
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial .btn-msi-primary {
+  background: var(--time-red) !important;
+  border: 1px solid var(--time-red) !important;
+  border-radius: 30px !important;
+  font-family: var(--time-sans) !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 14px rgba(196, 18, 47, 0.25) !important;
+}
+
+body.msi-time-editorial .btn-msi-primary:hover {
+  background: #9e0e25 !important;
+  border-color: #9e0e25 !important;
+}
+
+body.msi-time-editorial .btn-msi-outline {
+  border: 1px solid var(--time-black) !important;
+  color: var(--time-black) !important;
+  border-radius: 30px !important;
+  font-family: var(--time-sans) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+body.msi-time-editorial .btn-msi-outline:hover {
+  background: var(--time-black) !important;
+  color: #ffffff !important;
+}
+
+/* --------------------------------------------------------------------------
+   10. TIME STYLE ADVERTISING CONTAINERS (PRESTIGIOUS EDITORIAL FRAMING)
+   -------------------------------------------------------------------------- */
+body.msi-time-editorial .msi-ad-box {
+  border: 1px solid #d1d5db !important;
+  background: #ffffff !important;
+  border-radius: 4px !important;
+}
+
+body.msi-time-editorial .msi-ad-header {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+body.msi-time-editorial .msi-ad-badge {
+  background: var(--time-black) !important;
+  color: #ffffff !important;
+  font-family: var(--time-sans) !important;
+  font-size: 9.5px !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+

@@ -1,0 +1,263 @@
+<!doctype html>
+<html
+  lang="{lang}"
+  data-theme="{initial_theme}"
+  data-theme-preference="{default_theme}"
+>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {seo}
+    <meta name="theme-color" content="{background}" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/images/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="/css/msi-design-system.css?v=5" />
+    <style id="design-tokens">
+      {tokens}
+    </style>
+    <script src="/js/msi-theme.js?v=1"></script>
+  </head>
+  <body
+    class="{body_class} reading-{article_layout} category-{category_layout} search-{search_layout} reading-font-{reading_font}"
+    data-default-theme="{default_theme}"
+  >
+    <div class="scroll-telemetry" id="scroll-telemetry" aria-hidden="true"></div>
+    <a href="#main-content" class="skip-link">İçeriğe geç</a>
+    <div class="ambient-stage" aria-hidden="true">
+      <span class="ambient-orb orb-a"></span>
+      <span class="ambient-orb orb-b"></span>
+      <span class="ambient-orb orb-c"></span>
+    </div>
+    <div class="grain-veil" aria-hidden="true"></div>
+    {announcement_html}
+    <header class="site-header">
+      <div class="masthead-band">
+        <div class="container masthead">
+          <a class="wordmark" href="/" aria-label="{brand} ana sayfa"
+            ><span class="wordmark-brand"
+              ><img
+                class="brand-logo"
+                src="/images/logo-white.svg"
+                alt="{brand}"
+                width="126"
+                height="46"
+                decoding="async"
+              /><span class="wordmark-badge">DERGİSİ</span></span
+            ><small>SAVUNMA · HAVACILIK · GÜVENLİK TEKNOLOJİLERİ</small></a
+          >
+          <div class="masthead-caption">Stratejik Savunma İstihbaratı · Sıfır Gürültü, Mutlak Derinlik.</div>
+          <div class="header-actions">
+            <a class="icon-button" href="/arama" aria-label="Ara">{search}</a
+            ><button
+              class="icon-button"
+              data-open-dialog="notifications-dialog"
+              aria-label="Bildirimler"
+            >
+              {bell}<span class="notification-count"
+                >{notification_count}</span
+              ></button
+            ><button
+              class="icon-button"
+              id="btnToggleThemeMode"
+              aria-label="Koyu temaya geç"
+              aria-pressed="false"
+            >
+              {moon}</button
+            ><a href="/hesabim" class="account-link">{user}<span>Hesabım</span></a
+            ><a class="button primary subscribe-link" href="/abonelik-ve-satis"
+              >Abone ol {arrow}</a
+            ><button
+              class="icon-button mobile-toggle"
+              aria-label="Menüyü aç"
+              aria-controls="site-navigation"
+              aria-expanded="false"
+            >
+              {menu}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="navigation-border">
+        <nav
+          class="container navigation"
+          id="site-navigation"
+          aria-label="Ana menü"
+        >
+          {nav}
+          <details class="nav-more">
+            <summary>Tüm konular <span>⌄</span></summary>
+            <div class="mega-menu">{category_links}</div>
+          </details>
+          <a
+            class="language-link"
+            href="?lang={other_lang}"
+            data-language="{other_lang}"
+            >{other_lang_upper}</a
+          >
+        </nav>
+      </div>
+    </header>
+    <div class="portal-bar">
+      <div class="container portal-inner">
+        <nav class="portal-tabs" aria-label="Yayın seçimi">
+          <a
+            href="/?mode=magazine#dergi"
+            id="btnSwitchDergi"
+            data-portal="magazine"
+            class="{magazine_active}"
+            >{book} MSI Dergisi<span>DERİNLİKLİ BAKIŞ</span></a
+          ><a
+            href="/?mode=news#haber"
+            id="btnSwitchHaber"
+            data-portal="news"
+            class="{news_active}"
+            >{news_icon} Savunma Haber<span>GÜNCEL GELİŞMELER</span></a
+          >
+        </nav>
+        <a class="archive-link" href="/e-dergi">Dijital arşiv {arrow}</a>
+      </div>
+    </div>
+    {ticker_html}
+    <main id="main-content" tabindex="-1">{body}</main>
+    <footer class="site-footer">
+      <div class="footer-brand-strip">
+        <div class="container footer-brand-inner">
+          <a href="/" class="wordmark" aria-label="{brand} ana sayfa"
+            ><span class="wordmark-brand"
+              ><img
+                class="brand-logo"
+                src="/images/logo-white.svg"
+                alt="{brand}"
+                width="108"
+                height="40"
+                loading="lazy"
+                decoding="async"
+              /><span class="wordmark-badge">DERGİSİ</span></span
+            ></a
+          >
+          <span>Aylık, Türkçe ve İngilizce Yayımlanan Savunma, Havacılık ve Güvenlik Teknolojileri Dergisi · ISSN 1306-0309</span>
+        </div>
+      </div>
+      <div class="container footer-grid">
+        <div>
+          <h2>İletişim &amp; Merkez Ofis</h2>
+          <p class="footer-contact-list">
+            <strong>Adres:</strong> {address}<br />
+            <strong>P:</strong> <a href="tel:+903122254173">{phone}</a><br />
+            <strong>F:</strong> {fax}<br />
+            <strong>E:</strong> <a href="mailto:{email}">{email}</a><br />
+            <a href="https://www.savunmahaber.com" rel="noopener noreferrer" target="_blank">www.savunmahaber.com</a>
+          </p>
+          <div class="footer-social-block">
+            <span>Bizi Sosyal Medya Hesaplarımızdan Takip Edebilirsiniz</span>
+            <div class="footer-social-links" aria-label="Resmî sosyal medya hesapları">
+              <a href="https://www.facebook.com/MSI.Dergisi/" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi Facebook">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 21v-8h2.7l.4-3h-3.1V8.1c0-.9.3-1.5 1.6-1.5h1.7V3.9c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3V10H7.3v3h2.8v8h3.4Z"/></svg>
+              </a>
+              <a href="https://www.linkedin.com/company/msi-dergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi LinkedIn">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.9 8.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4ZM5.2 10h3.4v10.2H5.2V10Zm5.5 0h3.2v1.4h.1c.5-.8 1.6-1.7 3.3-1.7 3.5 0 4.1 2.3 4.1 5.3v5.2H18v-4.6c0-1.1 0-2.5-1.5-2.5s-1.8 1.2-1.8 2.4v4.7h-3.4V10Z"/></svg>
+              </a>
+              <a href="https://www.instagram.com/msidergisi/" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi Instagram">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+              </a>
+              <a href="https://nsosyal.com/msidergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi NSosyal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4m-8.4 0a6 6 0 0 1 0-8.4m11.2-2.8a10 10 0 0 1 0 14m-14 0a10 10 0 0 1 0-14"/></svg>
+              </a>
+              <a href="https://twitter.com/MSI_Dergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi X (Twitter)">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.2 3h2.9l-6.4 7.3L22.2 21h-5.9l-4.6-6-5.3 6H3.5l6.8-7.8L3.1 3h6l4.2 5.5L18.2 3Zm-1 16.2h1.6L8.3 4.7H6.6l10.6 14.5Z"/></svg>
+              </a>
+              <a href="https://www.youtube.com/c/msidergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi YouTube">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5A2.7 2.7 0 0 0 2.4 7.2C2 8.9 2 12 2 12s0 3.1.4 4.8a2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9c.4-1.7.4-4.8.4-4.8s0-3.1-.4-4.8ZM10 15.2V8.8l5.5 3.2-5.5 3.2Z"/></svg>
+              </a>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h2>Yayın Kategorileri</h2>
+          <a href="/kategori/haberler">Haberler</a
+          ><a href="/kategori/kapak-dosyasi">Kapak Dosyaları</a
+          ><a href="/kategori/soylesiler">Söyleşiler</a
+          ><a href="/kategori/ozel-haberler">Özel Haberler</a
+          ><a href="/kategori/basyazilar">Başyazılar</a
+          ><a href="/kategori/tanitici-makaleler">Tanıtıcı Makaleler</a
+          ><a href="/kategori/ozel-dosya">Özel Dosya</a
+          ><a href="/e-dergi">E-Dergi &amp; Arşiv</a>
+        </div>
+        <div>
+          <h2>Hakkımızda &amp; Künye</h2>
+          <a href="/kurumsal/kunye">Künye</a
+          ><a href="/kurumsal/hakkimizda">Biz Kimiz? (Hakkımızda)</a
+          ><a href="/kurumsal/yolculugumuz">Yolculuğumuz</a
+          ><a href="/kurumsal/cozum-ortaklarimiz">Çözüm Ortaklarımız</a
+          ><a href="/kurumsal/amac-magazine">AMAC Magazine</a
+          ><a href="/kurumsal/kasabaworks">KasabaWorks</a
+          ><a href="/kurumsal/iletisim">İletişim ve Reklam</a>
+        </div>
+        <div>
+          <h2>Okuyucu &amp; Veri Koruma</h2>
+          <a href="/hesabim">Hesabım</a
+          ><a href="/abonelik-ve-satis">Abonelik ve Yayınlar</a
+          ><a href="/kurumsal/kvkk">KVKK Aydınlatma Metni</a
+          ><a href="/kurumsal/kvkk-basvuru-formu">KVKK Başvuru Formu</a
+          ><a href="/kurumsal/gizlilik-politikasi">Gizlilik Politikası</a
+          ><a href="/kurumsal/cerez-politikasi">Çerez Politikası</a
+          ><a href="/rss.xml">RSS Haber Akışı</a>
+        </div>
+      </div>
+      <nav class="container footer-legal-bar" aria-label="Yasal bildirimler ve politikalar">
+        <a href="/kurumsal/kullanim-kosullari">Kullanım Koşulları</a>
+        <a href="/kurumsal/mesafeli-satis-sozlesmesi">Mesafeli Satış Sözleşmesi</a>
+        <a href="/kurumsal/iptal-ve-iade-kosullari">İptal ve İade Koşulları</a>
+        <a href="/kurumsal/ticari-ileti-aydinlatma">Ticari Elektronik İleti (ETK/İYS)</a>
+        <a href="/kurumsal/telif-ve-etik">Telif ve Yayın Etiği</a>
+        <a href="/kurumsal/duzeltme-ve-cevap-hakki">Düzeltme ve Cevap Hakkı</a>
+        <a href="/kurumsal/reklam-ve-sponsorluk">Reklam ve Sponsorluk İlkeleri</a>
+        <button type="button" class="footer-cookie-btn" data-open-dialog="cookie-dialog">
+          Çerez tercihleri
+        </button>
+      </nav>
+      <div class="container footer-bottom">
+        <span>© {year} UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti. · Tüm hakları saklıdır (5846 s. FSEK).</span
+        ><span>MSI Dergisi · MSI Turkish Defence Review (ISSN 1306-0309)</span>
+      </div>
+    </footer>
+    <dialog
+      id="notifications-dialog"
+      class="ui-dialog notification-dialog"
+      aria-labelledby="notification-title"
+    >
+      <div class="dialog-heading">
+        <div>
+          <div class="eyebrow">OKUYUCU MERKEZİ</div>
+          <h2 id="notification-title">Bildirimler</h2>
+        </div>
+        <button class="icon-button" data-close-dialog aria-label="Kapat">
+          {close}
+        </button>
+      </div>
+      <div class="notification-actions">
+        <button class="text-link" data-read-notifications>
+          Tümünü okundu işaretle
+        </button>
+      </div>
+      <div class="notification-list">{notification_content}</div>
+    </dialog>
+    {dialogs}
+    <div class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script id="msi-bootstrap" type="application/json">
+      {bootstrap}
+    </script>
+    <script src="/js/vendor/lenis.min.js" defer></script>
+    <script src="/js/vendor/gsap.min.js" defer></script>
+    <script src="/js/vendor/ScrollTrigger.min.js" defer></script>
+    <script src="/js/msi-ui.js?v=5" defer></script>
+    <script type="speculationrules">
+      {{"prefetch":[{{"source":"document","where":{{"and":[{{"href_matches":["/icerik/*","/kategori/*","/e-dergi","/abonelik-ve-satis","/kurumsal/*"]}},{{"not":{{"href_matches":["/admin*","/api/*","*logout*"]}}}}]}},"eagerness":"moderate"}}]}}
+    </script>
+  </body>
+</html>

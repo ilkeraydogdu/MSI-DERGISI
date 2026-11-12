@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="tr" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MSI · Tasarım stüdyosu</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="stylesheet" href="/css/msi-design-system.css?v=1" />
+    <link rel="stylesheet" href="/css/msi-design-editor.css?v=1" />
+  </head>
+  <body class="design-editor">
+    <header class="editor-header">
+      <a href="/" class="editor-brand">MSI <span>Tasarım stüdyosu</span></a>
+      <div class="editor-actions">
+        <span id="save-state" role="status">Yükleniyor…</span
+        ><button class="button secondary" id="discard-draft" type="button">
+          Taslağı bırak</button
+        ><button class="button secondary" id="preview-button">Önizle</button
+        ><button class="button primary" id="save-button">
+          Kaydet ve uygula</button
+        ><a href="/admin" class="button secondary">Yönetim</a>
+      </div>
+    </header>
+    <div class="editor-workspace">
+      <aside class="editor-sidebar">
+        <div class="editor-intro">
+          <div class="eyebrow">MERKEZİ TASARIM</div>
+          <h1>Bir sistem.<br />Tüm yayınlar.</h1>
+          <p>
+            Sayfaları ortak bölümlerle oluşturun. Renkler ve yazı ayarları tüm
+            okuyucu ekranlarına uygulanır.
+          </p>
+        </div>
+        <div class="editor-tabs" role="tablist" aria-label="Tasarım ayarları">
+          <button
+            role="tab"
+            aria-selected="true"
+            aria-controls="pages-panel"
+            id="pages-tab"
+            data-editor-tab="pages"
+          >
+            Sayfalar</button
+          ><button
+            role="tab"
+            aria-selected="false"
+            aria-controls="theme-panel"
+            id="theme-tab"
+            tabindex="-1"
+            data-editor-tab="theme"
+          >
+            Tema</button
+          ><button
+            role="tab"
+            aria-selected="false"
+            aria-controls="navigation-panel"
+            id="navigation-tab"
+            tabindex="-1"
+            data-editor-tab="navigation"
+          >
+            Menü
+          </button>
+        </div>
+        <section id="pages-panel" role="tabpanel" aria-labelledby="pages-tab">
+          <div class="ui-form">
+            <label>Sayfa<select id="page-select"></select></label>
+            <div class="editor-row">
+              <button class="button secondary" id="add-page">
+                + Yeni sayfa</button
+              ><button class="button secondary" id="duplicate-page">
+                Çoğalt
+              </button>
+            </div>
+            <label>Sayfa başlığı<input id="page-title" maxlength="200" /></label
+            ><label
+              >Sayfa adresi<input id="page-slug" pattern="[a-z0-9-]+" /><span
+                id="page-url"
+                class="field-help"
+              ></span></label
+            ><label
+              >Açıklama<textarea
+                id="page-description"
+                rows="2"
+              ></textarea></label
+            ><label
+              >Yayın görünümü<select id="page-mode">
+                <option value="magazine">Dergi</option>
+                <option value="news">Haber</option>
+              </select></label
+            >
+          </div>
+          <div class="editor-section-heading">
+            <h2>Bölümler</h2>
+            <span>Sıralayın, düzenleyin, gizleyin.</span>
+          </div>
+          <div id="section-list"></div>
+          <div class="ui-form editor-add">
+            <label>Yeni bölüm<select id="new-section-kind"></select></label
+            ><button class="button secondary" id="add-section">
+              + Bölüm ekle
+            </button>
+          </div>
+          <button class="text-link danger" id="delete-page">
+            Bu sayfayı sil
+          </button>
+        </section>
+        <section
+          id="theme-panel"
+          role="tabpanel"
+          aria-labelledby="theme-tab"
+          hidden
+        >
+          <div class="ui-form">
+            <label
+              >Varsayılan görünüm<select id="theme-default">
+                <option value="light">Açık</option>
+                <option value="dark">Yumuşak koyu</option>
+                <option value="system">Cihaz tercihi</option>
+              </select></label
+            ><label
+              >İçerik genişliği (px)<input
+                id="theme-width"
+                type="number"
+                min="1000"
+                max="1600"
+                step="20" /></label
+            ><label
+              >Köşe yuvarlaklığı (px)<input
+                id="theme-radius"
+                type="number"
+                min="0"
+                max="16" /></label
+            ><label
+              >Temel yazı boyutu (px)<input
+                id="theme-font-size"
+                type="number"
+                min="15"
+                max="20"
+            /></label>
+          </div>
+          <div class="editor-section-heading"><h2>İçerik şablonları</h2></div>
+          <div id="template-fields" class="ui-form"></div>
+          <div id="palette-fields"></div>
+          <p class="field-help">
+            Metin ve buton renkleri kaydedilirken en az 4.5:1 kontrast
+            kontrolünden geçer.
+          </p>
+        </section>
+        <section
+          id="navigation-panel"
+          role="tabpanel"
+          aria-labelledby="navigation-tab"
+          hidden
+        >
+          <h2>Ana menü</h2>
+          <p class="field-help">
+            Sayfa veya kategori adresi girin. Yeni sayfa adresleri /sayfa/adres
+            biçimindedir.
+          </p>
+          <div id="navigation-list"></div>
+          <button class="button secondary" id="add-navigation">
+            + Bağlantı ekle
+          </button>
+        </section>
+        <details class="editor-tools">
+          <summary>Yedek ve gelişmiş işlemler</summary>
+          <div class="editor-row">
+            <button class="button secondary" id="export-design">
+              JSON indir</button
+            ><label class="button secondary"
+              >JSON yükle<input
+                type="file"
+                accept="application/json,.json"
+                id="import-design"
+                hidden
+            /></label>
+          </div>
+          <button class="text-link" id="restore-defaults">
+            Varsayılan tasarımı taslağa al
+          </button>
+        </details>
+      </aside>
+      <main class="editor-preview">
+        <div class="preview-toolbar">
+          <span>Önizleme · kaydedilmemiş taslak</span>
+          <div>
+            <button data-preview-width="100%" aria-pressed="true">
+              Masaüstü</button
+            ><button data-preview-width="390px" aria-pressed="false">
+              Mobil</button
+            ><button id="preview-theme" aria-pressed="false">Koyu tema</button>
+          </div>
+          <a id="open-page" href="/" target="_blank" rel="noopener"
+            >Sayfayı aç ↗</a
+          >
+        </div>
+        <div id="editor-feedback" role="status"></div>
+        <iframe
+          id="design-preview"
+          title="Sayfa tasarımı önizlemesi"
+          sandbox="allow-same-origin"
+          src="about:blank"
+        ></iframe>
+      </main>
+    </div>
+    <script src="/js/msi-design-editor.js?v=1" defer></script>
+  </body>
+</html>

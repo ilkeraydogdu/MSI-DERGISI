@@ -1,0 +1,649 @@
+{
+  "version": 1,
+  "theme": {
+    "light": {
+      "background": "#f5f4f1",
+      "surface": "#ffffff",
+      "subtle": "#edece8",
+      "text": "#242b35",
+      "muted": "#5b626c",
+      "border": "#dcdedc",
+      "accent": "#b51230"
+    },
+    "dark": {
+      "background": "#12161f",
+      "surface": "#1a202c",
+      "subtle": "#232b3a",
+      "text": "#f4f6fa",
+      "muted": "#b5bfd0",
+      "border": "#323d52",
+      "accent": "#bd193b"
+    },
+    "width": 1280,
+    "radius": 2,
+    "font_size": 16,
+    "default_mode": "light"
+  },
+  "navigation": [
+    {
+      "label": "Haberler",
+      "href": "/kategori/haberler"
+    },
+    {
+      "label": "Kapak Dosyaları",
+      "href": "/kategori/kapak-dosyasi"
+    },
+    {
+      "label": "Söyleşiler",
+      "href": "/kategori/soylesiler"
+    },
+    {
+      "label": "Özel Haberler",
+      "href": "/kategori/ozel-haberler"
+    },
+    {
+      "label": "Başyazılar",
+      "href": "/kategori/basyazilar"
+    },
+    {
+      "label": "Mesajlar",
+      "href": "/kategori/mesajlar"
+    },
+    {
+      "label": "Tanıtıcı Makaleler",
+      "href": "/kategori/tanitici-makaleler"
+    },
+    {
+      "label": "Analizler",
+      "href": "/kategori/makaleler-analizler"
+    },
+    {
+      "label": "Advertorials",
+      "href": "/kategori/advertorials"
+    },
+    {
+      "label": "Özel Dosya",
+      "href": "/kategori/ozel-dosya"
+    }
+  ],
+  "pages": [
+    {
+      "slug": "magazine",
+      "title": "Savunmanın aklı. Geleceğin doktrini.",
+      "description": "Savunma, havacılık ve uzay ekosisteminde stratejik istihbarat, mühendislik derinliği ve referans analizler.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "magazine_hero",
+          "title": "Savunmanın aklı.\nGeleceğin doktrini.",
+          "eyebrow": "MSI DERGİSİ · STRATEJİK REFERANS YAYINI",
+          "description": "Muharebe sahasını değiştiren teknolojileri, karar vericilerin vizyonunu ve mühendislik mimarisini birinci kaynaktan okuyun. Sıfır gürültü, mutlak derinlik.",
+          "link": "/e-dergi",
+          "link_label": "Dijital kütüphaneyi keşfet"
+        },
+        {
+          "kind": "articles",
+          "title": "Sayının kalbinden stratejik kapak dosyaları",
+          "eyebrow": "KAPAK DOSYALARI",
+          "source": "all",
+          "category": "kapak-dosyasi",
+          "limit": 3,
+          "layout": "feature",
+          "link": "/kategori/kapak-dosyasi",
+          "link_label": "Tüm kapak dosyaları"
+        },
+        {
+          "kind": "banner",
+          "title": "",
+          "category": "ad-strip-top"
+        },
+        {
+          "kind": "articles",
+          "title": "Karar vericiler ve sektör liderleriyle birinci elden vizyon",
+          "eyebrow": "SÖYLEŞİLER",
+          "source": "all",
+          "category": "soylesiler",
+          "limit": 6,
+          "layout": "grid",
+          "link": "/kategori/soylesiler",
+          "link_label": "Tüm söyleşiler"
+        },
+        {
+          "kind": "articles",
+          "title": "Saha analizleri, uluslararası fuarlar ve özel savunma dosyaları",
+          "eyebrow": "ÖZEL HABERLER",
+          "source": "all",
+          "category": "ozel-haberler",
+          "limit": 3,
+          "layout": "grid",
+          "link": "/kategori/ozel-haberler",
+          "link_label": "Tüm özel haberler"
+        },
+        {
+          "kind": "banner",
+          "title": "",
+          "category": "ad-strip-mid"
+        },
+        {
+          "kind": "articles",
+          "title": "Editoryal perspektif ve stratejik muhasebe",
+          "eyebrow": "BAŞYAZILAR",
+          "source": "all",
+          "category": "basyazilar",
+          "limit": 4,
+          "layout": "list",
+          "link": "/kategori/basyazilar",
+          "link_label": "Tüm başyazılar"
+        },
+        {
+          "kind": "articles",
+          "title": "Mühendislik kabiliyetleri, alt sistemler ve küresel çözümler",
+          "eyebrow": "ÖZEL SAYILAR · TANITICI MAKALELER",
+          "source": "all",
+          "category": "tanitici-makaleler",
+          "limit": 6,
+          "layout": "grid",
+          "link": "/kategori/tanitici-makaleler",
+          "link_label": "Tüm tanıtıcı makaleler"
+        },
+        {
+          "kind": "articles",
+          "title": "Bakanlık, tedarik makamı ve komuta kademesi mesajları",
+          "eyebrow": "MESAJLAR",
+          "source": "all",
+          "category": "mesajlar",
+          "limit": 3,
+          "layout": "grid",
+          "link": "/kategori/mesajlar",
+          "link_label": "Tüm mesajlar"
+        },
+        {
+          "kind": "banner",
+          "title": "",
+          "category": "ad-strip-bottom"
+        },
+        {
+          "kind": "articles",
+          "title": "Doktrin, harp tarihi ve geleceğin kuvvet yapısı",
+          "eyebrow": "MAKALELER / ANALİZLER",
+          "source": "all",
+          "category": "makaleler-analizler",
+          "limit": 3,
+          "layout": "feature",
+          "link": "/kategori/makaleler-analizler",
+          "link_label": "Tüm makale ve analizler"
+        },
+        {
+          "kind": "articles",
+          "title": "Savunma sanayii kurumsal vitrini ve teknoloji lansmanları",
+          "eyebrow": "ADVERTORIALS",
+          "source": "all",
+          "category": "advertorials",
+          "limit": 4,
+          "layout": "list",
+          "link": "/kategori/advertorials",
+          "link_label": "Tüm kurumsal tanıtımlar"
+        },
+        {
+          "kind": "issues",
+          "title": "2004'ten bugüne savunma ve havacılık hafızası",
+          "eyebrow": "MSI DİJİTAL KÜTÜPHANESİ",
+          "limit": 4,
+          "link": "/e-dergi",
+          "link_label": "Tüm arşivi incele"
+        },
+        {
+          "kind": "topics",
+          "title": "Uzmanlık alanınıza göre istihbarat akışı",
+          "eyebrow": "SSB TEKNOLOJİ TAKSONOMİSİ",
+          "limit": 14
+        },
+        {
+          "kind": "cta",
+          "title": "Stratejik bilgiye tam yetkiyle hükmedin.",
+          "description": "Özel kapak dosyaları, yüksek çözünürlüklü E-Dergi arşivi ve kurumsal analizlerle savunma ekosisteminin her zaman bir adım önünde olun.",
+          "link": "/abonelik-ve-satis",
+          "link_label": "Abonelik yetkilerini incele"
+        }
+      ]
+    },
+    {
+      "slug": "news",
+      "title": "Savunma gündeminin komuta merkezi.",
+      "description": "Saha gelişmeleri, tedarik programları, ihracat sözleşmeleri ve yeni nesil sistemler.",
+      "mode": "news",
+      "sections": [
+        {
+          "kind": "news_hero",
+          "title": "Kritik gelişmeler ve saha gündemi",
+          "eyebrow": "SAVUNMA HABER · CANLI AKIŞ",
+          "source": "news",
+          "category": "haberler",
+          "limit": 5
+        },
+        {
+          "kind": "banner",
+          "title": "",
+          "category": "ad-strip-top"
+        },
+        {
+          "kind": "articles",
+          "title": "Programlar, sözleşmeler ve teknolojik eşikler",
+          "eyebrow": "GÜNCEL İSTİHBARAT",
+          "source": "news",
+          "category": "haberler",
+          "offset": 5,
+          "limit": 9,
+          "layout": "grid",
+          "link": "/kategori/haberler",
+          "link_label": "Tüm haber akışı"
+        },
+        {
+          "kind": "articles",
+          "title": "Derinlikli saha ve etkinlik dosyaları",
+          "eyebrow": "ÖZEL HABERLER",
+          "source": "all",
+          "category": "ozel-haberler",
+          "limit": 3,
+          "layout": "grid",
+          "link": "/kategori/ozel-haberler",
+          "link_label": "Tüm özel haberler"
+        },
+        {
+          "kind": "banner",
+          "title": "",
+          "category": "ad-strip-mid"
+        },
+        {
+          "kind": "topics",
+          "title": "Gündemi teknoloji dikeyine göre filtreleyin",
+          "eyebrow": "STRATEJİK ALANLAR",
+          "limit": 14
+        },
+        {
+          "kind": "articles",
+          "title": "Stratejik radarda öne çıkanlar",
+          "eyebrow": " GÜNDEM ARŞİVİ",
+          "source": "news",
+          "category": "haberler",
+          "offset": 14,
+          "limit": 6,
+          "layout": "list",
+          "link": "/kategori/haberler?page=2",
+          "link_label": "Haber arşivine git"
+        },
+        {
+          "kind": "cta",
+          "title": "Manşetin ardındaki doktrini okuyun.",
+          "description": "Günlük haber akışının ötesine geçin; MSI Dergisi'nin derinlikli mühendislik ve strateji dosyalarını inceleyin.",
+          "link": "/#dergi",
+          "link_label": "Dergi moduna geç"
+        }
+      ]
+    },
+    {
+      "slug": "e-dergi",
+      "title": "MSI Dijital Kütüphanesi",
+      "description": "2004'ten bugüne Türk ve dünya savunma sanayisinin teknik hafızası. Sayıları canlı inceleyin, arşive hükmedin.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "issues",
+          "title": "Güncel ve geçmiş referans sayılar",
+          "eyebrow": "DİJİTAL KİOSK & ARŞİV",
+          "limit": 24
+        },
+        {
+          "kind": "cta",
+          "title": "Stratejik bilgiye tam yetkiyle hükmedin.",
+          "description": "Kamu (.gov.tr / .tsk.tr) personeline ücretsiz E-Dergi erişimi ve kurumsal kütüphane planlarını keşfedin.",
+          "link": "/abonelik-ve-satis",
+          "link_label": "Abonelik yetkilerini incele"
+        }
+      ]
+    },
+    {
+      "slug": "abonelik-ve-satis",
+      "title": "Stratejik bilgiye tam erişim sağlayın.",
+      "description": "Bireysel uzmanlık planları, kurumsal kütüphane yetkileri ve prestij referans yayınlarıyla karar alma süreçlerinizi güçlendirin.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "plans",
+          "title": "Abonelik ve erişim planları",
+          "eyebrow": "MSI OKUYUCU KULÜBÜ"
+        },
+        {
+          "kind": "products",
+          "title": "Referans kitaplar, almanaklar ve özel yayınlar",
+          "eyebrow": "KURUMSAL KÜTÜPHANE SEÇKİSİ"
+        },
+        {
+          "kind": "cta",
+          "title": "Çok kullanıcılı kurumsal lisans mı arıyorsunuz?",
+          "description": "Bakanlık, kuvvet komutanlığı, üniversite ve savunma sanayii kuruluşlarına özel toplu erişim modelleri için ekibimizle görüşün.",
+          "link": "/kurumsal/iletisim",
+          "link_label": "Kurumsal teklif alın"
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-kunye",
+      "title": "Resmî Künye ve İnternet Haber Sitesi İletişim Beyanı",
+      "description": "5187 sayılı Basın Kanunu (7418 s. Kanun değişikliği RG: 18.10.2022/31987) ve 5651 sayılı Kanun m.3 uyarınca UMSA Prodüksiyon • MSI Dergisi (ISSN 1306-0309) & MSI TDR Resmî Künyesi.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "5187 & 7418 SAYILI KANUN ZORUNLU KÜNYE BİLGİLERİ",
+          "title": "İmtiyaz Sahibi, Tüzel Kişilik ve Yayın Yönetimi",
+          "description": "Yayın Adı: MSI Dergisi — Savunma, Havacılık ve Güvenlik Teknolojileri Dergisi & MSI Turkish Defence Review (MSI TDR) / savunmahaber.com\nISSN: 1306-0309\nYayın Türü: Yaygın Süreli Yayın (Aylık Basılı Dergi ve Sürekli Güncellenen İnternet Haber Sitesi)\n\nİmtiyaz Sahibi Tüzel Kişilik Unvanı: UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.\nİmtiyaz Sahibi Tüzel Kişilik Temsilcisi ve Genel Yayın Yönetmeni: Ümit BAYRAKTAR — ubayraktar@savunmahaber.com\nHaber Editörü ve Genel Koordinatör: Naile BAYRAKTAR — n.bayraktar@savunmahaber.com\nSorumlu Yazı İşleri Müdürü: Dr. K. Burak CODUR — b.codur@savunmahaber.com\n\nİçerik Ekibi ve Haber Merkezi:\n• Haber Merkezi Ortak E-Posta: haber.ekip@savunmahaber.com • news@savunmahaber.com\n• Emre ÜRE — e.ure@savunmahaber.com\n• Sena ŞAHAN — s.sahan@savunmahaber.com\n• Ahmet Sezai KARASAZOĞLU — a.karasazoglu@savunmahaber.com\n\nİş Geliştirme ve Kurumsal Projeler:\n• Proje ve İş Geliştirme Koordinatörü: Özay ÖYMEZ — o.oymez@savunmahaber.com\n• Kurumsal İlişkiler ve Abonelik: Refika TURGUT — r.turgut@savunmahaber.com"
+        },
+        {
+          "kind": "text",
+          "eyebrow": "AKADEMİK VE STRATEJİK DANIŞMA KURULU",
+          "title": "Yayın Kurulu, Danışmanlar ve Çözüm Ortakları",
+          "description": "Yayın Kurulu:\nProf. Dr. Süleyman TOLUN, Prof. Dr. Adil YÜKSELEN, Prof. Dr. Okan ADDEMİR, Prof. Dr. Zahit MECİTOĞLU, Prof. Dr. Mikdat KADIOĞLU, Prof. Dr. Gonca COŞKUN, Prof. Dr. Yıldırım SALDIRANER, Doç. Dr. Burak ÇINAR, Prof. Dr. Ş. Hakan ATAPEK\n\nDanışmanlar:\n• Askerî Danışman: Tuğgeneral (E) Hüsamettin ESEN\n• Uluslararası İlişkiler Danışmanı: Dr. Savaş BİÇER\n\nGrafik Tasarım ve Kurumsal İletişim Ajansı:\n• KasabaWorks — info@kasabaworks.com\n\nHavacılık ve Savunma Fotoğraf Ajansı:\n• Remove Before Photos (RBF) — Onur KURÇ & Tayfun YAŞAR"
+        },
+        {
+          "kind": "text",
+          "eyebrow": "5651 SAYILI KANUN M.3 & BASIN KANUNU M.7 BİLDİRİMİ",
+          "title": "Yönetim Yeri, Baskı Tesisi ve Yer Sağlayıcı Bilgileri",
+          "description": "Yönetim Yeri ve Çalışma Adresi:\nUMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.\nYaşamkent Mah. 3147 Sok. No:10, 06810 Çankaya / Ankara — TÜRKİYE\nTelefon: +90 312 225 41 73 • Faks: +90 312 225 41 74\nTicari İletişim E-Posta Adresi: info@savunmahaber.com • info@msidergisi.com\nDüzeltme, Cevap ve Hukuki Bildirim E-Posta: info@savunmahaber.com\n\nBasılı Yayın Matbaa / Teknik Hizmetler:\nEverest Basım Reklam ve Matbaa Hiz. San. Tic. Ltd. Şti.\nMaltepe Mah. Litros Yolu Sok. No: 2-4, 2. Matbaacılar Sitesi 5. Kat F Blok No: 3 NF 7, Zeytinburnu / İstanbul • Tel: +90 212 434 51 34\n\n5651 Sayılı Kanun Uyarınca Yer Sağlayıcı Bilgileri:\nUnvan: UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti. Dijital Yayın Altyapısı (Avrupa / Türkiye Bulut Veri Merkezi Altyapısı)\nİletişim: Yaşamkent Mah. 3147 Sok. No:10 Çankaya / Ankara • Tel: +90 312 225 41 73 • E-Posta: info@savunmahaber.com\n\nYasal Uyarı: Bu internet haber sitesinde yayımlanan haber, makale, söyleşi, fotoğraf ve E-Dergi içeriklerinin tamamı 5846 sayılı Fikir ve Sanat Eserleri Kanunu kapsamında korunmaktadır. İzin alınmaksızın ve kaynak gösterilmeksizin iktibas edilemez."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-hakkimizda",
+      "title": "Hakkımızda — Biz Kimiz?",
+      "description": "2004'ten bugüne aylık Türkçe ve İngilizce yayımlanan Savunma, Havacılık ve Güvenlik Teknolojileri referans yayın grubu.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "KURUMSAL KİMLİK · 2004'TEN BUGÜNE",
+          "title": "Türk savunma ve havacılık sanayisinin küresel referans sesi",
+          "description": "Türk savunma ve havacılık sektörünü, yurt içinde ve yurt dışında etkin bir şekilde tanıtacak referans yayınları okuyucularımızla buluşturmak hedefiyle 2004 yılında attığımız ilk adımla başlayan yolculuğumuz, yeni yayınlar ve yeni yapılanmalarla gelişerek ve güçlenerek bugünlere ulaştı.\n\nDolu dolu geçen 22 yılın ve okuyucusu ile buluşan 400'ü aşkın dergi sayısının ardından, yolumuza emin ve güçlü adımlarla devam ediyoruz.\n\n• 2004 — MSI Dergisi (ISSN 1306-0309) yayın hayatına başladı.\n• 2014 — İngilizce uluslararası edisyonumuz MSI Turkish Defence Review (MSI TDR) yayına başladı.\n• 2015 — Türkiye'de görev yapan yabancı ülke askerî ataşelerinin resmî yayını AMAC Magazine yayın ailesine katıldı.\n• 2019 — Savunma ve havacılık iletişim ajansımız KasabaWorks kuruldu.\n\nSektördeki gelişmelere dair birinci kaynaklardan elde ettiğimiz bilgilerle oluşturduğumuz içerikleri; basılı dergilerimiz, internet haber sitemiz (msidergisi.com / savunmahaber.com), dijital E-Dergi kütüphanemiz ve sosyal medya kanallarımız aracılığıyla karar vericilere, tedarik makamlarına, silahlı kuvvetler personeline, akademisyenlere ve sanayi paydaşlarına ulaştırıyoruz."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-yolculugumuz",
+      "title": "Yolculuğumuz (2004'ten Bugüne Tarihsel Gelişim)",
+      "description": "Türk savunma sanayisinin öncü referans yayını olarak 2004'ten 2026'ya uzanan kilometre taşlarımız.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "KİLOMETRE TAŞLARI (2004 – 2026)",
+          "title": "Yirmi iki yıllık stratejik yayıncılık hafızası",
+          "description": "• 2004 — MSI Dergisi'nin 1. sayısının yayımlanması\n• 2006 — İlk İngilizce Özel Sayı: DSA Malezya Fuarı\n• 2013 — MSI Dergisi'nin 100. sayısının yayımlanması\n• 2014 — MSI Turkish Defence Review (MSI TDR) 1. sayısının yayımlanması\n• 2015 — AMAC Magazine'in 1. sayısının yayımlanması\n• 2019 — KasabaWorks Reklam ve Kurumsal İletişim Ajansı'nın kuruluşu\n• 2020 — MSI Dergisi'nin 200. sayısının yayımlanması\n• 2021 — MSI TDR'nin 100. sayısının yayımlanması\n• 2022–2026 — MSI Dergisi 286. sayı ve MSI TDR 153. sayı eşiğinin aşılması, yeni nesil dijital kütüphane ve çift dilli istihbarat mimarisine geçiş\n\nMSI Dergisi: Sektöre ilişkin güncel gelişmeleri her ay Türkçe olarak okurlarına sunan MSI Dergisi; son kullanıcı, tedarik makamı, üniversiteler, araştırma merkezleri, kümelenmeler, ana yükleniciler ve alt yükleniciler arasında stratejik bilgi köprüsü kurmaktadır.\n\nMSI TDR (Turkish Defence Review): 2014 yılından bu yana sektörün ihracat faaliyetlerini destekleyecek şekilde uluslararası karar vericilere İngilizce olarak ulaşan tek aylık Türk savunma ve havacılık dergisidir."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-cozum-ortaklarimiz",
+      "title": "Çözüm Ortaklarımız: AMAC Magazine, KasabaWorks & Remove Before Photos",
+      "description": "UMSA Prodüksiyon stratejik iletişim, kurumsal tasarım, havacılık fotoğrafçılığı ve savunma diplomasisi ekosistemi.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "STRATEJİK İLETİŞİM VE DİPLOMASİ EKOSİSTEMİ",
+          "title": "AMAC Magazine, KasabaWorks ve Remove Before Photos",
+          "description": "AMAC Magazine (Savunma Diplomasisi • 2015'ten Beri):\nAnkara Askerî Ataşeler Birliği (Ankara Military Attaché Corps — AMAC) üyesi askerî ataşeler ve temsil ettikleri ülkelerin diplomatik misyonları ile Türk savunma ve havacılık sanayisi arasında köprü vazifesi gören AMAC Magazine, İngilizce olarak yılda 6 sayı yayımlanmaktadır.\n\nKasabaWorks (Reklam ve Kurumsal İletişim Ajansı • 2019'dan Beri):\nTürk savunma ve havacılık sektörünün tanıtım alanındaki özel ihtiyaçlarına cevap verebilmek amacıyla kurulan KasabaWorks, 'Dış Kaynak Kurumsal İletişim Birimi' iş modeliyle kurumsal kimlik, uluslararası fuar iletişimi ve prestij yayın tasarımları sunmaktadır. İletişim: info@kasabaworks.com\n\nRemove Before Photos — RBF (Havacılık ve Savunma Fotoğraf Ajansı):\nOnur KURÇ ve Tayfun YAŞAR yönetimindeki Remove Before Photos ekibi; hava-hava muharebe fotoğrafçılığı, saha tatbikat çekimleri ve yüksek çözünürlüklü telifli savunma fotoğraf arşivi alanında resmî çözüm ortağımızdır."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-amac-magazine",
+      "title": "AMAC Magazine — Savunma Diplomasisi Prestij Yayını",
+      "description": "Ankara Askerî Ataşeler Birliği (AMAC) ile Türk savunma ve havacılık sanayisi arasındaki uluslararası referans yayını.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "SAVUNMA DİPLOMASİSİ · YILDA 6 SAYI (İNGİLİZCE)",
+          "title": "AMAC Magazine",
+          "description": "Ankara Askerî Ataşeler Birliği (Ankara Military Attaché Corps — AMAC) üyesi yabancı ülke askerî ataşeleri, büyükelçilik savunma misyonları ve uluslararası tedarik heyetleri ile Türk savunma ve havacılık sanayisi arasında doğrudan iletişim köprüsü kuran AMAC Magazine, UMSA Prodüksiyon tarafından İngilizce olarak yılda 6 sayı yayımlanmaktadır.\n\n44'ü aşkın sayısıyla Türk savunma sanayisinin ihracat ve uluslararası iş birliği vizyonunu diplomatik misyonlara birinci elden aktaran yayın hakkında kurumsal iş birliği talepleriniz için info@savunmahaber.com adresinden ekibimize ulaşabilirsiniz."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-kasabaworks",
+      "title": "KasabaWorks — Savunma ve Havacılık İletişim Ajansı",
+      "description": "Savunma, havacılık ve ileri teknoloji kuruluşları için dış kaynak kurumsal iletişim, tasarım ve fuar yönetimi ajansı.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "KURUMSAL İLETİŞİM & TASARIM · 2019'DAN BERİ",
+          "title": "KasabaWorks Reklam ve İletişim Ajansı",
+          "description": "Türk savunma ve havacılık sektörünün uzmanlık gerektiren tanıtım ihtiyaçlarına yanıt vermek amacıyla 2019 yılında kurulan KasabaWorks, MSI Dergisi ekibinin 20+ yıllık sektörel terminoloji ve mühendislik birikimi üzerine inşa edilmiştir.\n\n'Dış Kaynak Kurumsal İletişim Birimi' modeliyle savunma sanayii ana ve alt yüklenicilerine; kurumsal kimlik, teknik ürün katalogları, prestij kitapları, uluslararası savunma fuarları (IDEF, SAHA EXPO, Eurosatory, MSPO, DIMDEX, DSA) iletişim yönetimi ve dijital medya prodüksiyonu hizmetleri sunmaktadır.\n\nİletişim: info@kasabaworks.com • Tel: +90 312 225 41 73"
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-iletisim",
+      "title": "İletişim, Merkez Ofis ve Hukuki Bildirim Kanalları",
+      "description": "UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti. • Yaşamkent Mah. 3147 Sok. No:10 Çankaya / Ankara • +90 312 225 41 73",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "MERKEZ OFİS & EDİTORYAL İLETİŞİM",
+          "title": "Bize Ulaşın",
+          "description": "Tüzel Kişilik Unvanı: UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.\nYönetim ve Çalışma Adresi: Yaşamkent Mah. 3147 Sok. No:10, 06810 Çankaya / Ankara — TÜRKİYE\nTelefon: +90 312 225 41 73\nFaks: +90 312 225 41 74\n\nBirim E-Posta Adresleri:\n• Kurumsal İletişim ve Okuyucu İlişkileri: info@savunmahaber.com • info@msidergisi.com\n• Haber Merkezi ve Basın Bültenleri: news@savunmahaber.com • haber.ekip@savunmahaber.com\n• Abonelik, Kurumsal Lisans ve Satış: r.turgut@savunmahaber.com\n• Reklam, Sponsorluk ve İş Geliştirme: o.oymez@savunmahaber.com\n• KVKK İlgili Kişi Başvuruları ve Hukuki Bildirimler: info@savunmahaber.com\n\nResmî Sosyal Medya Hesaplarımız:\n• LinkedIn: linkedin.com/company/msi-dergisi\n• X (Twitter): x.com/MSI_Dergisi\n• Instagram: instagram.com/msidergisi\n• Facebook: facebook.com/MSI.Dergisi\n• YouTube: youtube.com/c/msidergisi"
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-kvkk",
+      "title": "6698 Sayılı KVKK Kapsamında Kişisel Verilerin İşlenmesine İlişkin Aydınlatma Metni",
+      "description": "6698 sayılı Kişisel Verilerin Korunması Kanunu m.10, 7499 sayılı Kanun (RG: 12.03.2024/32487) m.6-m.9 değişiklikleri ve RG: 30356 Aydınlatma Tebliği uyarınca resmî aydınlatma metni.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "6698 SAYILI KANUN M.10 & RG: 30356 TEBLİĞİ",
+          "title": "1. Veri Sorumlusunun Kimliği ve Kapsam",
+          "description": "İşbu Aydınlatma Metni, 6698 sayılı Kişisel Verilerin Korunması Kanunu ('KVKK') m.10, 10 Mart 2018 tarihli ve 30356 sayılı Resmî Gazete'de yayımlanan Aydınlatma Yükümlülüğünün Yerine Getirilmesinde Uyulacak Usul ve Esaslar Hakkında Tebliğ ile 12 Mart 2024 tarihli ve 32487 sayılı Resmî Gazete'de yayımlanan 7499 sayılı Kanun değişiklikleri uyarınca, Veri Sorumlusu sıfatıyla UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti. ('MSI Dergisi') tarafından hazırlanmıştır.\n\n• Veri Sorumlusu: UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.\n• Adres: Yaşamkent Mah. 3147 Sok. No:10, 06810 Çankaya / Ankara — TÜRKİYE\n• Telefon: +90 312 225 41 73 • Faks: +90 312 225 41 74\n• E-Posta: info@savunmahaber.com\n• Web Platformları: msidergisi.com ve savunmahaber.com"
+        },
+        {
+          "kind": "text",
+          "eyebrow": "KİŞİSEL VERİ KATEGORİLERİ, AMAÇLAR VE HUKUKİ SEBEPLER",
+          "title": "2. İşlenen Kişisel Veriler, İşleme Amaçları ve KVKK m.5 Hukuki Sebepleri",
+          "description": "Platformumuz üzerinden toplanan kişisel verileriniz, Aydınlatma Tebliği m.5/1-f hükmüne uygun olarak açık rıza şartından bağımsız biçimde aşağıdaki amaç ve hukuki sebeplerle işlenmektedir:\n\nA) Kimlik ve Kurumsal Üyelik Verileri (Ad-soyad, görev/ünvan, kurum adı, resmi kurum kategorisi):\n• Amaç: Okuyucu hesabının oluşturulması, kamu (.gov.tr / .tsk.tr / .edu.tr) e-posta uzantılı kullanıcılara ücretsiz dijital E-Dergi yetkisinin tanımlanması ve kurumsal doğrulama süreçlerinin yürütülmesi.\n• Hukuki Sebep: KVKK m.5/2-(c) 'Bir sözleşmenin kurulması veya ifasıyla doğrudan doğruya ilgili olması'.\n\nB) İletişim ve Finans/Abonelik Verileri (Kurumsal e-posta, telefon, teslimat/fatura adresi, sipariş ve proforma/fatura kayıtları):\n• Amaç: Basılı dergi, dijital E-Dergi ve tekil yayın satış/abonelik işlemlerinin ifası, 213 sayılı Vergi Usul Kanunu ve 6502 sayılı TKHK kapsamındaki faturalandırma ve abonelik yenileme bildirimlerinin yapılması.\n• Hukuki Sebep: KVKK m.5/2-(c) sözleşmenin ifası ve m.5/2-(ç) 'Veri sorumlusunun hukuki yükümlülüğünü yerine getirebilmesi için zorunlu olması'.\n\nC) İşlem Güvenliği ve Siber Güvenlik Kayıtları (IP adresi, erişim zaman damgası, oturum doğrulama özeti, KVKK aydınlatma/onay zaman damgası, E-Dergi PDF DRM filigran kodu, WAF güvenlik denetim logları):\n• Amaç: 5651 sayılı Kanun kapsamındaki trafik kayıt yükümlülüğünün yerine getirilmesi, yetkisiz erişim/SQLi/XSS saldırılarının engellenmesi ve 5846 sayılı FSEK kapsamında dijital yayın telif güvenliğinin sağlanması.\n• Hukuki Sebep: KVKK m.5/2-(a) 'Kanunlarda açıkça öngörülmesi' ve m.5/2-(f) 'İlgili kişinin temel hak ve özgürlüklerine zarar vermemek kaydıyla veri sorumlusunun meşru menfaati'.\n\nD) İsteğe Bağlı Ticari Elektronik İleti ve Analitik/Pazarlama Verileri (E-bülten tercihi, SSB teknoloji ilgi alanı etiketleri, çerez onay tercihleri):\n• Amaç: Yeni sayı duyuruları, özel savunma dosyaları bülten gönderimi ve okuma deneyimi analitiği.\n• Hukuki Sebep: KVKK m.5/1 kapsamında özgür iradeyle verilen ve her zaman geri alınabilen 'Açık Rıza' (ve 6563 sayılı ETK kapsamında ticari elektronik ileti onayı)."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "7499 SAYILI KANUN (RG: 12.03.2024/32487) YENİ AKTARIM REJİMİ",
+          "title": "3. Kişisel Verilerin Yurt İçi ve Yurt Dışı Aktarımı (KVKK m.8 ve Değişik m.9)",
+          "description": "3.1. Yurt İçine Aktarım (KVKK m.8):\nKişisel verileriniz; yalnızca yukarıda belirtilen amaçların gerçekleştirilmesiyle sınırlı olarak ödeme kuruluşu iş ortağımıza (PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş. — BDDK lisanslı ve PCI-DSS uyumlu), basılı yayın teslimatlarında anlaşmalı kargo/posta kuruluşlarına, mali müşavirlik birimlerine ve kanunen yetkili kamu kurumları ile adli mercilere KVKK m.8 çerçevesinde aktarılabilmektedir.\n\n3.2. Yurt Dışına Aktarım (7499 Sayılı Kanun ile Değişik KVKK m.9 ve RG: 10.07.2024 / 32598 Yönetmeliği):\n1 Haziran 2024 tarihinde yürürlüğe giren değişik KVKK m.9 ve Kişisel Verilerin Yurt Dışına Aktarılmasına İlişkin Usul ve Esaslar Hakkında Yönetmelik uyarınca kişisel verileriniz yurt dışına ancak;\n(i) Kişisel Verileri Koruma Kurulu ('Kurul') tarafından hakkında yeterlilik kararı verilen ülke veya uluslararası kuruluşlara,\n(ii) Yeterlilik kararı bulunmaması hâlinde KVKK m.5 ve m.6'daki şartlardan birinin varlığı ve ilgili kişinin aktarımın yapılacağı ülkede de haklarını kullanma ve etkili kanun yollarına başvurma imkânının bulunması kaydıyla Kurul tarafından ilan edilen Standart Sözleşme'nin imzalanması ve 5 iş günü içinde Kurum'a bildirilmesi dâhil uygun güvencelerden birinin sağlanması durumunda veya\n(iii) KVKK m.9/6 kapsamındaki arızi (istisnai) hâllerden birinin varlığı hâlinde aktarılabilir."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "KVKK MADDE 11 & VERİ SORUMLUSUNA BAŞVURU USULÜ",
+          "title": "4. Toplanma Yöntemi ve İlgili Kişinin Hakları (KVKK m.11)",
+          "description": "Kişisel verileriniz; msidergisi.com ve savunmahaber.com üzerindeki üyelik, kurumsal doğrulama, abonelik/sipariş formları ve teknik güvenlik katmanları aracılığıyla elektronik ortamda otomatik veya kısmen otomatik yöntemlerle toplanmaktadır.\n\nKVKK m.11 uyarınca Veri Sorumlusuna başvurarak;\n• Kişisel verilerinizin işlenip işlenmediğini öğrenme ve işlenmişse bilgi talep etme,\n• İşlenme amacını ve bunların amacına uygun kullanılıp kullanılmadığını öğrenme,\n• Yurt içinde veya yurt dışında kişisel verilerin aktarıldığı üçüncü kişileri bilme,\n• Eksik veya yanlış işlenmiş olması hâlinde düzeltilmesini isteme,\n• KVKK m.7 şartları çerçevesinde silinmesini veya yok edilmesini isteme ve bu işlemlerin aktarıldığı üçüncü kişilere bildirilmesini talep etme,\n• Münhasıran otomatik sistemler vasıtasıyla analiz edilmesi suretiyle aleyhinize bir sonucun ortaya çıkmasına itiraz etme,\n• Kanuna aykırı olarak işlenmesi sebebiyle zarara uğramanız hâlinde zararın giderilmesini talep etme haklarına sahipsiniz.\n\nHaklarınıza ilişkin taleplerinizi '/kurumsal/kvkk-basvuru-formu' sayfasında yer alan usullere uygun olarak yazılı şekilde 'Yaşamkent Mah. 3147 Sok. No:10 Çankaya / Ankara' adresine veya sistemimizde kayıtlı e-posta adresiniz üzerinden 'info@savunmahaber.com' adresine iletebilirsiniz. Başvurularınız niteliğine göre en geç 30 (otuz) gün içinde ücretsiz olarak sonuçlandırılır."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-kvkk-basvuru-formu",
+      "title": "KVKK İlgili Kişi Başvuru Usul ve Esasları Rehberi",
+      "description": "10.03.2018 tarihli ve 30356 sayılı Resmî Gazete'de yayımlanan Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ m.5 uyarınca resmi başvuru kılavuzu.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "RG: 10.03.2018 / 30356 TEBLİĞ M.4 VE M.5",
+          "title": "Başvuru Kanalları ve Zorunlu Başvuru Unsurları",
+          "description": "6698 sayılı KVKK m.13 ve Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ m.5 uyarınca ilgili kişiler, KVKK m.11 kapsamındaki taleplerini Türkçe olarak aşağıdaki kanallardan biriyle UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.'ye iletebilir:\n\n1. Yazılı ve Islak İmzalı Başvuru: 'Yaşamkent Mah. 3147 Sok. No:10, 06810 Çankaya / Ankara' adresine kimlik teyitli elden teslim veya noter kanalıyla ('KVKK Bilgi Talebi' notuyla).\n2. Kayıtlı Elektronik Posta (KEP) / Güvenli Elektronik İmza / Mobil İmza: Güvenli elektronik imza veya mobil imza ile imzalanmış dilekçenin kurumsal e-posta kanallarımıza iletilmesi.\n3. Sistemde Kayıtlı E-Posta Adresi Üzerinden Başvuru: Okuyucu hesabınızda daha önce doğrulanmış ve sistemimizde kayıtlı bulunan e-posta adresinizden 'info@savunmahaber.com' adresine gönderilecek e-posta ile.\n\nTebliğ m.5/2 Uyarınca Başvuruda Bulunması Zorunlu Bilgiler:\n• Ad, soyad ve başvuru yazılı ise imza,\n• Türkiye Cumhuriyeti vatandaşları için T.C. kimlik numarası; yabancılar için uyruğu, pasaport numarası veya varsa kimlik numarası,\n• Tebligata esas yerleşim yeri veya iş yeri adresi,\n• Varsa bildirime esas elektronik posta adresi, telefon ve faks numarası,\n• Talep konusu ve konuya ilişkin bilgi/belgeler.\n\nYanıt Süresi ve Şikâyet Hakkı (KVKK m.13–14):\nUsulüne uygun başvurular en geç 30 gün içinde ücretsiz sonuçlandırılır; işlemin ayrıca bir maliyet gerektirmesi hâlinde Kişisel Verileri Koruma Kurulunca belirlenen tarifedeki ücret alınabilir. Başvurunun reddedilmesi, verilen cevabın yetersiz bulunması veya süresinde başvuruya cevap verilmemesi hâllerinde; cevabı öğrendiğiniz tarihten itibaren 30 ve her hâlde başvuru tarihinden itibaren 60 gün içinde Kişisel Verileri Koruma Kuruluna şikâyette bulunma hakkınız saklıdır."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-gizlilik-politikasi",
+      "title": "Gizlilik, Veri Güvenliği ve Kişisel Veri Saklama-İmha Politikası",
+      "description": "6698 sayılı KVKK m.12, RG: 30224 Silme-Yok Etme-Anonim Hale Getirme Yönetmeliği ve 5651 sayılı Kanun kapsamında veri güvenliği ve saklama süreleri.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "KVKK MADDE 12 TEKNİK VE İDARİ TEDBİRLER",
+          "title": "1. Siber Güvenlik ve Veri Koruma Mimarisi",
+          "description": "UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti. ('MSI Dergisi'), KVKK m.12 uyarınca kişisel verilerin hukuka aykırı olarak işlenmesini ve erişilmesini önlemek, muhafazasını sağlamak amacıyla aşağıdaki gerçek teknik ve idari güvenlik tedbirlerini uygulamaktadır:\n\n• Kriptografik Parola Güvenliği: Kullanıcı parolaları açık metin olarak asla saklanmaz; endüstri standardı bellek-sert Argon2id algoritması ve kriptografik tuzlama (salting) ile özetlenerek muhafaza edilir.\n• Güvenli Oturum Yönetimi: Oturum doğrulaması tarayıcı JavaScript kodunun erişimine kapalı (HttpOnly), SameSite=Lax ve HTTPS üzerinde Secure bayraklı, HMAC-SHA256 imzalı oturum çerezi ('msi_session') ile yürütülür; oturum anahtarları localStorage üzerinde tutulmaz.\n• Aktarım ve Ağ Güvenliği: Tüm veri trafiği TLS 1.2/1.3 şifrelemesi, katı Content-Security-Policy (CSP), X-Frame-Options: SAMEORIGIN ve merkezi Rust Web Uygulama Güvenlik Duvarı (WAF — SQL Injection, XSS, Path Traversal ve hız sınırlama denetimi) ile korunmaktadır.\n• Ödeme Güvenliği: Kredi/banka kartı verileri MSI Dergisi sunucularında işlenmez ve saklanmaz; doğrudan BDDK lisanslı ve PCI-DSS Seviye 1 sertifikalı ödeme kuruluşu PayTR güvenli iFrame altyapısı üzerinden gerçekleştirilir."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "RG: 28.10.2017 / 30224 YÖNETMELİĞİ UYUMU",
+          "title": "2. Yasal Veri Saklama Süreleri ve Periyodik İmha Esasları",
+          "description": "İlgili mevzuatta öngörülen veya işlendikleri amaç için gerekli olan süre kadar muhafaza edilen kişisel veriler, sürenin bitimini takip eden ilk periyodik imha döneminde (6 aylık periyotlarla) silinir, yok edilir veya anonim hâle getirilir:\n\n• Abonelik, Sipariş, Proforma ve Fatura Kayıtları: 213 sayılı Vergi Usul Kanunu m.253 uyarınca 5 yıl; 6102 sayılı Türk Ticaret Kanunu m.82 uyarınca 10 yıl.\n• Mesafeli Satış ve Tüketici İşlem Kayıtları: 6502 sayılı TKHK ve Mesafeli Sözleşmeler Yönetmeliği m.20 uyarınca 3 yıl.\n• Ticari Elektronik İleti Onay ve Ret Kayıtları: 6563 sayılı ETK ve ilgili Yönetmelik uyarınca onayın geri alındığı/sona erdiği tarihten itibaren 3 yıl.\n• İnternet Trafik ve Siber Güvenlik Logları: 5651 sayılı Kanun uyarınca 2 yıl.\n• Üyelik ve Kurumsal Doğrulama Kayıtları: Üyelik ilişkisi devam ettiği sürece ve sona ermesinden itibaren genel zamanaşımı (6098 sayılı TBK m.146 uyarınca 10 yıl) boyunca hukuki uyuşmazlıkların ispatı amacıyla sınırlı erişimle saklanır."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-cerez-politikasi",
+      "title": "Çerez (Cookie) ve Yerel Depolama Aydınlatma Politikası",
+      "description": "Kişisel Verileri Koruma Kurumu 'Çerez Uygulamaları Hakkında Rehber' ilkelerine tam uyumlu gerçek çerez ve tarayıcı depolama envanteri.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "KVKK KURUMU ÇEREZ UYGULAMALARI REHBERİ UYUMU",
+          "title": "1. Çerez Türleri, Hukuki Sebepler ve Gerçek Çerez Envanteri",
+          "description": "msidergisi.com ve savunmahaber.com dijital platformlarında, Kişisel Verileri Koruma Kurumu tarafından yayımlanan 'Çerez Uygulamaları Hakkında Rehber' uyarınca 'kesinlikle gerekli (zorunlu) çerezler' dışındaki analitik ve sponsorluk ölçümleme teknolojileri varsayılan olarak kapalı tutulmakta (opt-in) ve yalnızca açık rızanız hâlinde etkinleştirilmektedir.\n\n2.1. Kesinlikle Gerekli (Zorunlu) Çerezler — KVKK m.5/2-(c) ve (f) (Açık Rıza Gerektirmez):\n• msi_session (Birinci Taraf HTTP Çerezi — HttpOnly, SameSite=Lax, Secure): Kullanıcı oturumunun doğrulanması, abone/kamu yetkilerinin korunması ve güvenli yönetim erişimi için kullanılır. Saklama süresi: 24 saat (veya oturum kapatılana kadar).\n\n2.2. İşlevsel ve Tercih Kayıtları — Kullanıcı Talebiyle KVKK m.5/2-(f):\n• msi_lang (Birinci Taraf Çerez): Kullanıcının açıkça seçtiği yayın dilini (tr / en) hatırlar. Süre: 1 yıl.\n• msi_theme (Tarayıcı localStorage): Açık / koyu okuma teması tercihini cihazda saklar.\n• msi_cookie_consent (Tarayıcı localStorage): Çerez yönetim panelindeki onay/ret tercihlerinizi ve zaman damgasını saklar. Süre: 12 ay.\n• msi_read_notifications & msi_dismissed_announcement (Tarayıcı localStorage): Bildirim ve duyuru çubuğu okundu bilgisini yalnızca cihazınızda tutar.\n\n2.3. Performans ve Okuma Analitiği — KVKK m.5/1 Açık Rıza (İsteğe Bağlı / Opt-In):\n• msi_session_id & Birinci Taraf Okuma Telemetrisi: Üçüncü taraf reklam ağlarına veri aktarmaksızın, makale okuma süresi ve kaydırma derinliği istatistiklerini birinci taraf sunucumuzda anonim oturum koduyla ölçer. Yalnızca 'Analitik' izni verildiğinde çalışır.\n\n2.4. Kurumsal Sponsorluk ve Reklam Ölçümleme — KVKK m.5/1 Açık Rıza (İsteğe Bağlı / Opt-In):\n• Birinci Taraf Sponsorluk Gösterim/Tıklama Sayacı: Sayfa içi savunma sanayii kurumsal vitrin alanlarının gösterim ve tıklama performansını ölçer. Yalnızca 'Sponsorluk Ölçümü' izni verildiğinde çalışır."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "TERCİH YÖNETİMİ VE TARAYICI AYARLARI",
+          "title": "2. Çerez Tercihlerini Değiştirme ve Geri Alma Hakkı",
+          "description": "Sayfanın alt bilgi (footer) alanında yer alan 'Çerez Tercihleri' bağlantısına dilediğiniz anda tıklayarak zorunlu olmayan çerezlere verdiğiniz açık rızayı geri alabilir veya tercihlerinizi güncelleyebilirsiniz.\n\nAyrıca tarayıcınızın ayarları üzerinden çerezleri her zaman silebilir veya engelleyebilirsiniz:\n• Google Chrome: Ayarlar > Gizlilik ve Güvenlik > Üçüncü Taraf Çerezleri / Site Verileri\n• Mozilla Firefox: Ayarlar > Gizlilik ve Güvenlik > Çerezler ve Site Verileri\n• Apple Safari: Ayarlar / Tercihler > Gizlilik\n• Microsoft Edge: Ayarlar > Çerezler ve Site İzinleri"
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-mesafeli-satis-sozlesmesi",
+      "title": "Ön Bilgilendirme Formu ve Mesafeli Satış / Abonelik Sözleşmesi Koşulları",
+      "description": "6502 sayılı Tüketicinin Korunması Hakkında Kanun (7529 s. Kanun değişiklikleri), RG: 29188 Mesafeli Sözleşmeler Yönetmeliği ve RG: 29246 Abonelik Sözleşmeleri Yönetmeliği hükümleri.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "6502 SAYILI TKHK M.48 & M.52 ÖN BİLGİLENDİRME",
+          "title": "1. Satıcı / Sağlayıcı Bilgileri ve Sözleşmenin Konusu",
+          "description": "1.1. Satıcı / Sağlayıcı Bilgileri:\n• Unvan: UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.\n• Adres: Yaşamkent Mah. 3147 Sok. No:10, 06810 Çankaya / Ankara — TÜRKİYE\n• Telefon: +90 312 225 41 73 • Faks: +90 312 225 41 74\n• E-Posta (Müşteri Hizmetleri ve Şikâyet): info@savunmahaber.com • r.turgut@savunmahaber.com\n\n1.2. Konu ve Kapsam:\nİşbu Ön Bilgilendirme ve Mesafeli Satış / Abonelik Koşulları; 6502 sayılı Tüketicinin Korunması Hakkında Kanun ('TKHK'), 27.11.2014 tarihli ve 29188 sayılı Resmî Gazete'de yayımlanan Mesafeli Sözleşmeler Yönetmeliği (ve güncel değişiklikleri) ile 24.01.2015 tarihli ve 29246 sayılı Resmî Gazete'de yayımlanan Abonelik Sözleşmeleri Yönetmeliği uyarınca, Alıcı/Abone'nin msidergisi.com üzerinden elektronik ortamda sipariş verdiği basılı süreli yayın aboneliği, dijital E-Dergi aboneliği, tekil dijital makale erişimi veya basılı referans kitap/rapor satışına ilişkin hak ve yükümlülükleri düzenler."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "FİYATLANDIRMA, ÖDEME VE İFA ESASLARI",
+          "title": "2. Bedel, Ödeme Güvenliği ve Teslimat Süreçleri",
+          "description": "• Tüm yayın ve abonelik planlarının Türk Lirası (TL) cinsinden vergiler dâhil toplam satış bedeli '/abonelik-ve-satis' sayfasında ve sipariş onay ekranında açıkça gösterilir; sipariş ekranında belirtilmeyen hiçbir ek masraf talep edilmez.\n• Ödemeler BDDK lisanslı PayTR sanal POS altyapısı üzerinden kredi/banka kartıyla veya kurumsal fatura/proforma kapsamında banka havalesi/EFT yoluyla gerçekleştirilir.\n• Dijital İçerik İfası: Dijital E-Dergi abonelikleri ve tekil kilitli makale erişimleri, ödemenin onaylanmasını takiben elektronik ortamda derhal aktive edilir.\n• Fiziksel Yayın Teslimatı: Basılı kitap, rapor ve basılı dergi sayıları; stokta bulunması hâlinde en geç 30 (otuz) günlük yasal süreyi aşmamak kaydıyla Alıcı'nın bildirdiği teslimat adresine anlaşmalı kargo/posta aracılığıyla gönderilir."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "RG: 29188 M.9 & M.15 CAYMA HAKKI VE YASAL İSTİSNALAR",
+          "title": "3. Cayma Hakkı, Süreli Yayın / Dijital İçerik İstisnaları ve Abonelik Feshi",
+          "description": "3.1. Genel Cayma Hakkı (14 Gün):\nTüketici sıfatını haiz Alıcı; fiziksel kitap ve rapor alımlarında malın kendisine veya gösterdiği üçüncü kişiye teslim edildiği tarihten itibaren, abonelik/hizmet sözleşmelerinde ise sözleşmenin kurulduğu tarihten itibaren 14 (ondört) gün içinde herhangi bir gerekçe göstermeksizin ve cezai şart ödemeksizin cayma hakkını kullanabilir. Cayma bildiriminin 'info@savunmahaber.com' adresine yazılı/kalıcı veri saklayıcısı ile yöneltilmesi yeterlidir; bedel iadesi bildirimden itibaren 14 gün içinde ödeme aracına uygun şekilde tek seferde yapılır.\n\n3.2. Mesafeli Sözleşmeler Yönetmeliği m.15/1 Uyarınca Cayma Hakkının Kullanılamayacağı İstisnalar:\n• m.15/1-(f): Abonelik sözleşmesi kapsamında sağlananlar dışında, gazete ve dergi gibi süreli yayınların tekil teslimine ilişkin sözleşmelerde cayma hakkı kullanılamaz.\n• m.15/1-(ğ): Elektronik ortamda anında ifa edilen hizmetler veya tüketiciye anında teslim edilen gayrimaddi mallara (ödeme anında erişime açılan dijital E-Dergi PDF indirmeleri ve tekil dijital makaleler) ilişkin sözleşmelerde cayma hakkı kullanılamaz.\n\n3.3. Abonelik Sözleşmesinin Feshi (Abonelik Sözleşmeleri Yönetmeliği m.22–25):\nTüketici, belirsiz süreli veya süresi 1 yıl ve daha uzun olan abonelik sözleşmesini herhangi bir gerekçe göstermeksizin ve cezai şart ödemeksizin istediği zaman yazılı veya kalıcı veri saklayıcısı ile ('info@savunmahaber.com') bildirimde bulunarak feshedebilir. Fesih bildiriminin ulaşmasından itibaren en geç 7 gün içinde fesih işlemi yerine getirilir ve aboneliğin kalan süresine/ifa edilmeyen sayılarına tekabül eden tutar 14 gün içinde tüketiciye iade edilir."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "UYUŞMAZLIK ÇÖZÜMÜ VE YETKİLİ MERCİLER",
+          "title": "4. Tüketici Hakem Heyetleri ve Yetkili Mahkemeler",
+          "description": "6502 sayılı TKHK m.68 kapsamında tüketici işlemlerinden doğabilecek uyuşmazlıklarda, Ticaret Bakanlığı tarafından her yıl Resmî Gazete'de yayımlanan Tebliğ ile belirlenen güncel parasal sınırlar dâhilinde Alıcı'nın yerleşim yerinin bulunduğu veya tüketici işleminin yapıldığı yerdeki İl veya İlçe Tüketici Hakem Heyetleri; söz konusu parasal sınırların üzerindeki uyuşmazlıklarda ise Tüketici Mahkemeleri yetkilidir.\n\n6102 sayılı Türk Ticaret Kanunu kapsamında tacir veya kamu tüzel kişisi sıfatıyla gerçekleştirilen kurumsal abonelik, toplu lisans ve reklam/sponsorluk sözleşmelerinden doğan uyuşmazlıklarda Ankara Mahkemeleri ve İcra Müdürlükleri yetkilidir."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-iptal-ve-iade-kosullari",
+      "title": "Teslimat, İptal, Fesih ve İade Koşulları",
+      "description": "Basılı yayınlar, kurumsal/bireysel abonelikler ve dijital E-Dergi içeriklerine ilişkin teslimat, iptal ve bedel iadesi süreçleri.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "TESLİMAT, İPTAL VE İADE REHBERİ",
+          "title": "Abonelik ve Yayın Siparişlerinde İptal / İade Esasları",
+          "description": "1. Sipariş İptali:\nHenüz kargoya verilmemiş basılı kitap/rapor siparişlerinizi veya henüz dijital erişimi/PDF üretimi başlatılmamış proforma siparişlerinizi 'info@savunmahaber.com' adresine sipariş numaranızı ileterek kesintisiz iptal edebilirsiniz.\n\n2. Basılı Yayınlarda İade ve Ayıplı Mal Hükümleri (6502 s. TKHK m.8–11):\nKargo teslimatı sırasında hasar görmüş veya basım hatası bulunan yayınlar için teslim tarihinden itibaren yasal süreler içinde ücretsiz değişim veya tam bedel iadesi hakkınız mevcuttur. 14 günlük cayma hakkı kapsamındaki fiziksel kitap iadelerinde ürünün yeniden satılabilir özelliğini kaybetmemiş olması gerekir.\n\n3. Dijital E-Dergi ve Tekil Makale Erişimleri:\nMesafeli Sözleşmeler Yönetmeliği m.15/1-(ğ) hükmü uyarınca elektronik ortamda anında ifa edilen dijital içeriklerde (kişiye özel DRM filigranlı PDF indirme işlemi gerçekleşmiş E-Dergi sayıları ve kilidi açılmış tekil makaleler) ifa başladıktan sonra cayma hakkı kapsamında iade yapılamaz.\n\n4. Yıllık Abonelik Feshi ve Kıstelyevm İade:\nAbonelik Sözleşmeleri Yönetmeliği m.23 ve m.25 uyarınca yıllık abonelik fesih talepleriniz en geç 7 gün içinde işleme alınır; halihazırda teslim edilmiş/ifa edilmiş sayılar düşüldükten sonra kalan abonelik bedeli 14 gün içinde ödeme yönteminizle aynı kanaldan iade edilir."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-ticari-ileti-aydinlatma",
+      "title": "6563 Sayılı ETK Kapsamında Ticari Elektronik İleti Bilgilendirme ve Onay Metni",
+      "description": "6563 sayılı Elektronik Ticaretin Düzenlenmesi Hakkında Kanun, 7416 sayılı Kanun ve Ticari İletişim ve Ticari Elektronik İletiler Hakkında Yönetmelik (İYS) metni.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "6563 SAYILI KANUN & İLETİ YÖNETİM SİSTEMİ (İYS)",
+          "title": "Ticari Elektronik İleti Onayı ve Ret Hakkı",
+          "description": "İşbu metin, 6563 sayılı Elektronik Ticaretin Düzenlenmesi Hakkında Kanun ('ETK'), Ticari İletişim ve Ticari Elektronik İletiler Hakkında Yönetmelik (RG: 15.07.2015 / 29417 ve 04.01.2020 / 30998 değişiklikleri) uyarınca UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti. ('MSI Dergisi') tarafından bilgilendirme amacıyla hazırlanmıştır.\n\n1. Onayın Kapsamı ve İsteğe Bağlılık:\nKayıt formunda yer alan 'Ticari elektronik ileti ve bülten' kutucuğunu işaretlemeniz tamamen özgür iradenize bağlıdır; bu onayı vermemeniz MSI Dergisi okuyucu üyeliğinize veya abonelik hizmetlerinden yararlanmanıza hiçbir şekilde engel teşkil etmez.\n\n2. Gönderim Amaçları:\nOnay vermeniz hâlinde paylaşmış olduğunuz e-posta adresinize; MSI Dergisi ve MSI TDR yeni sayı duyuruları, özel savunma sanayii dosyaları, sektörel fuar/konferans bültenleri ve abonelik kampanya bilgilendirmeleri gönderilebilecektir.\n\n3. Her Zaman Ücretsiz Ret (Çıkış) Hakkı:\n6563 sayılı Kanun m.8 uyarınca dilediğiniz zaman hiçbir gerekçe göstermeksizin ticari elektronik ileti almayı reddedebilirsiniz. Gönderilen her e-bültendeki 'Bülten aboneliğinden ayrıl' bağlantısını kullanarak, İleti Yönetim Sistemi (iys.org.tr) üzerinden veya 'info@savunmahaber.com' adresine bildirimde bulunarak ret hakkınızı ücretsiz kullanabilirsiniz; talebiniz ulaştığı tarihten itibaren 3 (üç) iş günü içinde ticari elektronik ileti gönderimi durdurulur.\n\nNot: Mevcut aboneliğinizin yenilenmesi, fatura/sipariş durumu ve hesap güvenliğine ilişkin zorunlu bilgilendirme iletileri Yönetmelik m.6 kapsamında önceden onay şartına tabi değildir."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-kullanim-kosullari",
+      "title": "Platform Kullanım Koşulları ve Okuyucu Üyelik Şartları",
+      "description": "msidergisi.com ve savunmahaber.com dijital yayın platformunun kullanım şartları, üyelik kuralları ve yasal sorumluluk sınırları.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "DİJİTAL PLATFORM KULLANIM ŞARTLARI",
+          "title": "1. Hizmet Tanımı, Üyelik ve Kabul Edilebilir Kullanım",
+          "description": "msidergisi.com ve savunmahaber.com alan adları üzerinden sunulan dijital yayıncılık platformunu ziyaret eden veya üye olan tüm kullanıcılar aşağıdaki şartları okumuş ve kabul etmiş sayılır:\n\n• Doğru Beyan Yükümlülüğü: Üyelik ve kamu/kurumsal abonelik doğrulama formlarında beyan edilen ad-soyad, kurum ve görev bilgilerinin gerçeğe uygun olması zorunludur. Yanıltıcı kurum beyanı tespit edilen hesapların kurumsal yetkileri askıya alınır.\n• Bireysel Hesap Güvenliği: Her abonelik hesabı (çok kullanıcılı kurumsal kütüphane lisansları hariç) tekil kullanıcıya özeldir; şifre ve oturum bilgilerinin üçüncü kişilerle paylaşılması yasaktır.\n• Altyapı Güvenliği: Platforma yönelik otomatik veri kazıma (scraping), bot saldırısı, güvenlik zafiyeti taraması veya DRM/paywall koruma mekanizmalarını aşmaya yönelik her türlü girişim merkezi güvenlik duvarı (WAF) tarafından kaydedilir ve 5237 sayılı Türk Ceza Kanunu m.243–244 bilişim suçları kapsamında adli mercilere bildirilir.\n• Açık Kaynak Bilgilendirme Sınırı: Platformda yer alan savunma, havacılık ve güvenlik analizleri kamuya açık kaynaklar, resmî kurum açıklamaları ve uzman değerlendirmelerine dayanmaktadır; yatırım, ihale veya resmî teknik şartname taahhüdü niteliği taşımaz.\n• Uygulanacak Hukuk: İşbu koşulların yorumlanmasında Türkiye Cumhuriyeti kanunları uygulanır."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-telif-ve-etik",
+      "title": "Telif Hakları (5846 s. FSEK), Yapay Zekâ Hak Saklılığı ve Yayın Etiği İlkeleri",
+      "description": "5846 sayılı Fikir ve Sanat Eserleri Kanunu, dijital DRM filigran koruması, yapay zekâ eğitim kısıtlaması ve basın yayın etiği ilkelerimiz.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "5846 SAYILI FİKİR VE SANAT ESERLERİ KANUNU",
+          "title": "1. Fikrî Mülkiyet, İktibas Kuralları ve Yapay Zekâ Hak Saklılığı",
+          "description": "1.1. Eser Sahipliği:\nmsidergisi.com, savunmahaber.com ve MSI Dergisi / MSI TDR basılı ve dijital sayılarında yer alan tüm özgün haber, makale, söyleşi, çeviri, grafik, mizanpaj, logo ve fotoğrafların mali ve manevi hakları 5846 sayılı Fikir ve Sanat Eserleri Kanunu ('FSEK') kapsamında UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.'ye veya ilgili lisans veren eser sahiplerine (Remove Before Photos dâhil) aittir.\n\n1.2. İktibas ve Kaynak Gösterme (FSEK m.35–36):\nBasın özetleri ve akademik atıf sınırlarını aşacak şekilde içeriklerin tamamının veya önemli bir bölümünün yazılı izin alınmaksızın kopyalanması, çoğaltılması, yeniden yayımlanması veya ticari amaçla dağıtılması yasaktır. Hukuka uygun kısa alıntılarda 'Kaynak: MSI Dergisi (msidergisi.com)' ibaresi ve aktif bağlantı verilmesi zorunludur.\n\n1.3. Dijital Hak Yönetimi (DRM) ve Filigran:\nAbone kütüphanesinden indirilen E-Dergi PDF nüshaları; abonenin adı, kurumu, zaman damgası ve kriptografik doğrulama özetiyle kişiye özel filigranlanmaktadır. Yetkisiz paylaşım veya çoğaltma FSEK m.71 ve devamı uyarınca hukuki ve cezai sorumluluk doğurur.\n\n1.4. Yapay Zekâ Eğitimi ve Metin/Veri Madenciliği Beyanı:\nArama motoru ve yapay zekâ yanıt sistemlerinin (arama dizinleme ve kaynaklı özet atfı) '/llms.txt' ve '/robots.txt' kurallarına uygun olarak kaynak ve bağlantı göstermesi serbesttir; buna karşılık arşivimizin ticari büyük dil modeli (LLM) ham eğitim veri seti olarak toplu kopyalanması UMSA Prodüksiyon'un yazılı iznine tabidir."
+        },
+        {
+          "kind": "text",
+          "eyebrow": "BASIN AHLAK ESASLARI & EDİTORYAL STANDARTLAR",
+          "title": "2. MSI Dergisi Yayın Etiği İlkeleri",
+          "description": "• Birinci Kaynaktan Doğrulama: Savunma ve havacılık haberlerimizde resmî tedarik makamları (MSB, SSB, TSK kuvvet komutanlıkları), yüklenici kuruluşların resmî açıklamaları ve sahadaki uzman muhabirlerimizin teyitli bulguları esas alınır.\n• Millî Güvenlik ve Gizlilik Hassasiyeti: Kamuya açıklanmamış veya gizlilik dereceli hiçbir askerî/teknik veri yayımlanmaz; yalnızca açık kaynak istihbaratı ve resmî izinli saha verileri paylaşılır.\n• Editoryal Bağımsızlık ve Şeffaflık: Haber ve analiz içerikleri reklam veya sponsorluk ilişkilerinden tamamen bağımsızdır. Ticari iş birliği kapsamındaki tanıtım metinleri 'SPONSORLU İÇERİK / ADVERTORIAL' etiketiyle açıkça ayrıştırılır.\n• Hızlı Düzeltme Taahhüdü: Maddi hata tespit edilen içerikler 5187 sayılı Basın Kanunu ve gazetecilik etiği gereğince gecikmeksizin düzeltilir ve şeffaf biçimde güncellenir."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-duzeltme-ve-cevap-hakki",
+      "title": "Düzeltme ve Cevap Hakkı (5187 s. Kanun m.14) ile İçerik Bildirim Usulü",
+      "description": "5187 sayılı Basın Kanunu m.14 (7418 sayılı Kanun internet haber sitesi hükümleri) ve 5651 sayılı Kanun m.9 uyarınca düzeltme, cevap ve bildirim prosedürü.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "5187 SAYILI BASIN KANUNU M.14 & 7418 SAYILI KANUN",
+          "title": "İnternet Haber Sitesinde Düzeltme, Cevap ve Hukuki Bildirim Prosedürü",
+          "description": "1. Düzeltme ve Cevap Hakkı (5187 sayılı Basın Kanunu m.14 — 7418 sayılı Kanun Değişikliği):\nİnternet haber sitemizde yayımlanan süreli yayın içeriklerinde şeref ve haysiyetini ihlal edici veya kişilerle ilgili gerçeğe aykırı yayım yapılması hâlinde, zarar gören kişinin yayım tarihinden itibaren 2 (iki) ay içinde göndereceği, suç unsuru içermeyen ve üçüncü kişilerin hukuken korunan menfaatlerine aykırı olmayan düzeltme ve cevap yazısı; Sorumlu Yazı İşleri Müdürü tarafından hiçbir düzeltme ve ekleme yapılmaksızın, yazının alındığı tarihten itibaren en geç 1 (bir) gün içinde, ilgili yayının yer aldığı sayfa ve sütunlarda, URL bağlantısı sağlanmak suretiyle, aynı puntolarla ve aynı şekilde 1 (bir) hafta süreyle yayımlanır.\n\n2. 5651 Sayılı Kanun Kapsamında İçerik Bildirimi (Uyar-Kaldır):\n5651 sayılı Kanun kapsamında kişilik haklarının veya 5846 sayılı FSEK kapsamında fikrî mülkiyet haklarının ihlal edildiği iddiasına dayalı bildirimler; ilgili URL adresi, ihlal gerekçesi ve kimlik/yetki belgeleriyle birlikte Sorumlu Yazı İşleri Müdürlüğümüze iletilebilir.\n\n3. Başvuru Kanalları:\n• Sorumlu Yazı İşleri Müdürü: Dr. K. Burak CODUR — b.codur@savunmahaber.com\n• Kurumsal Hukuk / İletişim E-Posta: info@savunmahaber.com\n• Yazılı Tebligat Adresi: UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti., Yaşamkent Mah. 3147 Sok. No:10, 06810 Çankaya / Ankara — Tel: +90 312 225 41 73"
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-reklam-ve-sponsorluk",
+      "title": "Reklam, Sponsorluk ve Ticari İletişim Politikası",
+      "description": "6502 sayılı Kanun m.61 ve Ticari Reklam ve Haksız Ticari Uygulamalar Yönetmeliği (RG: 29232) örtülü reklam yasağına tam uyumlu reklam politikamız.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "6502 SAYILI KANUN M.61 & RG: 29232 YÖNETMELİĞİ",
+          "title": "Editoryal Bağımsızlık, Örtülü Reklam Yasağı ve Sponsorluk Kuralları",
+          "description": "MSI Dergisi ve MSI TDR platformlarında yürütülen tüm reklam, banner ve sponsorlu içerik faaliyetleri; 6502 sayılı Tüketicinin Korunması Hakkında Kanun m.61, Ticari Reklam ve Haksız Ticari Uygulamalar Yönetmeliği (RG: 10.01.2015 / 29232 ve güncel değişiklikler) ile Reklam Kurulu ilke kararlarına tam uyumlu olarak yürütülür:\n\n1. Örtülü Reklam Yasağı ve Açık Etiketleme:\n6502 sayılı Kanun m.61/4 uyarınca örtülü reklam kesinlikle yasaktır. Bedel veya benzeri bir karşılıkla yayımlanan tüm tanıtım yazıları ve kurumsal dosyalar; okuyucunun ilk bakışta fark edebileceği şekilde 'SPONSORLU İÇERİK', 'ADVERTORIAL' veya 'REKLAM · KURUMSAL İŞ BİRLİĞİ' ibaresiyle açıkça etiketlenir.\n\n2. Sektörel Uygunluk ve Kabul Kriterleri:\nPlatformumuzda yalnızca savunma, havacılık, uzay, denizcilik, siber güvenlik, ileri mühendislik ve kurumsal yan sanayi/hizmet ekosistemine yönelik kurumsal tanıtımlar kabul edilir. Bireysel silah satışı ilanları, siyasi propaganda, kumar/bahis, tütün/alkol ve yanıltıcı/doğrulanamaz iddialar içeren reklamlar kesinlikle kabul edilmez.\n\n3. Rakip Koruması ve Çakışma Denetimi:\nSponsorlu içerik sayfalarında rakip marka reklamlarının gösterilmemesi için merkezi reklam motorumuzda kategori ve marka çakışma kontrolü uygulanmaktadır.\n\n4. Reklam ve Kurumsal İş Birliği İletişim:\n• Proje ve İş Geliştirme Koordinatörü: Özay ÖYMEZ — o.oymez@savunmahaber.com\n• Kurumsal İletişim: info@savunmahaber.com • Tel: +90 312 225 41 73"
+        }
+      ]
+    }
+  ]
+}

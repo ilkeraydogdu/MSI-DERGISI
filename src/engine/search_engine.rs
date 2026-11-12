@@ -42,13 +42,12 @@ impl CentralSearchEngine {
         {
             return true;
         }
-        if slug.eq_ignore_ascii_case("gunluk-haberler") && item.source_group == "gunluk-haber" {
+        // Dynamic: match any source_group value directly (no hardcoded slugs)
+        if !item.source_group.is_empty() && slug.eq_ignore_ascii_case(&item.source_group) {
             return true;
         }
-        if slug.eq_ignore_ascii_case("dergi-icerikleri") && item.source_group == "dergi-icerigi" {
-            return true;
-        }
-        if slug.eq_ignore_ascii_case("multimedya")
+        // Dynamic: match video/multimedia by content_type or video_url presence
+        if (slug.eq_ignore_ascii_case("multimedya") || slug.eq_ignore_ascii_case("video"))
             && (item.content_type == "video" || item.video_url.is_some())
         {
             return true;
@@ -234,9 +233,10 @@ impl CentralSearchEngine {
 
         // 3. Compute exact live facet counts
         // Category Facets
+        // Dynamic: include all categories that have content (no hardcoded group_type slugs)
         let category_facets: Vec<FacetBucket> = categories
             .iter()
-            .filter(|c| c.group_type == "icerikler" || c.group_type == "gruplandirilmis")
+            .filter(|c| !c.slug.is_empty())
             .map(|c| {
                 let count = all_contents
                     .iter()
@@ -297,24 +297,17 @@ impl CentralSearchEngine {
             })
             .collect();
 
-        // Source Group Facets
-        let source_defs = [
-            (
-                "dergi-icerigi",
-                "Dergi İçerikleri (MSI Dergisi / TDR)",
-                "Magazine Issues (MSI Dergisi / TDR)",
-            ),
-            (
-                "gunluk-haber",
-                "Günlük Haberler (savunmahaber.com)",
-                "Daily Defense News (savunmahaber.com)",
-            ),
-            (
-                "sadece-online",
-                "Sadece Online Özel Dosya",
-                "Online Exclusive Analysis",
-            ),
-        ];
+        // Source Group Facets — dynamically derived from live content data (no hardcoded slugs)
+        let mut source_groups: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+        for item in all_contents.iter() {
+            if !item.source_group.is_empty() {
+                *source_groups.entry(item.source_group.clone()).or_insert(0) += 1;
+            }
+        }
+        let source_defs: Vec<(String, String, String)> = source_groups
+            .keys()
+            .map(|code| (code.clone(), code.clone(), code.clone()))
+            .collect();
         let source_facets: Vec<FacetBucket> = source_defs
             .iter()
             .map(|(code, tr, en)| {

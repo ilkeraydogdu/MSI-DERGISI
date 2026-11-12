@@ -1,3 +1,4 @@
+pub mod constants;
 pub mod repo;
 pub mod schema;
 pub mod seed;

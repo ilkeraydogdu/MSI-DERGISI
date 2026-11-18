@@ -4,6 +4,10 @@ fn default_content_status() -> String {
     "published".to_string()
 }
 
+fn default_en_status() -> String {
+    "none".to_string()
+}
+
 /// Single Source of Truth Content Entity
 /// Stored once in `contents` and linked to multiple site sections (`placements`) and SSB interest tags (`ssb_tags`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -47,10 +51,61 @@ pub struct ContentItem {
     /// Editorial lifecycle status: `published`, `pending_review`, `draft`, `rejected`, `archived`
     #[serde(default = "default_content_status")]
     pub status: String,
+    /// English translation approval lifecycle: `none`, `auto_draft`, `approved`
+    #[serde(default = "default_en_status")]
+    pub en_status: String,
+    #[serde(default)]
+    pub en_translated_at: Option<String>,
+    #[serde(default)]
+    pub en_approved_by: Option<String>,
+    #[serde(default)]
+    pub en_approved_at: Option<String>,
+    #[serde(default)]
+    pub tr_source_hash: Option<String>,
+}
+
+impl Default for ContentItem {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            slug: String::new(),
+            title_tr: String::new(),
+            title_en: String::new(),
+            summary_tr: String::new(),
+            summary_en: String::new(),
+            body_tr: String::new(),
+            body_en: String::new(),
+            content_type: String::new(),
+            source_group: String::new(),
+            cover_image: String::new(),
+            author_name: String::new(),
+            author_title: String::new(),
+            issue_number: None,
+            published_at: String::new(),
+            read_time_min: 5,
+            visibility_level: 0,
+            single_price_try: 0.0,
+            is_sponsored: false,
+            sponsor_brand: None,
+            sponsor_legal_label: None,
+            is_featured: false,
+            video_url: None,
+            view_count: 0,
+            true_read_count: 0,
+            placements: Vec::new(),
+            ssb_tags: Vec::new(),
+            status: default_content_status(),
+            en_status: default_en_status(),
+            en_translated_at: None,
+            en_approved_by: None,
+            en_approved_at: None,
+            tr_source_hash: None,
+        }
+    }
 }
 
 /// Approval workflow request for content review lifecycle.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ApprovalRequest {
     pub id: i64,
     pub content_id: i64,
@@ -60,6 +115,12 @@ pub struct ApprovalRequest {
     pub reviewed_by: Option<i64>,
     pub reviewed_at: Option<String>,
     pub review_note: Option<String>,
+    #[serde(default = "default_en_status")]
+    pub previous_en_status: String,
+    #[serde(default)]
+    pub source_action: String,
+    #[serde(default)]
+    pub target_en_status: String,
 }
 
 /// Unified paginated query result returned by CentralContentQueryEngine.

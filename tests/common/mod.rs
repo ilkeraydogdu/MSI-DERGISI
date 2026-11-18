@@ -180,6 +180,11 @@ pub fn fixture_content(seed: i64) -> ContentItem {
             },
         ],
         status: "published".into(),
+        en_status: "approved".into(),
+        en_translated_at: None,
+        en_approved_by: None,
+        en_approved_at: None,
+        tr_source_hash: None,
     }
 }
 

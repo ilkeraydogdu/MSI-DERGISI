@@ -4,7 +4,11 @@ fn default_publication_type() -> String {
     "msi".to_string()
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+fn default_en_status() -> String {
+    "none".to_string()
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct MagazinePageSpread {
     pub page_no: String,
     pub title_tr: String,
@@ -38,4 +42,44 @@ pub struct MagazineIssue {
     #[serde(default)]
     pub uploaded_pdf_file: Option<String>,
     pub spreads: Vec<MagazinePageSpread>,
+    #[serde(default = "default_en_status")]
+    pub en_status: String,
+    #[serde(default)]
+    pub en_translated_at: Option<String>,
+    #[serde(default)]
+    pub en_approved_by: Option<String>,
+    #[serde(default)]
+    pub en_approved_at: Option<String>,
+    #[serde(default)]
+    pub tr_source_hash: Option<String>,
+}
+
+impl Default for MagazineIssue {
+    fn default() -> Self {
+        Self {
+            issue_number: 0,
+            slug: String::new(),
+            title_tr: String::new(),
+            title_en: String::new(),
+            publish_month_tr: String::new(),
+            publish_month_en: String::new(),
+            year: 2026,
+            cover_image: String::new(),
+            is_special_issue: false,
+            event_name: None,
+            page_count: 0,
+            dossier_count: 0,
+            summary_tr: String::new(),
+            summary_en: String::new(),
+            pdf_path: String::new(),
+            publication_type: default_publication_type(),
+            uploaded_pdf_file: None,
+            spreads: Vec::new(),
+            en_status: default_en_status(),
+            en_translated_at: None,
+            en_approved_by: None,
+            en_approved_at: None,
+            tr_source_hash: None,
+        }
+    }
 }

@@ -35,6 +35,8 @@ use std::collections::HashMap;
             placements: vec!["ozel-haberler".into(), "kapak-dosyalari".into()],
             ssb_tags: vec!["hava-araclari".into(), "radarlar-ve-sensorler".into()],
             status: "published".into(),
+            en_status: "approved".into(),
+            ..Default::default()
         }
     }
 

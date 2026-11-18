@@ -6,20 +6,32 @@ use rusqlite::params;
 pub fn seed_user_roles(db: &crate::db::Database) -> Result<(), String> {
     let roles: &[(&str, &str, &str, &str, i32)] = &[
         ("super_admin", "Süper Yönetici", "Super Admin", r#"["*"]"#, 1),
-        ("admin", "Yönetici", "Administrator", r#"["*"]"#, 1),
-        ("site_operator", "Site Operatörü", "Site Operator", r#"["*"]"#, 1),
+        (
+            "admin",
+            "Yönetici",
+            "Administrator",
+            r#"["contents:manage","categories:manage","media:manage","issues:manage","approvals:manage","ads:manage","commerce:manage","subscriptions:manage","invoices:manage","users:read","users:write","users:verify","users:manage","corporate_requests:manage","newsletters:manage","email_groups:manage","notifications:manage","redirects:manage","translations:manage","glossary:manage","locales:manage","analytics:read","revenue:read","audit:read","audit:write","settings:manage","monitoring:read","roles:manage","backup:manage"]"#,
+            1,
+        ),
+        (
+            "site_operator",
+            "Site Operatörü",
+            "Site Operator",
+            r#"["contents:manage","categories:manage","media:manage","issues:manage","approvals:manage","ads:manage","commerce:manage","subscriptions:manage","invoices:read","invoices:write","users:read","users:verify","corporate_requests:manage","newsletters:manage","email_groups:manage","notifications:manage","redirects:manage","translations:manage","glossary:manage","analytics:read","revenue:read","audit:read","settings:read","settings:write","monitoring:read"]"#,
+            1,
+        ),
         (
             "editor_in_chief",
             "Genel Yayın Yönetmeni",
             "Editor-in-Chief",
-            r#"["contents:manage","categories:manage","media:manage","issues:manage","approvals:manage","newsletters:write","notifications:write","redirects:write","translations:write","analytics:read","settings:read"]"#,
+            r#"["contents:manage","categories:manage","media:manage","issues:manage","approvals:manage","newsletters:write","email_groups:manage","notifications:write","redirects:write","translations:write","glossary:manage","analytics:read","settings:read"]"#,
             0,
         ),
         (
             "managing_editor",
             "Yazı İşleri Müdürü",
             "Managing Editor",
-            r#"["contents:manage","categories:write","media:manage","issues:manage","approvals:manage","newsletters:write","redirects:write","translations:write","settings:read"]"#,
+            r#"["contents:manage","categories:write","media:manage","issues:manage","approvals:manage","newsletters:write","email_groups:write","redirects:write","translations:write","glossary:write","settings:read"]"#,
             0,
         ),
         (
@@ -68,7 +80,7 @@ pub fn seed_user_roles(db: &crate::db::Database) -> Result<(), String> {
             "support_agent",
             "Destek Temsilcisi",
             "Support Agent",
-            r#"["users:read","users:verify","corporate_requests:read","corporate_requests:decide","subscriptions:read","notifications:read","audit:read"]"#,
+            r#"["users:read","users:verify","users:write","corporate_requests:read","corporate_requests:decide","subscriptions:read","invoices:read","notifications:read","audit:read"]"#,
             0,
         ),
         (

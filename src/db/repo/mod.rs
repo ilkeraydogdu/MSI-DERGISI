@@ -32,3 +32,5 @@ mod approvals;
 mod monitoring;
 mod tokens;
 mod roles;
+mod i18n_glossary;
+pub use i18n_glossary::*;

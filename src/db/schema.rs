@@ -415,6 +415,84 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         -- Phase 1: Functional Index for case-insensitive email lookups
         CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(email COLLATE NOCASE);
 
+        -- Migration 012 synced tables for fresh DBs (idempotent)
+        CREATE TABLE IF NOT EXISTS locales (
+            code TEXT PRIMARY KEY,
+            name_native TEXT NOT NULL,
+            name_en TEXT NOT NULL,
+            hreflang TEXT NOT NULL,
+            og_locale TEXT NOT NULL,
+            dir TEXT NOT NULL DEFAULT 'ltr' CHECK (dir IN ('ltr', 'rtl')),
+            is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+            is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
+            fallback_code TEXT NOT NULL DEFAULT 'tr',
+            sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_locales_single_default
+            ON locales(is_default) WHERE is_default = 1;
+
+        CREATE TABLE IF NOT EXISTS translation_glossary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            term_tr TEXT NOT NULL,
+            term_en TEXT NOT NULL,
+            abbreviation_tr TEXT NOT NULL DEFAULT '',
+            abbreviation_en TEXT NOT NULL DEFAULT '',
+            domain TEXT NOT NULL,
+            rule_type TEXT NOT NULL DEFAULT 'fixed' CHECK (rule_type IN ('fixed', 'preserve', 'forbidden')),
+            preferred_en TEXT NOT NULL,
+            forbidden_variants_json TEXT NOT NULL DEFAULT '[]',
+            case_sensitive INTEGER NOT NULL DEFAULT 0 CHECK (case_sensitive IN (0, 1)),
+            priority INTEGER NOT NULL DEFAULT 50,
+            source_ref TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_by TEXT NOT NULL DEFAULT 'system',
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(term_tr, domain)
+        );
+        CREATE INDEX IF NOT EXISTS idx_glossary_domain_active
+            ON translation_glossary(domain, is_active, priority DESC);
+
+        CREATE TABLE IF NOT EXISTS institution_categories (
+            code TEXT PRIMARY KEY,
+            legacy_value TEXT NOT NULL UNIQUE,
+            label_tr TEXT NOT NULL,
+            label_en TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'industry',
+            is_public_sector INTEGER NOT NULL DEFAULT 0 CHECK (is_public_sector IN (0, 1)),
+            requires_verification INTEGER NOT NULL DEFAULT 1 CHECK (requires_verification IN (0, 1)),
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))
+        );
+
+        CREATE TABLE IF NOT EXISTS gov_email_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL UNIQUE,
+            match_mode TEXT NOT NULL DEFAULT 'suffix' CHECK (match_mode IN ('suffix', 'exact')),
+            domain_kind TEXT NOT NULL DEFAULT 'public_sector' CHECK (domain_kind IN ('public_sector', 'academic', 'personal')),
+            institution_code TEXT,
+            grants_role TEXT NOT NULL DEFAULT 'registered',
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            note TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS email_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            name_tr TEXT NOT NULL,
+            name_en TEXT NOT NULL,
+            description_tr TEXT NOT NULL DEFAULT '',
+            description_en TEXT NOT NULL DEFAULT '',
+            filter_json TEXT NOT NULL DEFAULT '{}',
+            static_emails_json TEXT NOT NULL DEFAULT '[]',
+            requires_marketing_consent INTEGER NOT NULL DEFAULT 1 CHECK (requires_marketing_consent IN (0, 1)),
+            is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_by TEXT NOT NULL DEFAULT 'system',
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         -- Phase 1: Additional FK constraints (safe re-creation via new indexes)
         -- Note: SQLite does not support ALTER TABLE ADD CONSTRAINT FOREIGN KEY.
         -- These are enforced at application level until migration framework (Phase 5).

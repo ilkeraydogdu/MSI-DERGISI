@@ -31,6 +31,7 @@ use super::select::select;
             placements: vec![],
             ssb_tags: vec![],
             status: "published".into(),
+            ..Default::default()
         }
     }
     #[test]
@@ -200,6 +201,7 @@ use super::select::select;
             publication_type: "msi".into(),
             uploaded_pdf_file: None,
             spreads: vec![],
+            ..Default::default()
         };
         let mut pub_item = content("dergi-icerigi", "published-dossier");
         pub_item.issue_number = Some(286);

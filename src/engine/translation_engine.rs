@@ -105,6 +105,32 @@ impl TranslationCache {
             Err(_) => None,
         }
     }
+
+    /// Returns `{ "lang": lang, "strings": { key: value } }` for centralized client/SSR UI hydration.
+    pub fn bundle_json(&self, lang: &str) -> serde_json::Value {
+        let norm_lang = match lang.trim().to_ascii_lowercase().as_str() {
+            "en" => "en",
+            "ar" => "ar",
+            "de" => "de",
+            "ru" => "ru",
+            "fr" => "fr",
+            _ => "tr",
+        };
+        let mut keys: Vec<String> = match self.inner.read() {
+            Ok(guard) => guard.keys().cloned().collect(),
+            Err(_) => Vec::new(),
+        };
+        keys.sort();
+        let mut strings = serde_json::Map::with_capacity(keys.len());
+        for key in keys {
+            let translated = self.t(norm_lang, &key);
+            strings.insert(key, serde_json::Value::String(translated));
+        }
+        serde_json::json!({
+            "lang": norm_lang,
+            "strings": strings
+        })
+    }
 }
 
 impl Default for TranslationCache {

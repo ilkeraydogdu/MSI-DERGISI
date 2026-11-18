@@ -75,7 +75,7 @@ impl Database {
             .map_err(|e| format!("SQLite bağlantı hatası: {}", e))?;
         schema::init_schema(&conn).map_err(|e| format!("Şema başlatma hatası: {}", e))?;
 
-        // Run rusqlite_migration for deterministic schema version tracking (001..010)
+        // Run rusqlite_migration for deterministic schema version tracking (001..012)
         {
             use rusqlite_migration::{Migrations, M};
             let migrations = Migrations::new(vec![
@@ -90,10 +90,11 @@ impl Database {
                 M::up(include_str!("../../migrations/009_email_verification.sql")),
                 M::up(include_str!("../../migrations/010_unsubscribe_tokens.sql")),
                 M::up(include_str!("../../migrations/011_rbac_issues_commerce_cleanup.sql")),
+                M::up(include_str!("../../migrations/012_central_i18n_glossary_b2b.sql")),
             ]);
             migrations
                 .to_latest(&mut conn)
-                .map_err(|e| format!("Veritabanı migrasyon hatası (001..011): {}", e))?;
+                .map_err(|e| format!("Veritabanı migrasyon hatası (001..012): {}", e))?;
         }
 
         let content_count: i64 = conn
@@ -103,6 +104,32 @@ impl Database {
         if content_count == 0 {
             seed::seed_initial_data(&conn)
                 .map_err(|e| format!("Başlangıç verisi (seed) yükleme hatası: {}", e))?;
+            // Sync fresh seed rows with Migration 012 backfills (en_status, composite publication_type, PDF links)
+            let _ = conn.execute_batch(
+                "UPDATE magazine_issues
+                 SET publication_type = CASE
+                        WHEN issue_number < 200 OR slug LIKE 'msi-tdr%' THEN 'msi_tdr'
+                        ELSE 'msi'
+                     END,
+                     en_status = CASE
+                        WHEN issue_number < 200 OR slug LIKE 'msi-tdr%' THEN 'approved'
+                        ELSE en_status
+                     END;
+                 UPDATE magazine_issues
+                 SET uploaded_pdf_file = 'msi-dergisi-sayi-' || issue_number || '.pdf'
+                 WHERE publication_type = 'msi'
+                   AND issue_number IN (263,266,270,271,273,274,275,276,277,278,279,280,281,284,285,286)
+                   AND (uploaded_pdf_file IS NULL OR TRIM(uploaded_pdf_file) = '');
+                 UPDATE magazine_issues
+                 SET uploaded_pdf_file = 'msi-tdr-issue-' || issue_number || '.pdf'
+                 WHERE publication_type = 'msi_tdr'
+                   AND issue_number IN (143,147,149,150,151,152,153)
+                   AND (uploaded_pdf_file IS NULL OR TRIM(uploaded_pdf_file) = '');
+                 UPDATE contents
+                 SET en_status = 'approved'
+                 WHERE source_group = 'msi-tdr'
+                    OR (TRIM(title_en) <> '' AND TRIM(body_en) <> '' AND title_en <> title_tr AND body_en <> body_tr);",
+            );
         } else {
             let settings_count: i64 = conn
                 .query_row("SELECT COUNT(*) FROM site_settings", [], |r| r.get(0))
@@ -116,9 +143,15 @@ impl Database {
 
         drop(conn);
 
-        // Seed RBAC roles (idempotent, runs after migrations)
+        // Seed RBAC roles and centralized UI + API translations idempotently
         if let Err(e) = seed::seed_user_roles(&db) {
             tracing::warn!("RBAC role seed uyarısı: {}", e);
+        }
+        if let Err(e) = db.seed_default_translations() {
+            tracing::warn!("UI translation seed uyarısı: {}", e);
+        }
+        if let Err(e) = db.seed_api_translations() {
+            tracing::warn!("API translation seed uyarısı: {}", e);
         }
 
         db.refresh_l1_cache();

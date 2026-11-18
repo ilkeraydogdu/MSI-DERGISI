@@ -1,4 +1,8 @@
 use super::*;
+use crate::engine::design::{
+    labels_helper::localize_section_copy,
+    shell::{self, ShellOptions},
+};
 
 pub async fn render_home(
     State(state): State<AppState>,
@@ -40,12 +44,12 @@ async fn render_home_for_lang(
     let brand_title = if lang == "en" {
         settings_map
             .get("brand_title")
-            .map(String::as_str)
-            .unwrap_or(&page.title)
+            .map(|s| localize_section_copy(&lang, s))
+            .unwrap_or_else(|| localize_section_copy(&lang, &page.title))
     } else {
         &page.title
     };
-    let brand_desc = &page.description;
+    let brand_desc = localize_section_copy(&lang, &page.description);
     let featured = settings_map
         .get("current_featured_issue")
         .and_then(|v| v.parse::<i32>().ok());
@@ -86,8 +90,13 @@ async fn render_home_for_lang(
         &snap.data.commerce_products,
     );
 
+    let user_opt = authenticated_reader(state, headers);
+    let floating_popup =
+        helpers::select_floating_popup_ad(&snap.data.ads, None, None, user_opt.as_ref());
+    let can_read_pdf = helpers::user_can_read_edergi_pdf(state, user_opt.as_ref());
+
     let exec_us = t0.elapsed().as_micros();
-    let full_html = design_engine::render_master_shell_with_nonce(
+    let full_html = shell::render_full(
         &lang,
         &domain_mode,
         &settings_map,
@@ -100,6 +109,12 @@ async fn render_home_for_lang(
         &body_html,
         exec_us,
         Some(csp_nonce),
+        &ShellOptions {
+            tr: Some(&state.translations),
+            institutions: &[],
+            floating_popup: floating_popup.as_ref(),
+            can_read_pdf,
+        },
     );
 
     Html(full_html).into_response()
@@ -169,6 +184,7 @@ pub async fn render_admin(
     (StatusCode::OK, admin_headers, Html(login_html)).into_response()
 }
 
+#[allow(dead_code)]
 pub(crate) fn render_shell_with_seo(
     state: &AppState,
     lang: &str,
@@ -177,11 +193,34 @@ pub(crate) fn render_shell_with_seo(
     main_body_html: &str,
     nonce: Option<&str>,
 ) -> String {
+    render_shell_with_context(state, lang, mode, seo, main_body_html, nonce, None, None, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_shell_with_context(
+    state: &AppState,
+    lang: &str,
+    mode: &str,
+    seo: &SeoMetaBundle,
+    main_body_html: &str,
+    nonce: Option<&str>,
+    headers: Option<&HeaderMap>,
+    article_opt: Option<&ContentItem>,
+    page_category: Option<&str>,
+) -> String {
     let t0 = Instant::now();
     let snap = CentralQueryEngine::snapshot(&state.db);
     let settings_map = state.db.get_setting_map(lang);
+    let user_opt = headers.and_then(|h| authenticated_reader(state, h));
+    let floating_popup = helpers::select_floating_popup_ad(
+        &snap.data.ads,
+        page_category,
+        article_opt,
+        user_opt.as_ref(),
+    );
+    let can_read_pdf = helpers::user_can_read_edergi_pdf(state, user_opt.as_ref());
     let exec_us = t0.elapsed().as_micros();
-    design_engine::render_master_shell_with_nonce(
+    shell::render_full(
         lang,
         mode,
         &settings_map,
@@ -194,6 +233,12 @@ pub(crate) fn render_shell_with_seo(
         main_body_html,
         exec_us,
         nonce,
+        &ShellOptions {
+            tr: Some(&state.translations),
+            institutions: &[],
+            floating_popup: floating_popup.as_ref(),
+            can_read_pdf,
+        },
     )
 }
 
@@ -207,6 +252,33 @@ pub fn render_shared_shell(
     noindex: bool,
     nonce: Option<&str>,
 ) -> String {
+    render_shared_shell_with_request(
+        state,
+        lang,
+        page_title,
+        main_body_html,
+        canonical_path,
+        article_opt,
+        noindex,
+        nonce,
+        None,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn render_shared_shell_with_request(
+    state: &AppState,
+    lang: &str,
+    page_title: &str,
+    main_body_html: &str,
+    canonical_path: Option<&str>,
+    article_opt: Option<&ContentItem>,
+    noindex: bool,
+    nonce: Option<&str>,
+    headers: Option<&HeaderMap>,
+    page_category: Option<&str>,
+) -> String {
     let path = canonical_path
         .map(|s| {
             if s.starts_with('/') {
@@ -217,6 +289,11 @@ pub fn render_shared_shell(
         })
         .unwrap_or_else(|| "/".to_string());
 
+    let default_desc = if lang.eq_ignore_ascii_case("en") {
+        "MSI Review & MSI TDR — Defence, Aerospace and Security Technologies Reference Platform (ISSN 1306-0309)"
+    } else {
+        "MSI Dergisi & MSI TDR — Savunma, Havacılık ve Güvenlik Teknolojileri Referans Platformu (ISSN 1306-0309)"
+    };
     let desc = article_opt
         .map(|c| {
             if lang == "en" && !c.summary_en.is_empty() {
@@ -225,9 +302,7 @@ pub fn render_shared_shell(
                 c.summary_tr.as_str()
             }
         })
-        .unwrap_or(
-            "MSI Dergisi & MSI TDR — Savunma, Havacılık ve Güvenlik Teknolojileri Referans Platformu (ISSN 1306-0309)",
-        );
+        .unwrap_or(default_desc);
     let og_img = article_opt
         .map(|c| media_service::resolve_asset_url(&c.cover_image))
         .unwrap_or_else(|| media_service::resolve_asset_url(media_service::DEFAULT_OG_IMAGE));
@@ -256,6 +331,15 @@ pub fn render_shared_shell(
         seo.robots = "noindex, follow".to_string();
     }
 
-    render_shell_with_seo(state, lang, "magazine", &seo, main_body_html, nonce)
+    render_shell_with_context(
+        state,
+        lang,
+        "magazine",
+        &seo,
+        main_body_html,
+        nonce,
+        headers,
+        article_opt,
+        page_category,
+    )
 }
-

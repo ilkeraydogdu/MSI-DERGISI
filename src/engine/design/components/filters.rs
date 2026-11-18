@@ -81,11 +81,7 @@ pub fn enrich_issue_spreads(
             }
         }
         if is_redundant_excerpt(&sp.title_en, &sp.excerpt_en) {
-            if !sp.excerpt_tr.is_empty() && !is_redundant_excerpt(&sp.title_en, &sp.excerpt_tr) {
-                sp.excerpt_en = sp.excerpt_tr.clone();
-            } else {
-                sp.excerpt_en.clear();
-            }
+            sp.excerpt_en.clear();
         }
         out.push(sp);
     }
@@ -120,7 +116,7 @@ pub fn enrich_issue_spreads(
             {
                 c.summary_en.trim().to_string()
             } else {
-                exc_tr.clone()
+                String::new()
             };
             out.push(MagazinePageSpread {
                 page_no: format!("DOSYA {:02}", out.len() + 1),

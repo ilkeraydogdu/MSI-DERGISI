@@ -1,9 +1,10 @@
 use super::super::config::{Section, SectionKind};
+use super::super::labels_helper::{lang_href, localize_section_copy};
 use super::PageData;
 use super::cards::{advertisement, article_card, issue_card};
 use super::filters::enrich_issue_spreads;
 use super::labels::localized;
-use super::layout::heading;
+use super::layout::heading_localized;
 use super::media::image_dimensions;
 use super::primitives::{asset, icon, link};
 use super::select::select_for_page;
@@ -13,7 +14,11 @@ use crate::models::*;
 fn render_ad_strip(d: &PageData<'_>, slots: &[&str], index: usize) -> Option<String> {
     let matched: Vec<&AdCampaign> = slots
         .iter()
-        .filter_map(|code| d.ads.iter().find(|a| a.slot_code == *code && a.is_active))
+        .filter_map(|code| {
+            d.ads
+                .iter()
+                .find(|a| a.slot_code == *code && a.is_active && !a.is_floating_popup)
+        })
         .collect();
     if matched.is_empty() {
         return None;
@@ -51,9 +56,15 @@ pub fn render_section(
             }
             .or_else(|| d.issues.iter().max_by_key(|i| i.issue_number));
             let Some(i) = issue else {
+                let empty_msg = if d.lang == "en" {
+                    "New issue coming soon."
+                } else {
+                    "Yeni sayı yakında burada."
+                };
                 return format!(
-                    "<section class=\"container section-space\">{}<p>Yeni sayı yakında burada.</p></section>",
-                    heading(s)
+                    "<section class=\"container section-space\">{}<p>{}</p></section>",
+                    heading_localized(s, d.lang),
+                    empty_msg
                 );
             };
             let preview_spreads = enrich_issue_spreads(i, d.contents);
@@ -126,10 +137,16 @@ pub fn render_section(
                     });
                 let display_badge = if d.lang == "en" {
                     match first_sp.category_badge.trim().to_ascii_uppercase().as_str() {
-                        "KAPAK DOSYASI" => "COVER FILE".to_string(),
-                        "SÖYLEŞİ" => "INTERVIEW".to_string(),
-                        "ÖZEL DOSYA" => "SPECIAL DOSSIER".to_string(),
-                        "ANALİZ" => "ANALYSIS".to_string(),
+                        "KAPAK DOSYASI" | "KAPAK DOSYALARI" => "COVER FILE".to_string(),
+                        "SÖYLEŞİ" | "SÖYLEŞİLER" => "INTERVIEW".to_string(),
+                        "ÖZEL DOSYA" | "ÖZEL DOSYALAR" => "SPECIAL DOSSIER".to_string(),
+                        "ÖZEL HABER" | "ÖZEL HABERLER" => "EXCLUSIVE REPORT".to_string(),
+                        "BAŞYAZI" | "BAŞYAZILAR" => "EDITORIAL".to_string(),
+                        "MESAJ" | "MESAJLAR" => "EXECUTIVE MESSAGE".to_string(),
+                        "TANITICI MAKALE" | "TANITICI MAKALELER" => "SPECIAL COVERAGE".to_string(),
+                        "ANALİZ" | "MAKALE / ANALİZ" => "ANALYSIS".to_string(),
+                        "HABER" | "HABERLER" => "NEWS".to_string(),
+                        "YENİ SAYI" => "NEW ISSUE".to_string(),
                         "DOSYA" => "DOSSIER".to_string(),
                         other => other.to_string(),
                     }
@@ -137,7 +154,10 @@ pub fn render_section(
                     first_sp.category_badge.clone()
                 };
                 let display_pages = if d.lang == "en" {
-                    first_sp.page_no.replacen("S. ", "P. ", 1)
+                    first_sp
+                        .page_no
+                        .replacen("S. ", "P. ", 1)
+                        .replacen("DOSYA ", "DOSSIER ", 1)
                 } else {
                     first_sp.page_no.clone()
                 };
@@ -189,16 +209,21 @@ pub fn render_section(
                         format!("{} sayfa · {} özel dosya", i.page_count, i.dossier_count),
                     )
                 };
+            let hero_eyebrow = localize_section_copy(d.lang, &s.eyebrow);
+            let hero_title = localize_section_copy(d.lang, &s.title);
+            let hero_desc = localize_section_copy(d.lang, &s.description);
+            let hero_link_label = localize_section_copy(d.lang, &s.link_label);
+            let hero_link = lang_href(&s.link, d.lang);
             return format!(
                 r#"<div class="hero-stage-band"><section class="magazine-hero container" data-hero-section><div class="hero-copy"><div class="eyebrow"><span class="accent-rule"></span>{eyebrow}</div><h1>{title}</h1><p class="hero-description">{description}</p><div class="hero-actions"><button class="button primary" data-open-issue="{number}">{open_cta} {arrow}</button><a class="text-link" href="{link}">{link_label} {arrow}</a></div><div class="hero-metrics" aria-label="{metrics_aria}"><div><strong>{m1_val}</strong><span>{m1_lbl}</span></div><div><strong>{m2_val}</strong><span>{m2_lbl}</span></div><div><strong>TR · EN</strong><span>{m3_lbl}</span></div></div><div class="hero-footnote"><span>{f1}</span><span>{f2}</span></div></div><div class="hero-cover-stage" data-hero-stage data-issue-number="{number}"><div class="stage-topbar"><span class="stage-live-pill"><span class="live-dot" aria-hidden="true"></span>{live_pill}</span>{spread_tabs}</div><span class="cover-index" aria-hidden="true">{number}<small>{ref_lbl}</small></span><div class="hero-mockup-3d" data-tilt-card><button class="hero-cover" data-open-issue="{number}" aria-label="{issue_title}"><img src="{cover}" alt="{issue_title}" width="{cw}" height="{ch}" fetchpriority="high"><span class="cover-sheen" aria-hidden="true"></span></button></div>{live_dossier}<div class="cover-caption"><span>{month} {year} · ISSN 1306-0309</span><span>{cover_stats}</span></div></div></section></div>"#,
-                eyebrow = esc(&s.eyebrow),
-                title = esc(&s.title).replace('\n', "<br>"),
-                description = esc(&s.description),
+                eyebrow = esc(hero_eyebrow),
+                title = esc(hero_title).replace('\n', "<br>"),
+                description = esc(hero_desc),
                 number = i.issue_number,
                 open_cta = open_cta,
                 arrow = icon("arrow"),
-                link = link(&s.link),
-                link_label = esc(&s.link_label),
+                link = link(&hero_link),
+                link_label = esc(hero_link_label),
                 metrics_aria = metrics_aria,
                 m1_val = m1_val,
                 m1_lbl = m1_lbl,
@@ -229,8 +254,8 @@ pub fn render_section(
                 .collect();
             return format!(
                 "<section class=\"container section-space news-lead\"><div class=\"eyebrow\">{}</div><h1>{}</h1><div class=\"news-hero-grid\">{}</div></section>",
-                esc(&s.eyebrow),
-                esc(&s.title),
+                esc(localize_section_copy(d.lang, &s.eyebrow)),
+                esc(localize_section_copy(d.lang, &s.title)),
                 cards
             );
         }
@@ -310,7 +335,7 @@ pub fn render_section(
             return d
                 .ads
                 .iter()
-                .find(|a| a.slot_code == s.category && a.is_active)
+                .find(|a| a.slot_code == s.category && a.is_active && !a.is_floating_popup)
                 .map(|a| {
                     format!(
                         "<div class=\"container\">{}</div>",
@@ -327,13 +352,14 @@ pub fn render_section(
                 .collect::<String>()
         ),
         SectionKind::Cta => {
+            let cta_href = lang_href(&s.link, d.lang);
             return format!(
                 "<section class=\"container section-space\"><div class=\"membership-banner\"><div><div class=\"eyebrow\">{}</div><h2>{}</h2><p>{}</p></div><a class=\"button primary\" href=\"{}\">{} {}</a></div></section>",
-                esc(&s.eyebrow),
-                esc(&s.title),
-                esc(&s.description),
-                link(&s.link),
-                esc(&s.link_label),
+                esc(localize_section_copy(d.lang, &s.eyebrow)),
+                esc(localize_section_copy(d.lang, &s.title)),
+                esc(localize_section_copy(d.lang, &s.description)),
+                link(&cta_href),
+                esc(localize_section_copy(d.lang, &s.link_label)),
                 icon("arrow")
             )
         }
@@ -439,7 +465,7 @@ pub fn render_section(
     }
     format!(
         "<div class=\"section-band section-band-{kind_slug}\" data-band-index=\"{index}\"><section class=\"container section-space\" data-section=\"{index}\">{}{content}</section></div>",
-        heading(&section)
+        heading_localized(&section, d.lang)
     )
 }
 

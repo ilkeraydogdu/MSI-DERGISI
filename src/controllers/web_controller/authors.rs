@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::design::labels_helper::{is_en_content_ready, tr_text};
 
 /// Derive a URL-safe slug from an author name for matching against the `/yazar/:slug` path segment.
 /// Maps common Turkish characters to ASCII equivalents, lowercases, and strips non-alphanumeric chars.
@@ -44,16 +45,27 @@ pub async fn render_author_profile(
     };
 
     let lang = detect_language(&params, &headers);
+    let is_en = lang.eq_ignore_ascii_case("en");
+    let tr = Some(&state.translations);
     let all_contents = state.db.get_all_contents();
     let is_staff = authenticated_reader(&state, &headers)
         .as_ref()
         .map(|u| crate::extractors::operator_user::is_staff_role(&state.db, &u.role))
         .unwrap_or(false);
 
-    // Find all publicly visible contents whose author_name matches this slug
+    // Find all publicly visible contents whose author_name matches this slug and locale readiness
     let mut matched_articles: Vec<&ContentItem> = all_contents
         .iter()
-        .filter(|c| (is_staff || content_service::is_publicly_visible(c)) && author_slug_from_name(&c.author_name) == slug)
+        .filter(|c| {
+            (is_staff || content_service::is_publicly_visible(c))
+                && author_slug_from_name(&c.author_name) == slug
+                && (is_staff
+                    || if is_en {
+                        is_en_content_ready(c)
+                    } else {
+                        !c.source_group.eq_ignore_ascii_case("msi-tdr")
+                    })
+        })
         .collect();
 
     if matched_articles.is_empty() {
@@ -77,17 +89,15 @@ pub async fn render_author_profile(
         .map(|(idx, c)| article_card(c, &lang, idx < 3))
         .collect();
 
-    let count_label = if lang == "en" {
-        format!("{} articles", total_articles)
-    } else {
-        format!("{} içerik", total_articles)
-    };
-
-    let heading_label = if lang == "en" {
-        "AUTHOR PROFILE"
-    } else {
-        "YAZAR PROFİLİ"
-    };
+    let suffix = tr_text(tr, &lang, "author.articles_suffix", "içerik", "articles");
+    let count_label = format!("{} {}", total_articles, suffix);
+    let heading_label = tr_text(
+        tr,
+        &lang,
+        "author.profile_eyebrow",
+        "YAZAR PROFİLİ",
+        "AUTHOR PROFILE",
+    );
 
     let body = format!(
         r#"<section class="container section-space author-profile-page">
@@ -103,20 +113,23 @@ pub async fn render_author_profile(
                 </div>
             </div>
         </section>"#,
-        heading = esc(heading_label),
+        heading = esc(&heading_label),
         name = display_name,
         title = display_title,
         count = esc(&count_label),
         cards = cards_html,
     );
 
-    let page_title = if lang == "en" {
-        format!("{} — Author Profile", author_name)
-    } else {
-        format!("{} — Yazar Profili", author_name)
-    };
+    let title_suffix = tr_text(
+        tr,
+        &lang,
+        "author.page_title_suffix",
+        "Yazar Profili",
+        "Author Profile",
+    );
+    let page_title = format!("{} — {}", author_name, title_suffix);
 
-    Html(render_shared_shell(
+    Html(home::render_shared_shell_with_request(
         &state,
         &lang,
         &page_title,
@@ -125,6 +138,8 @@ pub async fn render_author_profile(
         None,
         false,
         Some(&csp_nonce.0),
+        Some(&headers),
+        None,
     ))
     .into_response()
 }
@@ -135,4 +150,3 @@ pub(crate) fn authenticated_reader(
 ) -> Option<crate::models::UserAccount> {
     crate::services::auth_service::session_user(state, headers)
 }
-

@@ -79,11 +79,16 @@ impl Database {
         }
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         conn.execute(
-            "INSERT OR REPLACE INTO seo_redirects (old_path, new_path, status_code, hit_count)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO seo_redirects (old_path, new_path, status_code, hit_count)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(old_path) DO UPDATE SET
+                new_path = excluded.new_path,
+                status_code = excluded.status_code",
             params![old_p, new_p, rd.status_code, rd.hit_count],
         )?;
-        let rowid = conn.last_insert_rowid();
+        let rowid = conn
+            .query_row("SELECT id FROM seo_redirects WHERE old_path = ?1", params![old_p], |r| r.get(0))
+            .unwrap_or_else(|_| conn.last_insert_rowid());
         drop(conn);
         self.refresh_l1_sections(&["seo_redirects"]);
         Ok(rowid)

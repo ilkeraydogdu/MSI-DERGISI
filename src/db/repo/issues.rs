@@ -18,9 +18,10 @@ impl Database {
                     year, cover_image, is_special_issue, event_name, page_count, dossier_count,
                     summary_tr, summary_en, pdf_path, spreads_json,
                     COALESCE(publication_type, CASE WHEN issue_number < 200 THEN 'msi_tdr' ELSE 'msi' END),
-                    uploaded_pdf_file
+                    uploaded_pdf_file,
+                    COALESCE(en_status, 'none'), en_translated_at, en_approved_by, en_approved_at, tr_source_hash
              FROM magazine_issues
-             ORDER BY issue_number DESC",
+             ORDER BY year DESC, issue_number DESC",
             [],
             |r| {
                 let spreads_raw: String = r.get(15)?;
@@ -45,6 +46,11 @@ impl Database {
                     publication_type: r.get(16)?,
                     uploaded_pdf_file: r.get(17)?,
                     spreads,
+                    en_status: r.get::<_, String>(18).unwrap_or_else(|_| "none".to_string()),
+                    en_translated_at: r.get(19)?,
+                    en_approved_by: r.get(20)?,
+                    en_approved_at: r.get(21)?,
+                    tr_source_hash: r.get(22)?,
                 })
             },
         )
@@ -54,6 +60,12 @@ impl Database {
         self.get_all_issues()
             .into_iter()
             .find(|i| i.issue_number == issue_number)
+    }
+
+    pub fn get_issue(&self, publication_type: &str, issue_number: i32) -> Option<MagazineIssue> {
+        self.get_all_issues()
+            .into_iter()
+            .find(|i| i.issue_number == issue_number && i.publication_type.eq_ignore_ascii_case(publication_type.trim()))
     }
 
     pub fn upsert_issue(&self, iss: &MagazineIssue) -> rusqlite::Result<i32> {
@@ -76,13 +88,26 @@ impl Database {
         } else {
             iss.pdf_path.trim().to_string()
         };
+        let en_status = match iss.en_status.trim() {
+            "approved" => "approved",
+            "auto_draft" => "auto_draft",
+            _ => if pub_type == "msi_tdr" { "approved" } else { "none" },
+        };
+        let tr_hash = iss.tr_source_hash.clone().or_else(|| {
+            if en_status != "none" {
+                Some(Self::compute_tr_source_hash(&iss.title_tr, &iss.summary_tr, &iss.publish_month_tr))
+            } else {
+                None
+            }
+        });
         conn.execute(
             "INSERT INTO magazine_issues (
-                issue_number, slug, title_tr, title_en, publish_month_tr, publish_month_en,
+                publication_type, issue_number, slug, title_tr, title_en, publish_month_tr, publish_month_en,
                 year, cover_image, is_special_issue, event_name, page_count, dossier_count,
-                summary_tr, summary_en, pdf_path, spreads_json, publication_type, uploaded_pdf_file
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
-            ON CONFLICT(issue_number) DO UPDATE SET
+                summary_tr, summary_en, pdf_path, spreads_json, uploaded_pdf_file,
+                en_status, en_translated_at, en_approved_by, en_approved_at, tr_source_hash
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
+            ON CONFLICT(publication_type, issue_number) DO UPDATE SET
                 slug = excluded.slug,
                 title_tr = excluded.title_tr,
                 title_en = excluded.title_en,
@@ -98,9 +123,14 @@ impl Database {
                 summary_en = excluded.summary_en,
                 pdf_path = excluded.pdf_path,
                 spreads_json = excluded.spreads_json,
-                publication_type = excluded.publication_type,
-                uploaded_pdf_file = excluded.uploaded_pdf_file",
+                uploaded_pdf_file = COALESCE(excluded.uploaded_pdf_file, magazine_issues.uploaded_pdf_file),
+                en_status = excluded.en_status,
+                en_translated_at = COALESCE(excluded.en_translated_at, magazine_issues.en_translated_at),
+                en_approved_by = COALESCE(excluded.en_approved_by, magazine_issues.en_approved_by),
+                en_approved_at = COALESCE(excluded.en_approved_at, magazine_issues.en_approved_at),
+                tr_source_hash = COALESCE(excluded.tr_source_hash, magazine_issues.tr_source_hash)",
             params![
+                pub_type,
                 iss.issue_number,
                 iss.slug,
                 iss.title_tr,
@@ -117,8 +147,12 @@ impl Database {
                 iss.summary_en,
                 pdf_path,
                 spreads_json,
-                pub_type,
-                iss.uploaded_pdf_file
+                iss.uploaded_pdf_file,
+                en_status,
+                iss.en_translated_at,
+                iss.en_approved_by,
+                iss.en_approved_at,
+                tr_hash
             ],
         )?;
         drop(conn);
@@ -133,6 +167,21 @@ impl Database {
         let deleted = conn.execute(
             "DELETE FROM magazine_issues WHERE issue_number = ?1",
             params![issue_number],
+        )?;
+        drop(conn);
+        if deleted > 0 {
+            self.refresh_l1_sections(&["issues"]);
+        }
+        Ok(deleted > 0)
+    }
+
+    pub fn delete_issue_by_type(&self, publication_type: &str, issue_number: i32) -> rusqlite::Result<bool> {
+        let conn = self
+            .open_conn()
+            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let deleted = conn.execute(
+            "DELETE FROM magazine_issues WHERE LOWER(publication_type) = LOWER(?1) AND issue_number = ?2",
+            params![publication_type.trim(), issue_number],
         )?;
         drop(conn);
         if deleted > 0 {

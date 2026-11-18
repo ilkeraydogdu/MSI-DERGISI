@@ -1,7 +1,26 @@
 #[allow(unused_imports)]
 use super::*;
+use sha2::{Digest, Sha256};
 
 impl Database {
+    /// Deterministic SHA-256 hash of Turkish source fields used to detect EN staleness after TR edits.
+    pub fn compute_tr_source_hash(title_tr: &str, summary_tr: &str, body_tr: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(title_tr.trim().as_bytes());
+        hasher.update(b"\n---\n");
+        hasher.update(summary_tr.trim().as_bytes());
+        hasher.update(b"\n---\n");
+        hasher.update(body_tr.trim().as_bytes());
+        hex::encode(hasher.finalize())
+    }
+
+    fn normalize_en_status(raw: &str) -> &'static str {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "approved" => "approved",
+            "auto_draft" => "auto_draft",
+            _ => "none",
+        }
+    }
     pub(super) fn load_all_placements_map(conn: &Connection) -> HashMap<i64, Vec<String>> {
         let mut map: HashMap<i64, Vec<String>> = HashMap::new();
         let Ok(mut stmt) = conn.prepare(
@@ -53,7 +72,8 @@ impl Database {
                     content_type, source_group, cover_image, author_name, author_title,
                     issue_number, published_at, read_time_min, visibility_level, single_price_try,
                     is_sponsored, sponsor_brand, sponsor_legal_label, is_featured, video_url,
-                    view_count, true_read_count, COALESCE(status, 'published')
+                    view_count, true_read_count, COALESCE(status, 'published'),
+                    COALESCE(en_status, 'none'), en_translated_at, en_approved_by, en_approved_at, tr_source_hash
              FROM contents
              ORDER BY published_at DESC, id DESC",
         ) else {
@@ -90,6 +110,11 @@ impl Database {
                 placements: Vec::new(),
                 ssb_tags: Vec::new(),
                 status: r.get::<_, String>(25).unwrap_or_else(|_| "published".to_string()),
+                en_status: r.get::<_, String>(26).unwrap_or_else(|_| "none".to_string()),
+                en_translated_at: r.get(27)?,
+                en_approved_by: r.get(28)?,
+                en_approved_at: r.get(29)?,
+                tr_source_hash: r.get(30)?,
             })
         }) else {
             return Vec::new();
@@ -132,13 +157,84 @@ impl Database {
 
     pub fn upsert_content(&self, item: &ContentItem) -> rusqlite::Result<i64> {
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let tx = conn.unchecked_transaction()?;
         let status = if item.status.trim().is_empty() {
             "published"
         } else {
             item.status.trim()
         };
-        if item.id > 0 {
-            conn.execute(
+        let now = chrono::Utc::now().to_rfc3339();
+        let new_tr_hash = Self::compute_tr_source_hash(&item.title_tr, &item.summary_tr, &item.body_tr);
+
+        let content_id: i64 = if item.id > 0 {
+            let prev: (String, String, String, String, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>) = tx.query_row(
+                "SELECT title_tr, title_en, summary_tr, summary_en, body_tr, body_en,
+                        COALESCE(en_status, 'none'), en_translated_at, en_approved_by, en_approved_at, tr_source_hash
+                 FROM contents WHERE id = ?1",
+                params![item.id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?)),
+            )?;
+
+            // V1: Auto-snapshot previous DB state into content_versions before first edit
+            let existing_versions: i64 = tx
+                .query_row(
+                    "SELECT COUNT(*) FROM content_versions WHERE content_id = ?1",
+                    params![item.id],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            if existing_versions == 0 {
+                tx.execute(
+                    "INSERT INTO content_versions (
+                        content_id, version, title_tr, title_en, body_tr, body_en, summary_tr, summary_en,
+                        changed_by, change_note, created_at, en_status, previous_en_status, source_action, review_note
+                     ) VALUES (?1, 1, ?2, ?3, ?4, ?5, ?6, ?7, 'system-autosnapshot', 'Düzenleme öncesi orijinal sürüm yedeği', ?8, ?9, ?9, 'auto_snapshot', '')",
+                    params![item.id, prev.0, prev.1, prev.4, prev.5, prev.2, prev.3, now, prev.6],
+                )?;
+            }
+
+            let prev_tr_hash = Self::compute_tr_source_hash(&prev.0, &prev.2, &prev.4);
+            let tr_changed = prev_tr_hash != new_tr_hash;
+            let en_unchanged = item.title_en == prev.1 && item.summary_en == prev.3 && item.body_en == prev.5;
+            let requested_en = if item.en_status.trim().is_empty() {
+                prev.6.as_str()
+            } else {
+                Self::normalize_en_status(&item.en_status)
+            };
+            let approved_timestamp_changed = item.en_approved_at.is_some() && item.en_approved_at != prev.9;
+
+            let (next_en_status, next_en_translated_at, next_en_approved_by, next_en_approved_at, next_tr_hash) =
+                if prev.6 == "approved" && tr_changed && en_unchanged && !approved_timestamp_changed {
+                    // TR changed after EN approval without updating EN -> mark EN draft out of sync
+                    (
+                        "auto_draft".to_string(),
+                        prev.7.clone(),
+                        prev.8.clone(),
+                        prev.9.clone(),
+                        prev.10.clone().or(Some(prev_tr_hash)),
+                    )
+                } else {
+                    let st = requested_en.to_string();
+                    let tr_at = if !en_unchanged || (st == "auto_draft" && prev.7.is_none()) {
+                        item.en_translated_at.clone().or_else(|| Some(now.clone()))
+                    } else {
+                        item.en_translated_at.clone().or(prev.7)
+                    };
+                    let app_by = item.en_approved_by.clone().or(prev.8);
+                    let app_at = if st == "approved" {
+                        item.en_approved_at.clone().or(prev.9).or_else(|| Some(now.clone()))
+                    } else {
+                        item.en_approved_at.clone().or(prev.9)
+                    };
+                    let src_hash = if !en_unchanged || (st == "approved" && prev.6 != "approved") {
+                        Some(new_tr_hash)
+                    } else {
+                        item.tr_source_hash.clone().or(prev.10)
+                    };
+                    (st, tr_at, app_by, app_at, src_hash)
+                };
+
+            tx.execute(
                 "UPDATE contents SET
                     slug = ?1, title_tr = ?2, title_en = ?3, summary_tr = ?4, summary_en = ?5,
                     body_tr = ?6, body_en = ?7, content_type = ?8, source_group = ?9,
@@ -146,8 +242,13 @@ impl Database {
                     published_at = ?14, read_time_min = ?15, visibility_level = ?16,
                     single_price_try = ?17, is_sponsored = ?18, sponsor_brand = ?19,
                     sponsor_legal_label = ?20, is_featured = ?21, video_url = ?22,
-                    status = COALESCE(NULLIF(?23, ''), status, 'published')
-                 WHERE id = ?24",
+                    status = COALESCE(NULLIF(?23, ''), status, 'published'),
+                    en_status = ?24,
+                    en_translated_at = ?25,
+                    en_approved_by = ?26,
+                    en_approved_at = ?27,
+                    tr_source_hash = ?28
+                 WHERE id = ?29",
                 params![
                     item.slug,
                     item.title_tr,
@@ -172,49 +273,73 @@ impl Database {
                     if item.is_featured { 1 } else { 0 },
                     item.video_url,
                     status,
+                    next_en_status,
+                    next_en_translated_at,
+                    next_en_approved_by,
+                    next_en_approved_at,
+                    next_tr_hash,
                     item.id
                 ],
             )?;
+            item.id
         } else {
-            conn.execute(
+            // N6: Creating a new item (id == 0) NEVER uses ON CONFLICT(slug) DO UPDATE;
+            // auto-dedupe slug (-2, -3, ...) so a new article never overwrites a live article.
+            let base_slug = if item.slug.trim().is_empty() {
+                format!("icerik-{}", chrono::Utc::now().timestamp_millis())
+            } else {
+                item.slug.trim().to_string()
+            };
+            let mut final_slug = base_slug.clone();
+            let mut suffix = 2usize;
+            loop {
+                let exists: i64 = tx
+                    .query_row(
+                        "SELECT COUNT(*) FROM contents WHERE LOWER(slug) = LOWER(?1)",
+                        params![final_slug],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                if exists == 0 {
+                    break;
+                }
+                final_slug = format!("{}-{}", base_slug, suffix);
+                suffix += 1;
+            }
+
+            let en_st = if item.en_status.trim().is_empty() {
+                if item.source_group == "msi-tdr" {
+                    "approved"
+                } else {
+                    "none"
+                }
+            } else {
+                Self::normalize_en_status(&item.en_status)
+            };
+            let tr_hash = if en_st != "none" {
+                item.tr_source_hash.clone().or(Some(new_tr_hash))
+            } else {
+                item.tr_source_hash.clone()
+            };
+
+            tx.execute(
                 "INSERT INTO contents (
                     slug, title_tr, title_en, summary_tr, summary_en, body_tr, body_en,
                     content_type, source_group, cover_image, author_name, author_title,
                     issue_number, published_at, read_time_min, visibility_level, single_price_try,
                     is_sponsored, sponsor_brand, sponsor_legal_label, is_featured, video_url,
-                    view_count, true_read_count, status
+                    view_count, true_read_count, status,
+                    en_status, en_translated_at, en_approved_by, en_approved_at, tr_source_hash
                 ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                     ?8, ?9, ?10, ?11, ?12,
                     ?13, ?14, ?15, ?16, ?17,
                     ?18, ?19, ?20, ?21, ?22,
-                    ?23, ?24, ?25
-                )
-                ON CONFLICT(slug) DO UPDATE SET
-                    title_tr = excluded.title_tr,
-                    title_en = excluded.title_en,
-                    summary_tr = excluded.summary_tr,
-                    summary_en = excluded.summary_en,
-                    body_tr = excluded.body_tr,
-                    body_en = excluded.body_en,
-                    content_type = excluded.content_type,
-                    source_group = excluded.source_group,
-                    cover_image = excluded.cover_image,
-                    author_name = excluded.author_name,
-                    author_title = excluded.author_title,
-                    issue_number = excluded.issue_number,
-                    published_at = excluded.published_at,
-                    read_time_min = excluded.read_time_min,
-                    visibility_level = excluded.visibility_level,
-                    single_price_try = excluded.single_price_try,
-                    is_sponsored = excluded.is_sponsored,
-                    sponsor_brand = excluded.sponsor_brand,
-                    sponsor_legal_label = excluded.sponsor_legal_label,
-                    is_featured = excluded.is_featured,
-                    video_url = excluded.video_url,
-                    status = COALESCE(NULLIF(excluded.status, ''), contents.status, 'published')",
+                    ?23, ?24, ?25,
+                    ?26, ?27, ?28, ?29, ?30
+                )",
                 params![
-                    item.slug,
+                    final_slug,
                     item.title_tr,
                     item.title_en,
                     item.summary_tr,
@@ -238,24 +363,19 @@ impl Database {
                     item.video_url,
                     item.view_count.max(1),
                     item.true_read_count.max(1),
-                    status
+                    status,
+                    en_st,
+                    item.en_translated_at,
+                    item.en_approved_by,
+                    item.en_approved_at,
+                    tr_hash
                 ],
             )?;
-        }
-
-        let content_id: i64 = if item.id > 0 {
-            item.id
-        } else {
-            conn.query_row(
-                "SELECT id FROM contents WHERE slug = ?1",
-                params![item.slug],
-                |r| r.get(0),
-            )?
+            tx.last_insert_rowid()
         };
 
         // Batch junction-table writes: one prepared statement per table, reused across rows,
-        // wrapped in a single transaction so partial failures cannot leave orphaned links.
-        let tx = conn.unchecked_transaction()?;
+        // wrapped in the same transaction so partial failures cannot leave orphaned links.
         tx.execute(
             "DELETE FROM content_placements WHERE content_id = ?1",
             params![content_id],
@@ -288,6 +408,102 @@ impl Database {
         crate::engine::content_query_engine::CentralContentQueryEngine::invalidate_cache();
         self.refresh_l1_sections(&["contents"]);
         Ok(content_id)
+    }
+
+    /// Saves EN translation text (`auto_draft` or `approved`) and updates `tr_source_hash`.
+    pub fn update_content_en_translation(
+        &self,
+        content_id: i64,
+        title_en: &str,
+        summary_en: &str,
+        body_en: &str,
+        en_status: &str,
+        actor_email: &str,
+    ) -> Result<bool, String> {
+        let norm_status = Self::normalize_en_status(en_status);
+        let conn = self.open_conn().map_err(|e| e.to_string())?;
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        let (tr_t, tr_s, tr_b): (String, String, String) = tx
+            .query_row(
+                "SELECT title_tr, summary_tr, body_tr FROM contents WHERE id = ?1",
+                params![content_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .map_err(|_| "İçerik bulunamadı.".to_string())?;
+        let tr_hash = Self::compute_tr_source_hash(&tr_t, &tr_s, &tr_b);
+        let now = chrono::Utc::now().to_rfc3339();
+        let (approved_by, approved_at): (Option<&str>, Option<&str>) = if norm_status == "approved" {
+            (Some(actor_email.trim()), Some(now.as_str()))
+        } else {
+            (None, None)
+        };
+        let affected = tx
+            .execute(
+                "UPDATE contents SET
+                    title_en = ?1,
+                    summary_en = ?2,
+                    body_en = ?3,
+                    en_status = ?4,
+                    en_translated_at = ?5,
+                    en_approved_by = COALESCE(?6, en_approved_by),
+                    en_approved_at = COALESCE(?7, en_approved_at),
+                    tr_source_hash = ?8
+                 WHERE id = ?9",
+                params![
+                    title_en,
+                    summary_en,
+                    body_en,
+                    norm_status,
+                    now,
+                    approved_by,
+                    approved_at,
+                    tr_hash,
+                    content_id
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
+        drop(conn);
+        if affected > 0 {
+            crate::engine::content_query_engine::CentralContentQueryEngine::invalidate_cache();
+            self.refresh_l1_sections(&["contents"]);
+        }
+        Ok(affected > 0)
+    }
+
+    /// Explicitly marks an article's English translation as `approved` if non-empty.
+    pub fn approve_content_en(&self, content_id: i64, actor_email: &str) -> Result<bool, String> {
+        let conn = self.open_conn().map_err(|e| e.to_string())?;
+        let (t_tr, s_tr, b_tr, t_en, b_en): (String, String, String, String, String) = conn
+            .query_row(
+                "SELECT title_tr, summary_tr, body_tr, title_en, body_en FROM contents WHERE id = ?1",
+                params![content_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .map_err(|_| "İçerik bulunamadı.".to_string())?;
+        if t_en.trim().is_empty() || b_en.trim().is_empty() {
+            return Err("İngilizce başlık ve gövde metni boşken onay verilemez.".to_string());
+        }
+        let tr_hash = Self::compute_tr_source_hash(&t_tr, &s_tr, &b_tr);
+        let now = chrono::Utc::now().to_rfc3339();
+        let affected = conn
+            .execute(
+                "UPDATE contents SET
+                    en_status = 'approved',
+                    en_approved_by = ?1,
+                    en_approved_at = ?2,
+                    en_translated_at = COALESCE(en_translated_at, ?2),
+                    tr_source_hash = ?3
+                 WHERE id = ?4",
+                params![actor_email.trim(), now, tr_hash, content_id],
+            )
+            .map_err(|e| e.to_string())?;
+        drop(conn);
+        if affected > 0 {
+            crate::engine::content_query_engine::CentralContentQueryEngine::invalidate_cache();
+            self.refresh_l1_sections(&["contents"]);
+        }
+        Ok(affected > 0)
     }
 
     pub fn delete_content(&self, id: i64) -> rusqlite::Result<()> {

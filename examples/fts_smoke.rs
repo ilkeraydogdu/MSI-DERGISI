@@ -32,6 +32,7 @@ fn make_content(slug: &str, title_tr: &str, body_tr: &str) -> ContentItem {
         true_read_count: 1,
         placements: vec!["haberler".to_string()],
         ssb_tags: vec![],
+        ..Default::default()
     }
 }
 

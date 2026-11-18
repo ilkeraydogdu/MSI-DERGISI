@@ -305,7 +305,9 @@ impl Database {
                 subscription_expires_at = excluded.subscription_expires_at,
                 reminders_halted = excluded.reminders_halted,
                 email_consent = excluded.email_consent,
-                ssb_interests_json = excluded.ssb_interests_json",
+                ssb_interests_json = excluded.ssb_interests_json,
+                email_verified = excluded.email_verified,
+                marketing_emails_opted_in = excluded.marketing_emails_opted_in",
             params![
                 norm_email,
                 password_hash,
@@ -672,5 +674,65 @@ impl Database {
         self.delete_user_account(user_id, "admin")
             .map(|_| true)
             .map_err(|e| e.to_string())
+    }
+
+    /// Returns complete subscriber entitlement inspection payload for Support / Admin views.
+    pub fn get_user_entitlement_details(&self, user_id: i64) -> Option<serde_json::Value> {
+        let user = self.get_user_by_id(user_id)?;
+        let purchased_items = self.get_user_purchased_codes(&user.email);
+        let invoices: Vec<serde_json::Value> = self
+            .get_order_invoices()
+            .into_iter()
+            .filter(|inv| inv.user_email.eq_ignore_ascii_case(&user.email))
+            .map(|inv| serde_json::json!(inv))
+            .collect();
+        let corporate_requests = self
+            .get_corporate_requests_detailed()
+            .into_iter()
+            .filter(|r| r.get("user_id").and_then(|v| v.as_i64()) == Some(user_id))
+            .collect::<Vec<_>>();
+        Some(serde_json::json!({
+            "user": user,
+            "purchased_items": purchased_items,
+            "invoices": invoices,
+            "corporate_requests": corporate_requests,
+        }))
+    }
+
+    /// Allows support/admin operators to manually toggle `email_verified` state for a user.
+    pub fn admin_set_email_verified(&self, user_id: i64, verified: bool) -> Result<bool, String> {
+        let conn = self.open_conn().map_err(|e| e.to_string())?;
+        let affected = conn
+            .execute(
+                "UPDATE users SET email_verified = ?1 WHERE id = ?2",
+                params![if verified { 1 } else { 0 }, user_id],
+            )
+            .map_err(|e| e.to_string())?;
+        drop(conn);
+        if affected > 0 {
+            self.refresh_l1_sections(&["users"]);
+        }
+        Ok(affected > 0)
+    }
+
+    /// Allows support/admin operators to adjust subscription tier and expiry date cleanly.
+    pub fn admin_adjust_subscription(
+        &self,
+        user_id: i64,
+        tier: &str,
+        expires_at: Option<&str>,
+    ) -> Result<bool, String> {
+        let conn = self.open_conn().map_err(|e| e.to_string())?;
+        let affected = conn
+            .execute(
+                "UPDATE users SET subscription_tier = ?1, subscription_expires_at = ?2 WHERE id = ?3",
+                params![tier.trim(), expires_at.map(str::trim).filter(|s| !s.is_empty()), user_id],
+            )
+            .map_err(|e| e.to_string())?;
+        drop(conn);
+        if affected > 0 {
+            self.refresh_l1_sections(&["users"]);
+        }
+        Ok(affected > 0)
     }
 }

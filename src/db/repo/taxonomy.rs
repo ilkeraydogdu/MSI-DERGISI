@@ -40,19 +40,48 @@ impl Database {
     }
 
     pub fn insert_category(&self, cat: &CategoryNode) -> rusqlite::Result<i64> {
+        let slug = cat.slug.trim();
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM categories WHERE LOWER(slug) = LOWER(?1)",
+                params![slug],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if exists > 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Bu slug ('{}') zaten başka bir kategori tarafından kullanılıyor.",
+                slug
+            )));
+        }
+        let parent = cat
+            .parent_slug
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && *s != slug);
+        let group_type = if cat.group_type.trim().is_empty() {
+            "icerikler"
+        } else {
+            cat.group_type.trim()
+        };
+        let icon_class = if cat.icon_class.trim().is_empty() {
+            "ph-folder"
+        } else {
+            cat.icon_class.trim()
+        };
         conn.execute(
-            "INSERT OR REPLACE INTO categories (slug, parent_slug, name_tr, name_en, group_type, description_tr, description_en, icon_class, sort_order, is_dynamic)
+            "INSERT INTO categories (slug, parent_slug, name_tr, name_en, group_type, description_tr, description_en, icon_class, sort_order, is_dynamic)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
-                cat.slug,
-                cat.parent_slug,
-                cat.name_tr,
-                cat.name_en,
-                cat.group_type,
+                slug,
+                parent,
+                cat.name_tr.trim(),
+                cat.name_en.trim(),
+                group_type,
                 cat.description_tr,
                 cat.description_en,
-                cat.icon_class,
+                icon_class,
                 cat.sort_order,
                 if cat.is_dynamic { 1 } else { 0 }
             ],
@@ -90,15 +119,29 @@ impl Database {
     }
 
     pub fn insert_ssb_tag(&self, tag: &SsbInterestTag) -> rusqlite::Result<i64> {
+        let code = tag.code.trim();
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM ssb_tags WHERE LOWER(code) = LOWER(?1)",
+                params![code],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if exists > 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Bu SSB etiket kodu ('{}') zaten mevcut.",
+                code
+            )));
+        }
         conn.execute(
-            "INSERT OR REPLACE INTO ssb_tags (code, name_tr, name_en, category_group, sort_order)
+            "INSERT INTO ssb_tags (code, name_tr, name_en, category_group, sort_order)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
-                tag.code,
-                tag.name_tr,
-                tag.name_en,
-                tag.category_group,
+                code,
+                tag.name_tr.trim(),
+                tag.name_en.trim(),
+                tag.category_group.trim(),
                 tag.sort_order
             ],
         )?;
@@ -110,9 +153,61 @@ impl Database {
 
     pub fn update_category(&self, id: i64, cat: &CategoryNode) -> Result<bool, String> {
         let conn = self.open_conn().map_err(|e| e.to_string())?;
-        let old_slug: String = conn
-            .query_row("SELECT slug FROM categories WHERE id = ?1", params![id], |r| r.get(0))
+        let existing: (String, Option<String>, String, String, String, String) = conn
+            .query_row(
+                "SELECT slug, parent_slug, group_type, description_en, icon_class, name_en
+                 FROM categories WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+            )
             .map_err(|_| "Kategori bulunamadı.".to_string())?;
+        let old_slug = existing.0;
+        let new_slug = cat.slug.trim();
+
+        let dup: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM categories WHERE LOWER(slug) = LOWER(?1) AND id != ?2",
+                params![new_slug, id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if dup > 0 {
+            return Err(format!("'{}' slug'ı başka bir kategori tarafından kullanılıyor.", new_slug));
+        }
+
+        // Preserve existing parent_slug if caller omitted it (`None`); `Some("")` explicitly clears to NULL.
+        let next_parent: Option<String> = match cat.parent_slug.as_deref() {
+            None => existing.1,
+            Some(s) => {
+                let t = s.trim();
+                if t.is_empty() || t.eq_ignore_ascii_case(new_slug) {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            }
+        };
+        let next_group_type = if cat.group_type.trim().is_empty() {
+            existing.2
+        } else {
+            cat.group_type.trim().to_string()
+        };
+        let next_desc_en = if cat.description_en.trim().is_empty() {
+            existing.3
+        } else {
+            cat.description_en.clone()
+        };
+        let next_icon_class = if cat.icon_class.trim().is_empty() {
+            existing.4
+        } else {
+            cat.icon_class.trim().to_string()
+        };
+        let next_name_en = if cat.name_en.trim().is_empty() {
+            existing.5
+        } else {
+            cat.name_en.trim().to_string()
+        };
+
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         tx.execute(
             "UPDATE categories SET
@@ -120,27 +215,27 @@ impl Database {
                 description_tr = ?6, description_en = ?7, icon_class = ?8, sort_order = ?9, is_dynamic = ?10
              WHERE id = ?11",
             params![
-                cat.slug.trim(),
-                cat.parent_slug,
+                new_slug,
+                next_parent,
                 cat.name_tr.trim(),
-                cat.name_en.trim(),
-                cat.group_type.trim(),
+                next_name_en,
+                next_group_type,
                 cat.description_tr,
-                cat.description_en,
-                cat.icon_class.trim(),
+                next_desc_en,
+                next_icon_class,
                 cat.sort_order,
                 if cat.is_dynamic { 1 } else { 0 },
                 id
             ],
         ).map_err(|e| e.to_string())?;
-        if old_slug != cat.slug.trim() {
+        if old_slug != new_slug {
             let _ = tx.execute(
                 "UPDATE content_placements SET category_slug = ?1 WHERE category_slug = ?2",
-                params![cat.slug.trim(), old_slug],
+                params![new_slug, old_slug],
             );
             let _ = tx.execute(
                 "UPDATE categories SET parent_slug = ?1 WHERE parent_slug = ?2",
-                params![cat.slug.trim(), old_slug],
+                params![new_slug, old_slug],
             );
         }
         tx.commit().map_err(|e| e.to_string())?;

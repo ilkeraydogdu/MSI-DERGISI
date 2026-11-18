@@ -1,6 +1,6 @@
 use std::env;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AppConfig {
     pub app_name: String,
     pub app_env: String,
@@ -17,6 +17,7 @@ pub struct AppConfig {
     pub watermark_secret: String,
     pub admin_default_user: String,
     pub admin_default_pass: String,
+    pub admin_path_secret: String,
     pub ad_max_quota_per_keyword: usize,
     pub paytr_merchant_id: String,
     pub paytr_merchant_key: String,
@@ -30,6 +31,19 @@ pub struct AppConfig {
     pub paytr_api_url: String,
     pub social_media_urls: Vec<String>,
     pub legacy_seed_secret: String,
+    pub monitoring_enabled: bool,
+    pub monitoring_vhosts_path: String,
+    pub monitoring_nginx_log_path: String,
+    pub monitoring_fail2ban_log_path: String,
+    pub monitoring_cert_path: String,
+    pub monitoring_fast_interval_secs: u64,
+    pub monitoring_medium_interval_secs: u64,
+    pub monitoring_slow_interval_secs: u64,
+    pub monitoring_retention_days: u32,
+    pub monitoring_node_ports: Vec<u16>,
+    pub monitoring_redis_port: u16,
+    pub monitoring_smtp_port: u16,
+    pub indexnow_api_url: String,
 }
 
 impl AppConfig {
@@ -61,9 +75,8 @@ impl AppConfig {
                 .ok()
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or(default_static_dir),
-            sqlite_db_path: env::var("SQLITE_DB_PATH").unwrap_or_else(|_| {
-                "data/msi_platform.db".to_string()
-            }),
+            sqlite_db_path: env::var("SQLITE_DB_PATH")
+                .unwrap_or_else(|_| "data/msi_platform.db".to_string()),
             mariadb_database: env::var("MARIADB_DATABASE")
                 .unwrap_or_else(|_| "msi_dergisi_db".to_string()),
             session_secret: env::var("SESSION_SECRET")
@@ -74,6 +87,11 @@ impl AppConfig {
                 .unwrap_or_else(|_| "operator@msidergisi.com".to_string()),
             admin_default_pass: env::var("ADMIN_DEFAULT_PASS")
                 .unwrap_or_else(|_| "[REDACTED_ADMIN_DEFAULT_PASS]".to_string()),
+            admin_path_secret: env::var("ADMIN_PATH_SECRET")
+                .ok()
+                .map(|v| v.trim().trim_matches('/').to_string())
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| "msi-komuta".to_string()),
             ad_max_quota_per_keyword: env::var("AD_MAX_QUOTA_PER_KEYWORD")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -107,25 +125,78 @@ impl AppConfig {
                 "https://www.paytr.com/odeme/api/get-token".to_string()
             }),
             social_media_urls: env::var("SOCIAL_MEDIA_URLS")
-                .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
-                .unwrap_or_else(|_| vec![
-                    format!("https://{}", env::var("PRIMARY_DOMAIN").unwrap_or_else(|_| "msidergisi.com".to_string())),
-                    format!("https://{}", env::var("NEWS_DOMAIN").unwrap_or_else(|_| "savunmahaber.com".to_string())),
-                    "https://www.linkedin.com/company/msi-dergisi".to_string(),
-                    "https://x.com/MSI_Dergisi".to_string(),
-                    "https://twitter.com/MSI_Dergisi".to_string(),
-                    "https://www.instagram.com/msidergisi".to_string(),
-                    "https://www.facebook.com/MSI.Dergisi".to_string(),
-                    "https://www.youtube.com/c/msidergisi".to_string(),
-                ]),
+                .map(|v| {
+                    v.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
+                .unwrap_or_else(|_| {
+                    vec![
+                        format!(
+                            "https://{}",
+                            env::var("PRIMARY_DOMAIN")
+                                .unwrap_or_else(|_| "msidergisi.com".to_string())
+                        ),
+                        format!(
+                            "https://{}",
+                            env::var("NEWS_DOMAIN")
+                                .unwrap_or_else(|_| "savunmahaber.com".to_string())
+                        ),
+                        "https://www.linkedin.com/company/msi-dergisi".to_string(),
+                        "https://x.com/MSI_Dergisi".to_string(),
+                        "https://twitter.com/MSI_Dergisi".to_string(),
+                        "https://www.instagram.com/msidergisi".to_string(),
+                        "https://www.facebook.com/MSI.Dergisi".to_string(),
+                        "https://www.youtube.com/c/msidergisi".to_string(),
+                    ]
+                }),
             legacy_seed_secret: env::var("LEGACY_SEED_SECRET")
                 .or_else(|_| env::var("SESSION_SECRET"))
                 .unwrap_or_else(|_| "CHANGE-ME-LEGACY-SEED-SECRET".to_string()),
+            monitoring_enabled: env::var("MONITORING_ENABLED")
+                .map(|v| !v.eq_ignore_ascii_case("false") && v != "0")
+                .unwrap_or(true),
+            monitoring_vhosts_path: env::var("MONITORING_VHOSTS_PATH")
+                .unwrap_or_else(|_| "/var/www/vhosts".to_string()),
+            monitoring_nginx_log_path: env::var("MONITORING_NGINX_LOG_PATH")
+                .unwrap_or_else(|_| "/var/log/nginx/access.log".to_string()),
+            monitoring_fail2ban_log_path: env::var("MONITORING_FAIL2BAN_LOG_PATH")
+                .unwrap_or_else(|_| "/var/log/fail2ban.log".to_string()),
+            monitoring_cert_path: env::var("MONITORING_CERT_PATH")
+                .unwrap_or_else(|_| "/usr/local/psa/var/certificates".to_string()),
+            monitoring_fast_interval_secs: env::var("MONITORING_FAST_INTERVAL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(15),
+            monitoring_medium_interval_secs: env::var("MONITORING_MEDIUM_INTERVAL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
+            monitoring_slow_interval_secs: env::var("MONITORING_SLOW_INTERVAL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3600),
+            monitoring_retention_days: env::var("MONITORING_RETENTION_DAYS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(7),
+            monitoring_node_ports: env::var("MONITORING_NODE_PORTS")
+                .map(|v| v.split(',').filter_map(|s| s.trim().parse().ok()).collect())
+                .unwrap_or_else(|_| vec![3000, 3004, 3010, 3030, 3040, 3056, 3100, 8090]),
+            monitoring_redis_port: env::var("MONITORING_REDIS_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6379),
+            monitoring_smtp_port: env::var("MONITORING_SMTP_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(25),
+            indexnow_api_url: env::var("INDEXNOW_API_URL")
+                .unwrap_or_else(|_| "https://api.indexnow.org/indexnow".to_string()),
         }
     }
 
-    /// In production, fail-fast if critical secrets are using hardcoded insecure defaults.
-    /// Panics with a clear message listing every missing env var so operators fix it immediately.
     pub fn validate_production_secrets(&self) {
         let is_prod = self.app_env == "production" || self.app_env == "prod";
         if !is_prod {
@@ -133,7 +204,6 @@ impl AppConfig {
         }
 
         let mut missing: Vec<&str> = Vec::new();
-
         if std::env::var("SESSION_SECRET").is_err() {
             missing.push("SESSION_SECRET");
         }
@@ -148,11 +218,36 @@ impl AppConfig {
             panic!(
                 "FATAL: Production environment detected (APP_ENV={}) but the following \
                  required secret env vars are not set: [{}]. \
-                 Refusing to start with insecure hardcoded defaults. \
-                 Set these env vars and restart.",
+                 Refusing to start with insecure hardcoded defaults.",
                 self.app_env,
                 missing.join(", ")
             );
         }
+    }
+}
+
+impl std::fmt::Debug for AppConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppConfig")
+            .field("app_name", &self.app_name)
+            .field("app_env", &self.app_env)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("primary_domain", &self.primary_domain)
+            .field("news_domain", &self.news_domain)
+            .field("public_url", &self.public_url)
+            .field("static_dir", &self.static_dir)
+            .field("sqlite_db_path", &self.sqlite_db_path)
+            .field("session_secret", &"[REDACTED]")
+            .field("watermark_secret", &"[REDACTED]")
+            .field("admin_default_user", &self.admin_default_user)
+            .field("admin_default_pass", &"[REDACTED]")
+            .field("admin_path_secret", &"[REDACTED]")
+            .field("paytr_merchant_id", &self.paytr_merchant_id)
+            .field("paytr_merchant_key", &"[REDACTED]")
+            .field("paytr_merchant_salt", &"[REDACTED]")
+            .field("legacy_seed_secret", &"[REDACTED]")
+            .field("monitoring_enabled", &self.monitoring_enabled)
+            .finish()
     }
 }

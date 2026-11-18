@@ -66,6 +66,8 @@ pub mod msg_keys {
     // Generic validation
     pub const BAD_REQUEST: &str = "api.error.bad_request";
     pub const VALIDATION_ERROR: &str = "api.error.validation_error";
+    pub const PAYMENT_ERROR: &str = "api.error.payment_error";
+    pub const TOO_MANY_REQUESTS: &str = "api.error.too_many_requests";
 }
 
 /// Seed API-specific translation keys via centralized repo method.

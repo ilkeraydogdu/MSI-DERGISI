@@ -90,7 +90,16 @@
         autocomplete="email"
         required /></label
     ><label
-      >Şifre<input
+      ><span class="auth-label-row"
+        ><span>Şifre</span
+        ><button
+          type="button"
+          class="text-link auth-forgot-trigger"
+          data-auth-view="forgot"
+        >
+          Şifremi unuttum
+        </button></span
+      ><input
         name="password"
         type="password"
         autocomplete="current-password"
@@ -98,6 +107,58 @@
     /></label>
     <p class="form-feedback" role="status"></p>
     <button class="button primary" type="submit">Giriş yap →</button>
+  </form>
+  <form id="forgot-password-form" class="ui-form" hidden>
+    <div class="auth-step-banner">
+      <strong>Şifre Sıfırlama Talebi</strong>
+      <p>
+        Kayıtlı kurumsal veya bireysel e-posta adresinizi girin. Güvenli şifre
+        sıfırlama bağlantısı adresinize iletilecektir.
+      </p>
+    </div>
+    <label
+      >Kayıtlı e-posta adresi<input
+        name="email"
+        type="email"
+        autocomplete="email"
+        placeholder="ad.soyad@kurum.gov.tr"
+        required
+    /></label>
+    <p class="form-feedback" role="status"></p>
+    <button class="button primary" type="submit">
+      Sıfırlama bağlantısı gönder →
+    </button>
+    <button type="button" class="text-link auth-back-btn" data-auth-view="login">
+      ← Giriş ekranına dön
+    </button>
+  </form>
+  <form id="totp-login-form" class="ui-form" hidden>
+    <div class="auth-step-banner is-security">
+      <strong>İki Aşamalı Doğrulama (2FA)</strong>
+      <p>
+        Authenticator uygulamanızdaki doğrulama kodunu veya tek kullanımlık
+        yedek kurtarma kodunuzu girin.
+      </p>
+    </div>
+    <input type="hidden" name="temp_token" value="" />
+    <label
+      >Doğrulama kodu / Yedek kod<input
+        name="code"
+        type="text"
+        class="totp-code-input"
+        autocomplete="one-time-code"
+        minlength="6"
+        maxlength="20"
+        placeholder="000000"
+        required
+    /></label>
+    <p class="form-feedback" role="status"></p>
+    <button class="button primary" type="submit">
+      Doğrula ve giriş yap →
+    </button>
+    <button type="button" class="text-link auth-back-btn" data-auth-view="login">
+      ← Farklı hesapla giriş yap
+    </button>
   </form>
   <form
     id="register-form"

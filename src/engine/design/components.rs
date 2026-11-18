@@ -109,6 +109,209 @@ pub fn category_display_label<'a>(slug: &'a str, lang: &str) -> &'a str {
     }
 }
 
+pub const CANONICAL_SSB_TAG_CODES: &[&str] = &[
+    "kara-araclari",
+    "deniz-araclari",
+    "hava-araclari",
+    "muhimmatlar-ve-fuze-sistemleri",
+    "namlulu-silahlar",
+    "haberlesme-ve-muharebe-destek-sistemleri",
+    "radarlar-ve-sensorler",
+    "simulatorler-ve-egitim-sistemleri",
+    "elektronik-harp-sistemleri",
+    "itki-tahrik-ve-guc-sistemleri",
+    "hizmetler-danismanlik",
+    "hizmetler-egitim",
+    "hizmetler-kurumsal-iletisim",
+    "hizmetler-kurumsal-catering",
+];
+
+pub fn ssb_tag_display_label(code: &str, lang: &str) -> String {
+    let mapped = if lang == "en" {
+        match code {
+            "kara-araclari" => Some("Land Vehicles & Armored Platforms"),
+            "deniz-araclari" => Some("Naval Vessels & Submarines"),
+            "hava-araclari" => Some("Combat & Unmanned Aerial Vehicles"),
+            "muhimmatlar-ve-fuze-sistemleri" => Some("Munitions & Missile Systems"),
+            "namlulu-silahlar" => Some("Barrels, Small Arms & Cannons"),
+            "haberlesme-ve-muharebe-destek-sistemleri" => Some("C4ISR & Tactical Communications"),
+            "radarlar-ve-sensorler" => Some("AESA Radars & Electro-Optical Sensors"),
+            "simulatorler-ve-egitim-sistemleri" => Some("Simulators & Synthetic Training"),
+            "elektronik-harp-sistemleri" => Some("Electronic Warfare & Countermeasures"),
+            "itki-tahrik-ve-guc-sistemleri" => Some("Propulsion, Turboshaft & Powerpacks"),
+            "hizmetler-danismanlik" => Some("Services - Defense Consultancy"),
+            "hizmetler-egitim" => Some("Services - Technical & Operational Training"),
+            "hizmetler-kurumsal-iletisim" => Some("Services - Defense PR & Exhibition Architecture"),
+            "hizmetler-kurumsal-catering" => Some("Services - Field & Summit Catering Logistics"),
+            _ => None,
+        }
+    } else {
+        match code {
+            "kara-araclari" => Some("Kara Araçları"),
+            "deniz-araclari" => Some("Deniz Araçları"),
+            "hava-araclari" => Some("Hava Araçları"),
+            "muhimmatlar-ve-fuze-sistemleri" => Some("Mühimmatlar ve Füze Sistemleri"),
+            "namlulu-silahlar" => Some("Namlulu Silahlar"),
+            "haberlesme-ve-muharebe-destek-sistemleri" => {
+                Some("Haberleşme ve Muharebe Destek Sistemleri")
+            }
+            "radarlar-ve-sensorler" => Some("Radarlar ve Sensörler"),
+            "simulatorler-ve-egitim-sistemleri" => Some("Simülatörler ve Eğitim Sistemleri"),
+            "elektronik-harp-sistemleri" => Some("Elektronik Harp Sistemleri"),
+            "itki-tahrik-ve-guc-sistemleri" => Some("İtki / Tahrik ve Güç Sistemleri"),
+            "hizmetler-danismanlik" => Some("Hizmetler - Danışmanlık"),
+            "hizmetler-egitim" => Some("Hizmetler - Eğitim"),
+            "hizmetler-kurumsal-iletisim" => Some("Hizmetler - Kurumsal İletişim"),
+            "hizmetler-kurumsal-catering" => Some("Hizmetler - Kurumsal Catering"),
+            _ => None,
+        }
+    };
+    mapped
+        .map(str::to_string)
+        .unwrap_or_else(|| code.replace('-', " "))
+}
+
+#[inline]
+fn is_published_content(c: &ContentItem) -> bool {
+    c.status == "published" || c.status.is_empty()
+}
+
+fn is_redundant_excerpt(title: &str, excerpt: &str) -> bool {
+    let t = title.trim().to_lowercase();
+    let e = excerpt.trim().to_lowercase();
+    e.is_empty()
+        || e == t
+        || (t.len() >= 18
+            && e.starts_with(
+                &t[..t
+                    .char_indices()
+                    .nth(18)
+                    .map(|(i, _)| i)
+                    .unwrap_or(t.len())],
+            ))
+        || e.contains("yeni sayısının içerikleri:")
+}
+
+/// Enriches an issue's spreads with non-duplicate excerpts and real SQLite `dergi-icerigi`
+/// dossier records belonging to that issue when `spreads` has fewer than 4 entries.
+pub fn enrich_issue_spreads(
+    issue: &MagazineIssue,
+    contents: &[ContentItem],
+) -> Vec<MagazinePageSpread> {
+    let limit = crate::db::constants::COMPONENTS_PREVIEW_SPREADS_LIMIT;
+    let mut out = Vec::new();
+    let mut used_slugs = std::collections::HashSet::new();
+
+    for raw_sp in &issue.spreads {
+        let mut sp = raw_sp.clone();
+        if let Some(slug) = sp.linked_content_slug.as_deref() {
+            if !slug.is_empty() {
+                used_slugs.insert(slug.to_string());
+            }
+        }
+        if is_redundant_excerpt(&sp.title_tr, &sp.excerpt_tr) {
+            let linked_summary = sp
+                .linked_content_slug
+                .as_deref()
+                .and_then(|slug| {
+                    contents
+                        .iter()
+                        .find(|c| is_published_content(c) && c.slug == slug)
+                })
+                .map(|c| c.summary_tr.trim())
+                .filter(|sum| !is_redundant_excerpt(&sp.title_tr, sum));
+
+            let matched_editorial = if linked_summary.is_none() && sp.title_tr.contains("ARES") {
+                contents
+                    .iter()
+                    .find(|c| {
+                        is_published_content(c)
+                            && c.source_group == "dergi-icerigi"
+                            && c.title_tr.contains("ARES")
+                            && !c.summary_tr.trim().is_empty()
+                    })
+                    .map(|c| (c.slug.as_str(), c.title_tr.trim(), c.summary_tr.trim()))
+            } else {
+                None
+            };
+
+            if let Some(sum) = linked_summary {
+                sp.excerpt_tr = sum.to_string();
+            } else if let Some((slug, full_title, sum)) = matched_editorial {
+                if sp.title_tr.ends_with("...") {
+                    sp.title_tr = full_title.to_string();
+                }
+                sp.excerpt_tr = sum.to_string();
+                sp.linked_content_slug = Some(slug.to_string());
+                used_slugs.insert(slug.to_string());
+            } else if !is_redundant_excerpt(&sp.title_tr, &issue.summary_tr) {
+                sp.excerpt_tr = issue.summary_tr.trim().to_string();
+            } else {
+                sp.excerpt_tr.clear();
+            }
+        }
+        if is_redundant_excerpt(&sp.title_en, &sp.excerpt_en) {
+            if !sp.excerpt_tr.is_empty() && !is_redundant_excerpt(&sp.title_en, &sp.excerpt_tr) {
+                sp.excerpt_en = sp.excerpt_tr.clone();
+            } else {
+                sp.excerpt_en.clear();
+            }
+        }
+        out.push(sp);
+    }
+
+    if out.len() < limit {
+        let mut candidates: Vec<&ContentItem> = contents
+            .iter()
+            .filter(|c| {
+                is_published_content(c)
+                    && c.source_group == "dergi-icerigi"
+                    && c.content_type != "yeni-sayi-kapak"
+                    && !used_slugs.contains(&c.slug)
+                    && (c.issue_number == Some(issue.issue_number)
+                        || (c.issue_number.is_none()
+                            && c.published_at.starts_with(&issue.year.to_string())))
+            })
+            .collect();
+        candidates.sort_by(|a, b| b.published_at.cmp(&a.published_at).then(b.id.cmp(&a.id)));
+
+        for c in candidates {
+            if out.len() >= limit {
+                break;
+            }
+            used_slugs.insert(c.slug.clone());
+            let exc_tr = if is_redundant_excerpt(&c.title_tr, &c.summary_tr) {
+                String::new()
+            } else {
+                c.summary_tr.trim().to_string()
+            };
+            let exc_en = if !c.summary_en.trim().is_empty()
+                && !is_redundant_excerpt(&c.title_en, &c.summary_en)
+            {
+                c.summary_en.trim().to_string()
+            } else {
+                exc_tr.clone()
+            };
+            out.push(MagazinePageSpread {
+                page_no: format!("DOSYA {:02}", out.len() + 1),
+                title_tr: c.title_tr.clone(),
+                title_en: if c.title_en.is_empty() {
+                    c.title_tr.clone()
+                } else {
+                    c.title_en.clone()
+                },
+                category_badge: category_display_label(&c.content_type, "tr").to_string(),
+                image_url: c.cover_image.clone(),
+                excerpt_tr: exc_tr,
+                excerpt_en: exc_en,
+                linked_content_slug: Some(c.slug.clone()),
+            });
+        }
+    }
+
+    out
+}
+
 pub fn asset(path: &str) -> String {
     if path.starts_with("https://") {
         esc(path)
@@ -207,7 +410,7 @@ pub fn issue_card(i: &MagazineIssue, lang: &str) -> String {
 pub fn advertisement(ad: &AdCampaign, lang: &str, id: &str) -> String {
     if let Some(img_path) = ad.image_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         let (w, h) = image_dimensions(img_path).unwrap_or((900, 300));
-        let is_graphic_banner = img_path.contains("msi-dergisi-reklam-");
+        let is_graphic_banner = img_path.contains(crate::db::constants::AD_GRAPHIC_BANNER_SUBSTRING);
         if is_graphic_banner {
             return format!(
                 r#"<aside class="advertisement ad-visual-banner" id="{id}" data-ad-id="{ad_id}" aria-label="Reklam"><a class="ad-banner-frame" href="{href}" data-ad-click-id="{ad_id}"><span class="ad-corner-tag">REKLAM</span><img src="{img}" alt="{sponsor} — {title}" loading="lazy" decoding="async" width="{w}" height="{h}"></a></aside>"#,
@@ -342,7 +545,7 @@ pub fn editorial_sidebar(
 
     let tower_pool: Vec<&AdCampaign> = ads
         .iter()
-        .filter(|a| a.is_active && a.slot_code.starts_with("ad-live-home-right"))
+        .filter(|a| a.is_active && a.slot_code.starts_with(crate::db::constants::AD_SLOT_HOME_RIGHT_PREFIX))
         .collect();
     let seed_key = format!(
         "{}:{}",
@@ -468,7 +671,8 @@ fn select_for_page<'a>(
         .contents
         .iter()
         .filter(|c| {
-            (s.category == "yeni-sayi-kapak" || c.content_type != "yeni-sayi-kapak")
+            is_published_content(c)
+                && (s.category == "yeni-sayi-kapak" || c.content_type != "yeni-sayi-kapak")
                 && (s.source == "all"
                     || s.source == "magazine" && c.source_group == "dergi-icerigi"
                     || s.source == "news" && c.source_group != "dergi-icerigi")
@@ -556,8 +760,8 @@ fn render_section(
                     heading(s)
                 );
             };
-            let preview_spreads: Vec<_> = i.spreads.iter().take(crate::db::constants::COMPONENTS_PREVIEW_SPREADS_LIMIT).collect();
-            let spread_tabs = if preview_spreads.is_empty() {
+            let preview_spreads = enrich_issue_spreads(i, d.contents);
+            let spread_tabs = if preview_spreads.len() <= 1 {
                 String::new()
             } else {
                 format!(
@@ -576,8 +780,25 @@ fn render_section(
                 )
             };
             let live_dossier = if let Some(first_sp) = preview_spreads.first() {
-                let sp_title = esc(localized(d.lang, &first_sp.title_tr, &first_sp.title_en));
-                let sp_excerpt = esc(localized(d.lang, &first_sp.excerpt_tr, &first_sp.excerpt_en));
+                let raw_title = localized(d.lang, &first_sp.title_tr, &first_sp.title_en).trim();
+                let raw_excerpt =
+                    localized(d.lang, &first_sp.excerpt_tr, &first_sp.excerpt_en).trim();
+                let sp_title = esc(raw_title);
+                let show_excerpt =
+                    !raw_excerpt.is_empty() && !raw_excerpt.eq_ignore_ascii_case(raw_title);
+                let excerpt_html = if show_excerpt {
+                    format!(
+                        "<p class=\"dossier-excerpt\" data-dossier-excerpt>{}</p>",
+                        esc(raw_excerpt)
+                    )
+                } else {
+                    "<p class=\"dossier-excerpt\" data-dossier-excerpt hidden></p>".to_string()
+                };
+                let next_btn = if preview_spreads.len() > 1 {
+                    "<button type=\"button\" class=\"dossier-next\" data-hero-next-spread>Sonraki dosya ↻</button>"
+                } else {
+                    ""
+                };
                 let sp_link = first_sp
                     .linked_content_slug
                     .as_deref()
@@ -595,12 +816,13 @@ fn render_section(
                         )
                     });
                 format!(
-                    r#"<div class="hero-live-dossier" data-live-dossier aria-live="polite"><span class="dossier-progress" data-dossier-progress aria-hidden="true"></span><div class="dossier-meta"><span class="dossier-badge" data-dossier-badge>{badge}</span><span class="dossier-pages" data-dossier-pages>{page_no}</span></div><strong class="dossier-title" data-dossier-title>{sp_title}</strong><p class="dossier-excerpt" data-dossier-excerpt>{sp_excerpt}</p><div class="dossier-actions">{sp_link}<button type="button" class="dossier-next" data-hero-next-spread>Sonraki dosya ↻</button></div></div>"#,
+                    r#"<div class="hero-live-dossier" data-live-dossier aria-live="polite"><span class="dossier-progress" data-dossier-progress aria-hidden="true"></span><div class="dossier-meta"><span class="dossier-badge" data-dossier-badge>{badge}</span><span class="dossier-pages" data-dossier-pages>{page_no}</span></div><strong class="dossier-title" data-dossier-title>{sp_title}</strong>{excerpt_html}<div class="dossier-actions">{sp_link}{next_btn}</div></div>"#,
                     badge = esc(&first_sp.category_badge),
                     page_no = esc(&first_sp.page_no),
                     sp_title = sp_title,
-                    sp_excerpt = sp_excerpt,
-                    sp_link = sp_link
+                    excerpt_html = excerpt_html,
+                    sp_link = sp_link,
+                    next_btn = next_btn
                 )
             } else {
                 String::new()
@@ -855,6 +1077,7 @@ mod tests {
             true_read_count: 0,
             placements: vec![],
             ssb_tags: vec![],
+            status: "published".into(),
         }
     }
     #[test]
@@ -997,5 +1220,40 @@ mod tests {
         let html = render_page(&page, &data);
         assert_eq!(html.matches("/icerik/shared-slug\"").count(), 2); // 1 image link + 1 title link = 1 card
         assert_eq!(html.matches("/icerik/interview-only\"").count(), 2);
+    }
+    #[test]
+    fn ssb_tags_and_enriched_spreads_filter_unpublished_drafts() {
+        assert_eq!(ssb_tag_display_label("hava-araclari", "tr"), "Hava Araçları");
+        assert_eq!(
+            ssb_tag_display_label("muhimmatlar-ve-fuze-sistemleri", "tr"),
+            "Mühimmatlar ve Füze Sistemleri"
+        );
+        let issue = MagazineIssue {
+            issue_number: 286,
+            slug: "sayi-286".into(),
+            title_tr: "Sayı 286".into(),
+            title_en: "Issue 286".into(),
+            publish_month_tr: "Kasım".into(),
+            publish_month_en: "November".into(),
+            year: 2026,
+            cover_image: "images/example.webp".into(),
+            is_special_issue: false,
+            event_name: None,
+            page_count: 96,
+            dossier_count: 6,
+            summary_tr: "Özel savunma dosyası özeti.".into(),
+            summary_en: String::new(),
+            pdf_path: String::new(),
+            spreads: vec![],
+        };
+        let mut pub_item = content("dergi-icerigi", "published-dossier");
+        pub_item.issue_number = Some(286);
+        pub_item.title_tr = "KAAN Seri Üretim Analizi".into();
+        let mut draft_item = content("dergi-icerigi", "draft-dossier");
+        draft_item.issue_number = Some(286);
+        draft_item.status = "draft".into();
+        let spreads = enrich_issue_spreads(&issue, &[pub_item, draft_item]);
+        assert_eq!(spreads.len(), 1);
+        assert_eq!(spreads[0].linked_content_slug.as_deref(), Some("published-dossier"));
     }
 }

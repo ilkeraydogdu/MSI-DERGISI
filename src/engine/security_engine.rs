@@ -1,9 +1,14 @@
 use crate::models::SecurityAuditLog;
+use crate::utils::crypto::constant_time_eq;
 use base64::Engine as _;
 use chrono::Utc;
+use hmac::{Hmac, Mac};
 use once_cell::sync::OnceCell;
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::Mutex;
+
+type HmacSha256 = Hmac<Sha256>;
 
 /// Generates a cryptographically random nonce for Content-Security-Policy headers.
 /// Uses 16 random bytes from `/dev/urandom`, base64-encoded to produce a 24-character string.
@@ -13,7 +18,6 @@ pub fn generate_csp_nonce() -> String {
         use std::io::Read;
         let _ = f.read_exact(&mut buf);
     } else {
-        // Fallback: use uuid v4 randomness if /dev/urandom is unavailable
         let id = uuid::Uuid::new_v4();
         buf.copy_from_slice(id.as_bytes());
     }
@@ -23,7 +27,8 @@ pub fn generate_csp_nonce() -> String {
 static RATE_LIMIT_STORE: OnceCell<Mutex<HashMap<String, (u32, i64)>>> = OnceCell::new();
 
 /// Default rate limit values for backward compatibility with tests.
-const DEFAULT_MAX_REQUESTS_PER_MINUTE: u32 = crate::db::constants::RATE_LIMIT_MAX_REQUESTS_PER_MINUTE;
+const DEFAULT_MAX_REQUESTS_PER_MINUTE: u32 =
+    crate::db::constants::RATE_LIMIT_MAX_REQUESTS_PER_MINUTE;
 const DEFAULT_RATE_LIMIT_WINDOW_SECS: i64 = crate::db::constants::RATE_LIMIT_WINDOW_SECONDS;
 
 /// Per-request CSP nonce stored in Axum request extensions.
@@ -39,14 +44,6 @@ impl CentralSecurityFilter {
     }
 
     /// Inspects incoming HTTP request parameters for rate limiting, SQL injection, XSS, and Path Traversal.
-    ///
-    /// # Arguments
-    /// * `path` - The request path
-    /// * `query` - Optional query string
-    /// * `user_agent` - Optional User-Agent header
-    /// * `client_ip` - Client IP address for rate limiting
-    /// * `max_rpm` - Maximum requests per minute (rate limit threshold)
-    /// * `window_secs` - Rate limit window duration in seconds
     pub fn inspect_request_security(
         path: &str,
         query: Option<&str>,
@@ -72,9 +69,7 @@ impl CentralSecurityFilter {
                 if map.len() > crate::db::constants::RATE_LIMIT_STORE_MAX_ENTRIES {
                     map.retain(|_, (_, ts)| now_ts - *ts < window_secs * 2);
                 }
-                let entry = map
-                    .entry(client_ip.to_string())
-                    .or_insert((0, now_ts));
+                let entry = map.entry(client_ip.to_string()).or_insert((0, now_ts));
                 if now_ts - entry.1 >= window_secs {
                     entry.0 = 1;
                     entry.1 = now_ts;
@@ -135,7 +130,10 @@ impl CentralSecurityFilter {
                     request_path: path.to_string(),
                     event_type: "PATH_TRAVERSAL_ATTEMPT".to_string(),
                     threat_level: "CRITICAL".to_string(),
-                    details: format!("Dizin gezinme (Path Traversal) imzası tespit edildi: '{}'", pat),
+                    details: format!(
+                        "Dizin gezinme (Path Traversal) imzası tespit edildi: '{}'",
+                        pat
+                    ),
                     blocked: true,
                     created_at: now_str,
                 });
@@ -166,7 +164,10 @@ impl CentralSecurityFilter {
                     request_path: path.to_string(),
                     event_type: "SQL_INJECTION_ATTEMPT".to_string(),
                     threat_level: "CRITICAL".to_string(),
-                    details: format!("SQL Injection vektörü tespit edildi ve engellendi: '{}'", pat),
+                    details: format!(
+                        "SQL Injection vektörü tespit edildi ve engellendi: '{}'",
+                        pat
+                    ),
                     blocked: true,
                     created_at: now_str,
                 });
@@ -256,29 +257,57 @@ impl CentralSecurityFilter {
     /// (`<script>`, inline `on*` handlers, `javascript:` URIs, `<iframe` injections) while keeping
     /// legitimate article formatting, figures, tables, links, and media intact.
     pub fn sanitize_rich_html(raw: &str) -> String {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashSet;
 
         let mut builder = ammonia::Builder::default();
-        let extra_tags = ["figure", "figcaption", "video", "source", "section", "aside", "time", "mark"];
+        let extra_tags = [
+            "figure",
+            "figcaption",
+            "video",
+            "source",
+            "section",
+            "aside",
+            "time",
+            "mark",
+        ];
         for tag in extra_tags {
             builder.add_tags([tag]);
         }
 
-        let generic_attrs: HashSet<&str> = ["class", "lang", "dir", "title"].into_iter().collect();
+        let generic_attrs: HashSet<&str> =
+            ["class", "lang", "dir", "title"].into_iter().collect();
         builder.add_generic_attributes(generic_attrs);
 
         let mut tag_attrs: HashMap<&str, HashSet<&str>> = HashMap::new();
         tag_attrs.insert(
             "img",
-            ["src", "alt", "width", "height", "loading", "decoding", "fetchpriority"]
-                .into_iter()
-                .collect(),
+            [
+                "src",
+                "alt",
+                "width",
+                "height",
+                "loading",
+                "decoding",
+                "fetchpriority",
+            ]
+            .into_iter()
+            .collect(),
         );
         tag_attrs.insert(
             "video",
-            ["src", "controls", "poster", "preload", "width", "height", "playsinline", "muted", "loop"]
-                .into_iter()
-                .collect(),
+            [
+                "src",
+                "controls",
+                "poster",
+                "preload",
+                "width",
+                "height",
+                "playsinline",
+                "muted",
+                "loop",
+            ]
+            .into_iter()
+            .collect(),
         );
         tag_attrs.insert("source", ["src", "type"].into_iter().collect());
         tag_attrs.insert("time", ["datetime"].into_iter().collect());
@@ -291,16 +320,16 @@ impl CentralSecurityFilter {
     }
 
     /// Returns strict HTTP security headers and engine execution latency telemetry.
-    /// When `nonce` is provided, replaces `'unsafe-inline'` in `script-src` with `'nonce-{value}'`.
-    /// The `style-src` directive retains `'unsafe-inline'` temporarily for CSS compatibility.
+    /// Hardened CSP: removes `'unsafe-inline'` from `default-src` and enforces
+    /// `object-src 'none'; base-uri 'self'; form-action 'self';`.
     pub fn security_headers_list(exec_us: u128, nonce: Option<&str>) -> Vec<(&'static str, String)> {
         let csp = if let Some(n) = nonce {
             format!(
-                "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' 'nonce-{}'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self';",
+                "default-src 'self' https: data: blob:; script-src 'self' 'nonce-{}'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';",
                 n
             )
         } else {
-            "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self';".to_string()
+            "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';".to_string()
         };
         vec![
             ("X-Content-Type-Options", "nosniff".to_string()),
@@ -313,8 +342,6 @@ impl CentralSecurityFilter {
                 "Referrer-Policy",
                 "strict-origin-when-cross-origin".to_string(),
             ),
-            // SECURITY FIX: Removed deprecated X-XSS-Protection header (ignored by modern browsers,
-            // provides false sense of security). CSP is the correct XSS mitigation mechanism.
             (
                 "Permissions-Policy",
                 "geolocation=(), microphone=(), camera=()".to_string(),
@@ -326,7 +353,6 @@ impl CentralSecurityFilter {
 }
 
 /// Backward-compatible wrapper using default rate limit values (120 RPM, 60s window).
-/// Retained for existing test compatibility.
 #[allow(dead_code)]
 pub fn inspect_request_security(
     path: &str,
@@ -353,7 +379,140 @@ pub fn inspect_request_security_with_limits(
     max_rpm: u32,
     window_secs: i64,
 ) -> Result<(), SecurityAuditLog> {
-    CentralSecurityFilter::inspect_request_security(path, query, user_agent, client_ip, max_rpm, window_secs)
+    CentralSecurityFilter::inspect_request_security(
+        path,
+        query,
+        user_agent,
+        client_ip,
+        max_rpm,
+        window_secs,
+    )
+}
+
+// =========================================================================
+// CSRF Double-Submit Cookie Protection
+// =========================================================================
+
+/// Generates a signed CSRF token: `{timestamp_secs}.{hmac_hex}`.
+pub fn generate_csrf_token(secret: &str) -> String {
+    let timestamp = Utc::now().timestamp();
+    let payload = timestamp.to_string();
+    let sig = sign_csrf_payload(&payload, secret);
+    format!("{}.{}", payload, sig)
+}
+
+/// Validates a CSRF token against the server secret.
+/// Returns `true` if the signature matches in constant time and the token is within `[-60s, +3600s]`.
+pub fn validate_csrf_token(token: &str, secret: &str) -> bool {
+    let parts: Vec<&str> = token.trim().splitn(2, '.').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let Ok(timestamp) = parts[0].parse::<i64>() else {
+        return false;
+    };
+    let age = Utc::now()
+        .timestamp()
+        .checked_sub(timestamp)
+        .unwrap_or(i64::MAX);
+    if !(-60..=3600).contains(&age) {
+        return false;
+    }
+    let expected_sig = sign_csrf_payload(parts[0], secret);
+    constant_time_eq(parts[1].as_bytes(), expected_sig.as_bytes())
+}
+
+fn sign_csrf_payload(payload: &str, secret: &str) -> String {
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts arbitrary key lengths");
+    mac.update(b"MSI-CSRF-V1:");
+    mac.update(payload.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+// =========================================================================
+// Login Brute-Force Protection (Case-Normalized)
+// =========================================================================
+
+static LOGIN_ATTEMPT_STORE: OnceCell<Mutex<HashMap<String, (u32, i64)>>> = OnceCell::new();
+
+/// Maximum failed login attempts before temporary lockout (15 minutes).
+const LOGIN_LOCKOUT_THRESHOLD: u32 = 5;
+const LOGIN_LOCKOUT_DURATION_SECS: i64 = 900;
+/// Extended lockout after 10+ failures (1 hour).
+const LOGIN_EXTENDED_LOCKOUT_THRESHOLD: u32 = 10;
+const LOGIN_EXTENDED_LOCKOUT_DURATION_SECS: i64 = 3600;
+
+/// Result of a login attempt check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoginCheckResult {
+    /// Login is allowed to proceed.
+    Allowed,
+    /// Account is temporarily locked. Contains remaining lockout seconds and failed attempt count.
+    Locked { remaining_secs: i64, attempts: u32 },
+}
+
+fn normalize_login_key(key: &str) -> String {
+    key.trim().to_lowercase()
+}
+
+/// Checks whether a login attempt should be allowed based on recent failure history.
+/// Always normalizes `key.trim().to_lowercase()` so mixed-case emails cannot bypass lockout.
+pub fn check_login_allowed(key: &str) -> LoginCheckResult {
+    let normalized = normalize_login_key(key);
+    let store = LOGIN_ATTEMPT_STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(map) = store.lock() else {
+        return LoginCheckResult::Allowed;
+    };
+
+    if let Some((attempts, last_attempt_ts)) = map.get(&normalized) {
+        let now = Utc::now().timestamp();
+        let elapsed = now - last_attempt_ts;
+
+        let lockout_duration = if *attempts >= LOGIN_EXTENDED_LOCKOUT_THRESHOLD {
+            LOGIN_EXTENDED_LOCKOUT_DURATION_SECS
+        } else if *attempts >= LOGIN_LOCKOUT_THRESHOLD {
+            LOGIN_LOCKOUT_DURATION_SECS
+        } else {
+            return LoginCheckResult::Allowed;
+        };
+
+        if elapsed < lockout_duration {
+            return LoginCheckResult::Locked {
+                remaining_secs: lockout_duration - elapsed,
+                attempts: *attempts,
+            };
+        }
+    }
+
+    LoginCheckResult::Allowed
+}
+
+/// Records a failed login attempt under `key.trim().to_lowercase()`.
+pub fn record_failed_login(key: &str) {
+    let normalized = normalize_login_key(key);
+    if normalized.is_empty() {
+        return;
+    }
+    let store = LOGIN_ATTEMPT_STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut map) = store.lock() {
+        let now = Utc::now().timestamp();
+        if map.len() > 10_000 {
+            map.retain(|_, (_, ts)| now - *ts < LOGIN_EXTENDED_LOCKOUT_DURATION_SECS * 2);
+        }
+        let entry = map.entry(normalized).or_insert((0, 0));
+        entry.0 = entry.0.saturating_add(1);
+        entry.1 = now;
+    }
+}
+
+/// Resets the failed login counter for `key.trim().to_lowercase()` after successful authentication.
+pub fn reset_login_attempts(key: &str) {
+    let normalized = normalize_login_key(key);
+    let store = LOGIN_ATTEMPT_STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut map) = store.lock() {
+        map.remove(&normalized);
+    }
 }
 
 pub fn escape_html(input: &str) -> String {
@@ -375,7 +534,10 @@ pub fn security_headers_list(exec_us: u128) -> Vec<(&'static str, String)> {
 }
 
 /// Nonce-aware wrapper for production use.
-pub fn security_headers_list_with_nonce(exec_us: u128, nonce: Option<&str>) -> Vec<(&'static str, String)> {
+pub fn security_headers_list_with_nonce(
+    exec_us: u128,
+    nonce: Option<&str>,
+) -> Vec<(&'static str, String)> {
     CentralSecurityFilter::security_headers_list(exec_us, nonce)
 }
 
@@ -393,5 +555,52 @@ mod tests {
         assert!(!clean.contains("onerror"));
         assert!(!clean.contains("<script"));
         assert!(!clean.contains("javascript:"));
+    }
+
+    #[test]
+    fn hardened_csp_contains_object_src_base_uri_and_form_action() {
+        let headers = security_headers_list_with_nonce(120, Some("testNonce123"));
+        let csp = headers
+            .iter()
+            .find(|(k, _)| *k == "Content-Security-Policy")
+            .map(|(_, v)| v.as_str())
+            .expect("CSP header present");
+        assert!(csp.contains("object-src 'none'"));
+        assert!(csp.contains("base-uri 'self'"));
+        assert!(csp.contains("form-action 'self'"));
+        assert!(csp.contains("'nonce-testNonce123'"));
+        assert!(!csp.starts_with("default-src 'self' https: data: blob: 'unsafe-inline'"));
+    }
+
+    #[test]
+    fn csrf_token_round_trip_and_tamper_rejection() {
+        let secret = "csrf-unit-test-secret";
+        let tok = generate_csrf_token(secret);
+        assert!(validate_csrf_token(&tok, secret));
+        assert!(!validate_csrf_token(&tok, "wrong-secret"));
+        assert!(!validate_csrf_token("1700000000.deadbeef", secret));
+    }
+
+    #[test]
+    fn login_lockout_normalizes_case_and_whitespace() {
+        let key_mixed = "  Operator.LockoutTest@MSIDergisi.com ";
+        let key_upper = "OPERATOR.LOCKOUTTEST@MSIDERGISI.COM";
+        reset_login_attempts(key_mixed);
+        assert_eq!(check_login_allowed(key_upper), LoginCheckResult::Allowed);
+
+        for _ in 0..5 {
+            record_failed_login(key_mixed);
+        }
+
+        match check_login_allowed(key_upper) {
+            LoginCheckResult::Locked { remaining_secs, attempts } => {
+                assert!(remaining_secs > 0);
+                assert_eq!(attempts, 5);
+            }
+            LoginCheckResult::Allowed => panic!("expected account to be locked regardless of email case"),
+        }
+
+        reset_login_attempts("operator.lockouttest@msidergisi.com");
+        assert_eq!(check_login_allowed(key_mixed), LoginCheckResult::Allowed);
     }
 }

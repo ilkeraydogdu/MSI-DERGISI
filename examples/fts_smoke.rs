@@ -14,6 +14,7 @@ fn make_content(slug: &str, title_tr: &str, body_tr: &str) -> ContentItem {
         body_en: String::new(),
         content_type: "haberler".to_string(),
         source_group: "gunluk-haber".to_string(),
+        status: "published".to_string(),
         cover_image: String::new(),
         author_name: "Test Yazar".to_string(),
         author_title: "Editör".to_string(),

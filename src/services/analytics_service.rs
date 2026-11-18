@@ -26,7 +26,7 @@ pub fn compute_content_report(
     let event_count = matching_events.len() as i64;
     let computed_true_reads = matching_events
         .iter()
-        .filter(|e| (e.duration_sec >= 25 && e.scroll_depth_pct >= 70) || e.is_true_read)
+        .filter(|e| (e.duration_sec >= crate::db::constants::TRUE_READ_MIN_DURATION_SEC && e.scroll_depth_pct >= crate::db::constants::TRUE_READ_MIN_SCROLL_PCT) || e.is_true_read)
         .count() as i64;
 
     let total_views = if event_count > 0 {
@@ -106,7 +106,7 @@ pub fn compute_ad_report(ad: &AdCampaign, events: &[AnalyticsEvent]) -> AdAnalyt
     };
 
     let ctr_pct = if impressions > 0 {
-        ((clicks as f64 / impressions as f64) * 10000.0).round() / 100.0
+        ((clicks as f64 / impressions as f64) * crate::db::constants::CTR_MULTIPLIER).round() / 100.0
     } else {
         0.0
     };
@@ -237,4 +237,237 @@ fn build_institution_breakdown(events: &[&AnalyticsEvent]) -> Vec<InstitutionBre
 
 fn round_one_decimal(val: f64) -> f64 {
     (val * 10.0).round() / 10.0
+}
+
+/// Normalizes ISO `'T'` and SQLite space `' '` timestamps to `YYYY-MM-DD HH:MM:SS`
+/// so lexicographical cutoff comparisons never fail when timestamps use `' '` instead of `'T'`.
+fn normalize_timestamp_for_cmp(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let replaced = trimmed.replace('T', " ").trim_end_matches('Z').to_string();
+    if replaced.len() == 10 {
+        format!("{} 00:00:00", replaced)
+    } else if replaced.len() >= 19 {
+        replaced[..19].to_string()
+    } else {
+        replaced
+    }
+}
+
+// =========================================================================
+// Content Performance Analytics (Author, Category & Trending)
+// =========================================================================
+
+/// Computes author-based performance metrics by grouping content analytics by `author_name`.
+/// Returns authors sorted by `total_views` descending.
+pub fn compute_author_performance(
+    contents: &[ContentItem],
+    events: &[AnalyticsEvent],
+) -> Vec<serde_json::Value> {
+    let mut author_map: HashMap<String, serde_json::Map<String, serde_json::Value>> =
+        HashMap::new();
+
+    for content in contents {
+        let author = if content.author_name.trim().is_empty() {
+            "unknown".to_string()
+        } else {
+            content.author_name.trim().to_string()
+        };
+        let report = compute_content_report(content, events);
+
+        let entry = author_map.entry(author.clone()).or_insert_with(|| {
+            let mut m = serde_json::Map::new();
+            m.insert("author".to_string(), serde_json::json!(author));
+            m.insert("content_count".to_string(), serde_json::json!(0i64));
+            m.insert("total_views".to_string(), serde_json::json!(0i64));
+            m.insert("total_true_reads".to_string(), serde_json::json!(0i64));
+            m.insert("sum_duration".to_string(), serde_json::json!(0.0f64));
+            m.insert("sum_scroll".to_string(), serde_json::json!(0.0f64));
+            m
+        });
+
+        entry["content_count"] =
+            serde_json::json!(entry["content_count"].as_i64().unwrap_or(0) + 1);
+        entry["total_views"] =
+            serde_json::json!(entry["total_views"].as_i64().unwrap_or(0) + report.total_views);
+        entry["total_true_reads"] =
+            serde_json::json!(entry["total_true_reads"].as_i64().unwrap_or(0) + report.true_reads);
+        entry["sum_duration"] = serde_json::json!(
+            entry["sum_duration"].as_f64().unwrap_or(0.0) + report.avg_duration_sec
+        );
+        entry["sum_scroll"] =
+            serde_json::json!(entry["sum_scroll"].as_f64().unwrap_or(0.0) + report.avg_scroll_pct);
+    }
+
+    let mut results: Vec<serde_json::Value> = author_map
+        .into_values()
+        .map(|mut m| {
+            let count = m["content_count"].as_i64().unwrap_or(1).max(1) as f64;
+            m.insert(
+                "avg_duration_sec".to_string(),
+                serde_json::json!(round_one_decimal(
+                    m["sum_duration"].as_f64().unwrap_or(0.0) / count
+                )),
+            );
+            m.insert(
+                "avg_scroll_pct".to_string(),
+                serde_json::json!(round_one_decimal(
+                    m["sum_scroll"].as_f64().unwrap_or(0.0) / count
+                )),
+            );
+            let views = m["total_views"].as_i64().unwrap_or(0).max(1) as f64;
+            let true_reads = m["total_true_reads"].as_i64().unwrap_or(0) as f64;
+            let engagement = round_one_decimal((true_reads / views) * 100.0);
+            m.insert("engagement_pct".to_string(), serde_json::json!(engagement));
+            m.remove("sum_duration");
+            m.remove("sum_scroll");
+            serde_json::Value::Object(m)
+        })
+        .collect();
+
+    results.sort_by(|a, b| {
+        b["total_views"]
+            .as_i64()
+            .unwrap_or(0)
+            .cmp(&a["total_views"].as_i64().unwrap_or(0))
+    });
+
+    results
+}
+
+/// Computes category-based performance trends by grouping content analytics by primary `content_type`.
+/// Returns categories sorted by `total_views` descending.
+pub fn compute_category_performance(
+    contents: &[ContentItem],
+    events: &[AnalyticsEvent],
+) -> Vec<serde_json::Value> {
+    let mut cat_map: HashMap<String, serde_json::Map<String, serde_json::Value>> = HashMap::new();
+
+    for content in contents {
+        let category = if content.content_type.trim().is_empty() {
+            "uncategorized".to_string()
+        } else {
+            content.content_type.trim().to_string()
+        };
+        let report = compute_content_report(content, events);
+
+        let entry = cat_map.entry(category.clone()).or_insert_with(|| {
+            let mut m = serde_json::Map::new();
+            m.insert("category".to_string(), serde_json::json!(category));
+            m.insert("content_count".to_string(), serde_json::json!(0i64));
+            m.insert("total_views".to_string(), serde_json::json!(0i64));
+            m.insert("total_true_reads".to_string(), serde_json::json!(0i64));
+            m.insert("sum_duration".to_string(), serde_json::json!(0.0f64));
+            m
+        });
+
+        entry["content_count"] =
+            serde_json::json!(entry["content_count"].as_i64().unwrap_or(0) + 1);
+        entry["total_views"] =
+            serde_json::json!(entry["total_views"].as_i64().unwrap_or(0) + report.total_views);
+        entry["total_true_reads"] =
+            serde_json::json!(entry["total_true_reads"].as_i64().unwrap_or(0) + report.true_reads);
+        entry["sum_duration"] = serde_json::json!(
+            entry["sum_duration"].as_f64().unwrap_or(0.0) + report.avg_duration_sec
+        );
+    }
+
+    let mut results: Vec<serde_json::Value> = cat_map
+        .into_values()
+        .map(|mut m| {
+            let count = m["content_count"].as_i64().unwrap_or(1).max(1) as f64;
+            m.insert(
+                "avg_duration_sec".to_string(),
+                serde_json::json!(round_one_decimal(
+                    m["sum_duration"].as_f64().unwrap_or(0.0) / count
+                )),
+            );
+            let views = m["total_views"].as_i64().unwrap_or(0).max(1) as f64;
+            let true_reads = m["total_true_reads"].as_i64().unwrap_or(0) as f64;
+            m.insert(
+                "engagement_pct".to_string(),
+                serde_json::json!(round_one_decimal((true_reads / views) * 100.0)),
+            );
+            m.remove("sum_duration");
+            serde_json::Value::Object(m)
+        })
+        .collect();
+
+    results.sort_by(|a, b| {
+        b["total_views"]
+            .as_i64()
+            .unwrap_or(0)
+            .cmp(&a["total_views"].as_i64().unwrap_or(0))
+    });
+
+    results
+}
+
+/// Returns trending content: top `limit` articles by recent event activity over the last 7 days
+/// using space-safe timestamp normalization (`YYYY-MM-DD HH:MM:SS`).
+pub fn compute_trending_content(
+    contents: &[ContentItem],
+    events: &[AnalyticsEvent],
+    limit: usize,
+) -> Vec<serde_json::Value> {
+    let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+    let cutoff = seven_days_ago.format("%Y-%m-%d %H:%M:%S").to_string();
+
+    let mut slug_counts: HashMap<String, i64> = HashMap::new();
+    for ev in events {
+        if ev.event_type.starts_with("ad_") {
+            continue;
+        }
+        let ev_ts = normalize_timestamp_for_cmp(&ev.created_at);
+        if ev_ts >= cutoff {
+            if let Some(ref slug) = ev.content_slug {
+                let norm_slug = slug.trim().to_lowercase();
+                if !norm_slug.is_empty() {
+                    *slug_counts.entry(norm_slug).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    let mut trending: Vec<serde_json::Value> = contents
+        .iter()
+        .filter(|c| crate::services::content_service::is_publicly_visible(c))
+        .filter_map(|c| {
+            let recent_views = slug_counts
+                .get(&c.slug.trim().to_lowercase())
+                .copied()
+                .unwrap_or(0);
+            if recent_views > 0 {
+                Some(serde_json::json!({
+                    "slug": c.slug,
+                    "title_tr": c.title_tr,
+                    "author_name": c.author_name,
+                    "content_type": c.content_type,
+                    "recent_views_7d": recent_views,
+                    "total_views": c.view_count,
+                    "true_reads": c.true_read_count,
+                }))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    trending.sort_by(|a, b| {
+        b["recent_views_7d"]
+            .as_i64()
+            .unwrap_or(0)
+            .cmp(&a["recent_views_7d"].as_i64().unwrap_or(0))
+            .then_with(|| {
+                b["total_views"]
+                    .as_i64()
+                    .unwrap_or(0)
+                    .cmp(&a["total_views"].as_i64().unwrap_or(0))
+            })
+    });
+
+    trending.truncate(limit);
+    trending
 }

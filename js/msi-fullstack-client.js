@@ -329,7 +329,7 @@
 
         container.innerHTML = `
             <div style="text-align:center;">
-                <img src="${escapeHtml(sp.image_url)}" alt="${escapeHtml(title)}" style="width:100%; max-height:240px; object-fit:cover; border-radius:8px; border:1px solid var(--msi-border, #E2E8F0);">
+                <img src="${escapeHtml(sp.image_url)}" alt="${escapeHtml(title)}" style="width:100%; max-height:240px; object-fit:cover; border-radius:8px; border:1px solid var(--msi-border, #E2E8F0);" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22240%22 viewBox=%220 0 400 240%22%3E%3Crect fill=%22%23e2e8f0%22 width=%22400%22 height=%22240%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-size=%2216%22 fill=%22%2364748b%22%3EGörsel yüklenemedi%3C/text%3E%3C/svg%3E';">
             </div>
             <div>
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">

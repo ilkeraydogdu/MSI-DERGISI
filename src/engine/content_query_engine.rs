@@ -37,20 +37,33 @@ impl CentralContentQueryEngine {
     /// # Returns
     /// `ContentQueryResult` with paginated items, metadata, and telemetry.
     pub fn execute(db: &Database, query: &SearchFilterQuery) -> ContentQueryResult {
+        Self::execute_internal(db, query, false)
+    }
+
+    /// Admin query entry point: includes `draft`, `pending_review`, and `rejected` items and supports up to 1000 per_page.
+    pub fn execute_admin(db: &Database, query: &SearchFilterQuery) -> ContentQueryResult {
+        Self::execute_internal(db, query, true)
+    }
+
+    fn execute_internal(
+        db: &Database,
+        query: &SearchFilterQuery,
+        include_non_published: bool,
+    ) -> ContentQueryResult {
         let start = Instant::now();
 
-        // Normalize pagination params
+        let max_per_page = if include_non_published { 1000 } else { MAX_PER_PAGE };
+        let default_pp = if include_non_published { 200 } else { DEFAULT_PER_PAGE };
         let per_page = query
             .per_page
-            .unwrap_or(DEFAULT_PER_PAGE)
-            .clamp(1, MAX_PER_PAGE);
+            .unwrap_or(default_pp)
+            .clamp(1, max_per_page);
         let page = query.page.unwrap_or(1).max(1);
 
-        // Check cache
-        let cache_key = Self::compute_cache_key(query, per_page, page);
+        let cache_key = Self::compute_cache_key(query, per_page, page)
+            ^ if include_non_published { 0xA5A5_5A5A_u64 } else { 0 };
         if let Ok(guard) = QUERY_CACHE.read() {
             if let Some(cached) = guard.get(&cache_key) {
-                // Cache valid for 5 seconds
                 if cached.cached_at.elapsed().as_secs() < 5 {
                     let mut result = cached.result.clone();
                     result.cache_hit = true;
@@ -60,10 +73,18 @@ impl CentralContentQueryEngine {
             }
         }
 
-        // Get snapshot via CentralQueryEngine (L1 cache)
         let snap = CentralQueryEngine::snapshot(db);
+        let visible_pool: Vec<ContentItem> = if include_non_published {
+            snap.data.contents.clone()
+        } else {
+            snap.data
+                .contents
+                .iter()
+                .filter(|c| c.status.is_empty() || c.status == "published")
+                .cloned()
+                .collect()
+        };
 
-        // Build full SearchFilterQuery for faceted search (reuse existing engine)
         let facet_query = SearchFilterQuery {
             q: query.q.clone(),
             category: query.category.clone(),
@@ -75,15 +96,14 @@ impl CentralContentQueryEngine {
             is_sponsored: query.is_sponsored,
             sort_by: query.sort_by.clone(),
             lang: query.lang.clone(),
-            limit: None, // No limit at facet stage; we paginate after
+            limit: None,
             page: None,
             per_page: None,
         };
 
-        // Execute faceted search (existing CentralSearchEngine handles matching + sorting)
         let facet_res = CentralSearchEngine::execute_faceted_search(
             &facet_query,
-            &snap.data.contents,
+            &visible_pool,
             &snap.data.categories,
             &snap.data.ssb_tags,
             &snap.data.issues,

@@ -2,6 +2,14 @@
   "use strict";
   const $ = (s) => document.querySelector(s),
     $$ = (s) => [...document.querySelectorAll(s)];
+  const adminBase =
+    (
+      document.body?.dataset?.adminPath ||
+      location.pathname.replace(/\/tasarim\/?$/, "") ||
+      "/msi-komuta"
+    ).replace(/\/+$/, "") || "/msi-komuta";
+  const adminLink = $("#editor-admin-link");
+  if (adminLink) adminLink.href = adminBase;
   const kinds = {
     magazine_hero: "Dergi kapağı",
     news_hero: "Haber manşeti",
@@ -323,16 +331,27 @@
     renderTheme();
     renderNavigation();
   }
+  function jsonCsrfHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    const match = document.cookie
+      .split(";")
+      .map((c) => c.trim())
+      .find((c) => c.startsWith("csrf_token="));
+    if (match) {
+      headers["X-CSRF-Token"] = decodeURIComponent(match.substring("csrf_token=".length));
+    }
+    return headers;
+  }
   async function preview() {
     if (!config) return;
     const request = ++requestId;
     const selected = page().slug;
     try {
       const response = await fetch(
-        "/admin/tasarim/onizleme?page=" + encodeURIComponent(selected),
+        `${adminBase}/tasarim/onizleme?page=${encodeURIComponent(selected)}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: jsonCsrfHeaders(),
           body: JSON.stringify(config),
         },
       );
@@ -341,7 +360,7 @@
         const data = await response
           .json()
           .catch(() => ({ error: "Önizleme oluşturulamadı." }));
-        throw Error(data.error || "Önizleme oluşturulamadı.");
+        throw Error(data.message || data.error || "Önizleme oluşturulamadı.");
       }
       const html = await response.text();
       if (request !== requestId) return;
@@ -369,11 +388,12 @@
     try {
       const response = await fetch("/api/v1/admin/design", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonCsrfHeaders(),
         body: JSON.stringify(submitted),
       });
       const data = await response.json();
-      if (!response.ok) throw Error(data.error || "Kaydetme başarısız.");
+      if (!response.ok)
+        throw Error(data.message || data.error || "Kaydetme başarısız.");
       saved = clone(submitted);
       if (revision === atRevision) {
         dirty = false;
@@ -537,7 +557,7 @@
     try {
       if (file.size > 500000) throw Error("Dosya en fazla 500 KB olabilir.");
       const imported = JSON.parse(await file.text());
-      const response = await fetch("/admin/tasarim/onizleme", {
+      const response = await fetch(`${adminBase}/tasarim/onizleme`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(imported),
@@ -546,7 +566,9 @@
         const error = await response
           .json()
           .catch(() => ({ error: "Geçersiz tasarım dosyası." }));
-        throw Error(error.error);
+        throw Error(
+          error.message || error.error || "Geçersiz tasarım dosyası.",
+        );
       }
       config = imported;
       pageIndex = 0;
@@ -588,7 +610,8 @@
     try {
       const response = await fetch("/api/v1/admin/design");
       if (!response.ok) throw Error("Tasarım ayarları yüklenemedi.");
-      const data = await response.json();
+      const rawData = await response.json();
+      const data = rawData?.data || rawData;
       saved = clone(data.config);
       config = data.config;
       defaults = data.defaults;

@@ -42,6 +42,7 @@ pub fn test_config(db_path: &str) -> AppConfig {
         watermark_secret: "TEST-WATERMARK-SECRET".into(),
         admin_default_user: "admin@test.msidergisi.com".into(),
         admin_default_pass: "TestAdmin2026!".into(),
+        admin_path_secret: "msi-komuta".into(),
         ad_max_quota_per_keyword: 3,
         paytr_merchant_id: "TEST_MERCHANT_ID".into(),
         paytr_merchant_key: "test_merchant_key_123".into(),
@@ -55,6 +56,19 @@ pub fn test_config(db_path: &str) -> AppConfig {
         paytr_api_url: "https://www.paytr.com/odeme/api/get-token".into(),
         social_media_urls: vec!["https://test.msidergisi.com".into()],
         legacy_seed_secret: "test-legacy-seed-secret".into(),
+        monitoring_enabled: false,
+        monitoring_vhosts_path: "/tmp".into(),
+        monitoring_nginx_log_path: "/tmp/nonexistent_access.log".into(),
+        monitoring_fail2ban_log_path: "/tmp/nonexistent_fail2ban.log".into(),
+        monitoring_cert_path: "/tmp".into(),
+        monitoring_fast_interval_secs: 60,
+        monitoring_medium_interval_secs: 300,
+        monitoring_slow_interval_secs: 3600,
+        monitoring_retention_days: 7,
+        monitoring_node_ports: vec![],
+        monitoring_redis_port: 6379,
+        monitoring_smtp_port: 25,
+        indexnow_api_url: "https://api.indexnow.org/indexnow".into(),
     }
 }
 
@@ -74,6 +88,7 @@ pub fn build_test_state(label: &str) -> (AppState, String) {
         config: Arc::new(config),
         db: database,
         translations,
+        monitoring_cache: None,
     };
 
     (state, db_path)
@@ -163,6 +178,7 @@ pub fn fixture_content(seed: i64) -> ContentItem {
                 "deniz-araclari".into()
             },
         ],
+        status: "published".into(),
     }
 }
 
@@ -190,6 +206,9 @@ pub fn fixture_user(seed: i64) -> UserAccount {
         email_consent: true,
         ssb_interests: vec!["hava-araclari".into(), "radarlar-ve-sensorler".into()],
         created_at: "2026-01-01 00:00:00".into(),
+        email_verified: false,
+        marketing_emails_opted_in: true,
+        totp_enabled: false,
     }
 }
 

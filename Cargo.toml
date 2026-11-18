@@ -36,6 +36,10 @@ tokio-util = "0.7"
 r2d2 = "0.8"
 r2d2_sqlite = "0.25"
 rusqlite_migration = "1"
+serde_urlencoded = "0.7.1"
+totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
+qrcode = "0.14"
+libc = "0.2.191"
 
 [profile.release]
 opt-level = 3

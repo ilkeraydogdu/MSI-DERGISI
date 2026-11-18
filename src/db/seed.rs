@@ -708,9 +708,11 @@ fn seed_magazine_issues(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 fn seed_users_and_verifications(conn: &Connection) -> rusqlite::Result<()> {
-    let secret = "[REDACTED_SESSION_SECRET]";
-    let admin_pw = crate::services::auth_service::hash_password("[REDACTED_ADMIN_DEFAULT_PASS]", secret);
-    let reader_pw = crate::services::auth_service::hash_password("[REDACTED_SEED_PW]", secret);
+    let secret = std::env::var("SEED_SECRET_KEY")
+        .or_else(|_| std::env::var("SESSION_SECRET"))
+        .unwrap_or_else(|_| "msi-seed-fallback".to_string());
+    let admin_pw = crate::services::auth_service::hash_password("[REDACTED_ADMIN_DEFAULT_PASS]", &secret);
+    let reader_pw = crate::services::auth_service::hash_password("[REDACTED_SEED_PW]", &secret);
 
     let users: &[(&str, &str, &str, &str, &str, &str, &str, i32, &str, Option<&str>, i32, &str)] = &[
         ("operator@msidergisi.com", &admin_pw, "UMSA Operasyon Merkezi", "site_operator", "Sektör Kuruluşları", "UMSA Prodüksiyon - MSI Dergisi", "Baş Operatör & Yayın Yönetmeni", 1, "Kurumsal Tam Yetki", Some("2030-12-31"), 0, "[\"hava-araclari\",\"deniz-araclari\",\"kara-araclari\",\"radarlar-ve-sensorler\"]"),
@@ -3750,3 +3752,185 @@ fn seed_live_msi_harvested_data(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("INSERT OR IGNORE INTO content_placements (content_id, category_slug) VALUES (?1, ?2)", params![cid, "haberler"])?;
     }    Ok(())
 }
+
+/// Seeds unified RBAC roles into `user_roles` and dedicated staff test accounts into `users`.
+/// Idempotent: preserves custom roles (`is_system = 0`) and never overwrites `operator@msidergisi.com`.
+pub fn seed_user_roles(db: &super::Database) -> Result<(), String> {
+    use rusqlite::params;
+
+    let roles: &[(&str, &str, &str, &str, i32)] = &[
+        ("super_admin", "Süper Yönetici", "Super Admin", r#"["*"]"#, 1),
+        ("admin", "Yönetici", "Administrator", r#"["*"]"#, 1),
+        ("site_operator", "Site Operatörü", "Site Operator", r#"["*"]"#, 1),
+        (
+            "editor_in_chief",
+            "Genel Yayın Yönetmeni",
+            "Editor-in-Chief",
+            r#"["contents:*","categories:*","media:*","approvals:*","newsletters:*","analytics:read","notifications:*","settings:read"]"#,
+            1,
+        ),
+        (
+            "managing_editor",
+            "Yazı İşleri Müdürü",
+            "Managing Editor",
+            r#"["contents:*","categories:read","media:*","approvals:*","newsletters:write","analytics:read"]"#,
+            1,
+        ),
+        (
+            "content_editor",
+            "İçerik Editörü",
+            "Content Editor",
+            r#"["contents:read","contents:write","categories:read","media:upload"]"#,
+            1,
+        ),
+        (
+            "editor",
+            "Editör",
+            "Editor",
+            r#"["contents:read","contents:write","categories:read","media:upload"]"#,
+            1,
+        ),
+        (
+            "content_publisher",
+            "İçerik Yayınlayıcı",
+            "Content Publisher",
+            r#"["contents:read","contents:write","contents:publish","approvals:*","media:*","categories:*"]"#,
+            1,
+        ),
+        (
+            "ads_manager",
+            "Reklam Yöneticisi",
+            "Ads Manager",
+            r#"["ads:*","analytics:read","media:upload"]"#,
+            1,
+        ),
+        (
+            "business_dev",
+            "İş Geliştirme Uzmanı",
+            "Business Development",
+            r#"["ads:*","analytics:read","media:upload"]"#,
+            1,
+        ),
+        (
+            "finance_viewer",
+            "Finans Görüntüleyici",
+            "Finance Viewer",
+            r#"["analytics:read","revenue:read","subscriptions:read","users:read"]"#,
+            1,
+        ),
+        (
+            "support_agent",
+            "Destek Temsilcisi",
+            "Support Agent",
+            r#"["users:read","users:verify","subscriptions:read","notifications:read"]"#,
+            1,
+        ),
+    ];
+
+    let conn = db
+        .open_conn()
+        .map_err(|e| format!("RBAC seed bağlantı hatası: {}", e))?;
+
+    let mut roles_upserted = 0usize;
+    for (role_code, name_tr, name_en, permissions_json, is_system) in roles {
+        let affected = conn
+            .execute(
+                "INSERT INTO user_roles (role_code, name_tr, name_en, permissions_json, is_system)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(role_code) DO UPDATE SET
+                     name_tr = excluded.name_tr,
+                     name_en = excluded.name_en,
+                     permissions_json = excluded.permissions_json,
+                     is_system = excluded.is_system",
+                params![role_code, name_tr, name_en, permissions_json, is_system],
+            )
+            .map_err(|e| format!("RBAC role '{}' eklenemedi: {}", role_code, e))?;
+        roles_upserted += affected;
+    }
+
+    // Seed dedicated staff demo accounts (Argon2id hash of "[REDACTED_SEED_PW]").
+    // Never touches operator@msidergisi.com whose password is synced with ADMIN_DEFAULT_PASS.
+    let staff_accounts: &[(&str, &str, &str, &str)] = &[
+        (
+            "superadmin@msidergisi.com",
+            "MSI Süper Yönetici",
+            "super_admin",
+            "Süper Yönetici",
+        ),
+        (
+            "yyonetmen@msidergisi.com",
+            "MSI Genel Yayın Yönetmeni",
+            "editor_in_chief",
+            "Genel Yayın Yönetmeni",
+        ),
+        (
+            "editor@msidergisi.com",
+            "MSI İçerik Editörü",
+            "content_editor",
+            "İçerik Editörü",
+        ),
+        (
+            "yayinci@msidergisi.com",
+            "MSI İçerik Yayınlayıcı",
+            "content_publisher",
+            "İçerik Yayınlayıcı & Sorumlu Müdür",
+        ),
+        (
+            "reklam@msidergisi.com",
+            "MSI Reklam ve İş Geliştirme",
+            "ads_manager",
+            "Reklam ve Kurumsal İletişim Yöneticisi",
+        ),
+        (
+            "finans@msidergisi.com",
+            "MSI Finans ve Abonelik İzleme",
+            "finance_viewer",
+            "Finansal Raporlama Uzmanı",
+        ),
+        (
+            "destek@msidergisi.com",
+            "MSI Okur ve Kamu Destek",
+            "support_agent",
+            "Abone & Kurumsal Doğrulama Temsilcisi",
+        ),
+    ];
+
+    let secret = std::env::var("SEED_SECRET_KEY")
+        .or_else(|_| std::env::var("SESSION_SECRET"))
+        .unwrap_or_else(|_| "msi-staff-rbac-seed".to_string());
+    let staff_pw_hash = crate::services::auth_service::hash_password("[REDACTED_SEED_PW]", &secret);
+
+    let mut staff_upserted = 0usize;
+    for (email, full_name, role, job_title) in staff_accounts {
+        let affected = conn
+            .execute(
+                "INSERT INTO users (
+                    email, password_hash, full_name, role, organization_category, organization_name,
+                    job_title, is_gov_verified, subscription_tier, subscription_expires_at,
+                    reminders_halted, kvkk_consent_at, kvkk_consent_ip, kvkk_consent_hash,
+                    email_consent, ssb_interests_json, created_at, email_verified, marketing_emails_opted_in
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4, 'Sektör Kuruluşları', 'UMSA Prodüksiyon - MSI Dergisi',
+                    ?5, 1, 'Kurumsal Tam Yetki', '2030-12-31',
+                    1, '2026-09-01T10:00:00Z', '127.0.0.1', 'KVKK-2026-STAFF-RBAC',
+                    1, '[\"hava-araclari\",\"deniz-araclari\",\"kara-araclari\",\"radarlar-ve-sensorler\"]',
+                    '2026-09-01T10:00:00Z', 1, 1
+                 )
+                 ON CONFLICT(email) DO UPDATE SET
+                    role = excluded.role,
+                    email_verified = 1",
+                params![email, staff_pw_hash, full_name, role, job_title],
+            )
+            .map_err(|e| format!("RBAC personel hesabı '{}' eklenemedi: {}", email, e))?;
+        staff_upserted += affected;
+    }
+
+    tracing::info!(
+        "RBAC seed tamamlandı: {} rol ve {} personel hesabı senkronize edildi",
+        roles_upserted,
+        staff_upserted
+    );
+
+    Ok(())
+}
+

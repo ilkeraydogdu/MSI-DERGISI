@@ -1,6 +1,6 @@
 use super::components::{
     advertisement, article_card, asset, breadcrumb, category_display_label, editorial_sidebar,
-    image_dimensions, localized,
+    image_dimensions, localized, ssb_tag_display_label,
 };
 use crate::{
     engine::security_engine::escape_html as esc,
@@ -30,9 +30,26 @@ pub fn article(
         String::new()
     };
     let paywall = if locked {
+        let single_buy_btn = if item.single_price_try > 0.0 {
+            let buy_lbl = if lang == "en" {
+                format!("Buy This Article (₺{:.0}) →", item.single_price_try)
+            } else {
+                format!("Bu Makaleyi Satın Al (₺{:.0}) →", item.single_price_try)
+            };
+            format!(
+                r#"<button type="button" class="button secondary paywall-buy-btn" data-buy-article="{slug}" data-article-title="{title}" data-article-price="{price:.2}">{buy_lbl}</button>"#,
+                slug = esc(&item.slug),
+                title = title,
+                price = item.single_price_try,
+                buy_lbl = buy_lbl
+            )
+        } else {
+            String::new()
+        };
         format!(
-            r##"<aside class="paywall-panel"><div class="eyebrow">MSI OKUYUCU KULÜBÜ</div><h2>Hikâyenin tamamını keşfedin.</h2><p>{}</p><div class="hero-actions"><a href="#modal-login" class="button primary">Giriş yap / Hesap oluştur →</a><a href="/abonelik-ve-satis" class="button secondary">Abonelikleri incele</a></div></aside>"##,
-            esc(reason)
+            r##"<aside class="paywall-panel"><div class="eyebrow">MSI OKUYUCU KULÜBÜ</div><h2>Hikâyenin tamamını keşfedin.</h2><p>{reason}</p><div class="hero-actions"><a href="#modal-login" class="button primary">Giriş yap / Hesap oluştur →</a>{single_buy_btn}<a href="/abonelik-ve-satis" class="button secondary">Abonelikleri incele</a></div></aside>"##,
+            reason = esc(reason),
+            single_buy_btn = single_buy_btn
         )
     } else {
         String::new()
@@ -59,7 +76,7 @@ pub fn article(
                 format!(
                     "<a class=\"article-tag-pill\" href=\"/arama?ssb_tag={}\">#{}</a>",
                     esc(&urlencoding::encode(t)),
-                    esc(&t.replace('-', " "))
+                    esc(&ssb_tag_display_label(t, lang))
                 )
             })
             .collect();

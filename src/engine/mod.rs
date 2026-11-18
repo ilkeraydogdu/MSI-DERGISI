@@ -1,6 +1,7 @@
 pub mod api_response;
 pub mod content_query_engine;
 pub mod design_engine;
+pub mod monitoring_engine;
 pub mod notification_engine;
 pub mod query_engine;
 pub mod search_engine;

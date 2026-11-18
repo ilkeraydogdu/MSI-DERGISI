@@ -1,3 +1,6 @@
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use tracing::warn;
+
 use crate::models::{ContentItem, RecommendationRule, UserAccount};
 
 /// Common Turkish and English military, academic, and corporate abbreviations that contain periods
@@ -45,20 +48,84 @@ const PROTECTED_ABBREVIATIONS: &[&str] = &[
     "Say.",
 ];
 
-/// Evaluates whether the given `UserAccount` has an active subscriber-level entitlement
-/// (public sector `.gov.tr`/`.tsk.tr` subscriber, paid E-Dergi/Print/Corporate subscriber, or operator/admin).
+/// Returns `true` when a `ContentItem` is publicly visible (editorial status is `"published"` or legacy empty).
+pub fn is_publicly_visible(item: &ContentItem) -> bool {
+    item.status.is_empty() || item.status == "published"
+}
+
+/// Parses flexible `subscription_expires_at` formats (`%Y-%m-%d`, RFC3339, `%Y-%m-%d %H:%M:%S`,
+/// `%Y-%m-%dT%H:%M:%S`, `%Y-%m-%d %H:%M`) and returns `true` if the timestamp has expired.
+/// Date-only strings like `"2030-12-31"` remain valid through the end of that UTC calendar day.
+fn is_subscription_expired(expires_str: &str, user_id: i64) -> bool {
+    let s = expires_str.trim();
+    if s.is_empty() {
+        return false;
+    }
+
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return dt.with_timezone(&Utc) < Utc::now();
+    }
+    if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M"))
+        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M"))
+    {
+        return ndt.and_utc() < Utc::now();
+    }
+    if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        return d < Utc::now().date_naive();
+    }
+    if s.len() >= 10 {
+        if let Ok(d) = NaiveDate::parse_from_str(&s[..10], "%Y-%m-%d") {
+            return d < Utc::now().date_naive();
+        }
+    }
+
+    warn!(
+        "user_has_subscriber_access: unparseable subscription_expires_at '{}' for user id={}; treating as expired",
+        s, user_id
+    );
+    true
+}
+
+/// Evaluates whether the given `UserAccount` has an active subscriber-level entitlement:
+/// 1. Editorial & administrative staff roles always have full access (`return true` first).
+/// 2. If `subscription_expires_at` is set and non-empty, expired dates immediately deny subscriber access.
+/// 3. Verified public-sector personnel (`is_gov_verified`) or active subscriber roles/tiers receive access.
 pub fn user_has_subscriber_access(user: &UserAccount) -> bool {
+    let role_lower = user.role.trim().to_lowercase();
+
+    // 1. Staff & editorial roles always retain full access regardless of subscription expiry
+    if matches!(
+        role_lower.as_str(),
+        "site_operator"
+            | "admin"
+            | "super_admin"
+            | "operator"
+            | "editor"
+            | "editor_in_chief"
+            | "managing_editor"
+            | "content_editor"
+            | "content_publisher"
+    ) {
+        return true;
+    }
+
+    // 2. Enforce subscription expiration date across all date/datetime formats
+    if let Some(ref expires_str) = user.subscription_expires_at {
+        if !expires_str.trim().is_empty() && is_subscription_expired(expires_str, user.id) {
+            return false;
+        }
+    }
+
+    // 3. Verified .gov.tr / .tsk.tr public-sector subscribers
     if user.is_gov_verified {
         return true;
     }
-    let role_lower = user.role.to_lowercase();
+
     if matches!(
         role_lower.as_str(),
-        "admin"
-            | "site_operator"
-            | "operator"
-            | "editor"
-            | "subscriber"
+        "subscriber"
             | "subscriber_public"
             | "subscriber_corporate"
             | "subscriber_digital"
@@ -69,7 +136,14 @@ pub fn user_has_subscriber_access(user: &UserAccount) -> bool {
         return true;
     }
 
-    let tier_lower = user.subscription_tier.to_lowercase();
+    let tier_lower = user.subscription_tier.trim().to_lowercase();
+    if matches!(
+        tier_lower.as_str(),
+        "" | "free" | "standart kayıtlı okur" | "akademik / öğrenci okur" | "akademik okur"
+    ) {
+        return false;
+    }
+
     tier_lower.contains("abone")
         || tier_lower.contains("subscriber")
         || tier_lower.contains("kamu")
@@ -133,7 +207,7 @@ pub fn apply_paywall_view(
         return (preview_html, true, reason);
     }
 
-    // Level 2+: Only subscribers (including verified public sector E-Dergi subscribers) or single-article buyers
+    // Level 2+: Only active subscribers or single-article buyers
     if let Some(u) = user {
         if user_has_subscriber_access(u) {
             return (full_body, false, String::new());
@@ -161,9 +235,6 @@ pub fn apply_paywall_view(
 /// **STRICT COMPETITOR PROTECTION RULE**:
 /// If `current.is_sponsored` is `true`, immediately returns an empty `Vec::new()`
 /// ("Sponsorlu içerik gösterilirken içerik önerisi yapılmaz").
-///
-/// For non-sponsored content, combines operator `RecommendationRule` matches (by institution + SSB tag),
-/// shared `ssb_tags`, user `ssb_interests`, and shared `placements` to return at least 3 related articles.
 pub fn select_related_articles(
     current: &ContentItem,
     all_contents: &[ContentItem],
@@ -182,7 +253,11 @@ pub fn select_related_articles(
 
     let mut scored_candidates: Vec<(i64, i64, ContentItem)> = all_contents
         .iter()
-        .filter(|candidate| candidate.id != current.id && candidate.slug != current.slug)
+        .filter(|candidate| {
+            is_publicly_visible(candidate)
+                && candidate.id != current.id
+                && candidate.slug != current.slug
+        })
         .map(|candidate| {
             let mut score: i64 = 0;
 
@@ -261,10 +336,10 @@ pub fn select_related_articles(
 
             // 5. Same content_type or magazine issue
             if candidate.content_type == current.content_type {
-                score += 10;
+                score += crate::db::constants::SEARCH_SCORE_CATEGORY_MATCH;
             }
             if current.issue_number.is_some() && candidate.issue_number == current.issue_number {
-                score += 10;
+                score += crate::db::constants::SEARCH_SCORE_CATEGORY_MATCH;
             }
 
             // Prefer editorial content over sponsored advertorials in organic recommendations
@@ -298,7 +373,7 @@ pub fn truncate_to_two_sentences_html(raw_html: &str) -> String {
     }
 
     // Temporarily mask dots inside known military/corporate abbreviations
-    let mut masked = cleaned.clone();
+    let mut masked = cleaned;
     for abbr in PROTECTED_ABBREVIATIONS {
         let safe_token = abbr.replace('.', "\u{0007}");
         masked = masked.replace(abbr, &safe_token);
@@ -311,14 +386,12 @@ pub fn truncate_to_two_sentences_html(raw_html: &str) -> String {
     for i in 0..chars.len() {
         let c = chars[i];
         if c == '.' || c == '!' || c == '?' {
-            // Avoid splitting decimal numbers like 2.5 or 100.000
             let prev_is_digit = i > 0 && chars[i - 1].is_ascii_digit();
             let next_is_digit = i + 1 < chars.len() && chars[i + 1].is_ascii_digit();
             if prev_is_digit && next_is_digit {
                 continue;
             }
 
-            // A sentence boundary occurs at end-of-text or when followed by whitespace/quote
             let at_boundary = i + 1 == chars.len()
                 || chars[i + 1].is_whitespace()
                 || chars[i + 1] == '"'
@@ -361,4 +434,52 @@ fn strip_html_tags(input: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_user(role: &str, tier: &str, expires: Option<&str>) -> UserAccount {
+        UserAccount {
+            id: 1,
+            email: "okur@aselsan.com.tr".to_string(),
+            full_name: "Test Okur".to_string(),
+            role: role.to_string(),
+            organization_category: "Sektör Kuruluşları".to_string(),
+            organization_name: "ASELSAN".to_string(),
+            job_title: "Mühendis".to_string(),
+            is_gov_verified: false,
+            subscription_tier: tier.to_string(),
+            subscription_expires_at: expires.map(|s| s.to_string()),
+            reminders_halted: false,
+            kvkk_consent_at: "2026-01-01".to_string(),
+            kvkk_consent_ip: "127.0.0.1".to_string(),
+            kvkk_consent_hash: "KVKK".to_string(),
+            email_consent: true,
+            ssb_interests: vec![],
+            created_at: "2026-01-01".to_string(),
+            email_verified: true,
+            marketing_emails_opted_in: true,
+            totp_enabled: false,
+        }
+    }
+
+    #[test]
+    fn date_only_future_expiry_allows_subscriber_and_past_denies() {
+        let active = make_user("subscriber_digital", "Dijital E-Dergi Abonesi", Some("2030-12-31"));
+        assert!(user_has_subscriber_access(&active));
+
+        let expired = make_user("subscriber_digital", "Dijital E-Dergi Abonesi", Some("2020-01-01"));
+        assert!(!user_has_subscriber_access(&expired));
+    }
+
+    #[test]
+    fn staff_roles_retain_access_regardless_of_expiry() {
+        let staff = make_user("editor_in_chief", "free", Some("2020-01-01"));
+        assert!(user_has_subscriber_access(&staff));
+
+        let op = make_user("site_operator", "Kurumsal Tam Yetki", Some("2030-12-31"));
+        assert!(user_has_subscriber_access(&op));
+    }
 }

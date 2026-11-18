@@ -32,6 +32,25 @@
   const text = (tr, en) => (boot.lang === "en" ? en : tr);
   const localized = (obj, field) =>
     obj?.[`${field}_${boot.lang || "tr"}`] || obj?.[`${field}_tr`] || "";
+  const unwrapPayload = (data) =>
+    data &&
+    typeof data === "object" &&
+    data.data &&
+    typeof data.data === "object"
+      ? data.data
+      : data || {};
+  const extractError = (data, fallback) =>
+    data?.message ||
+    (typeof data?.error === "string" ? data.error : data?.error?.message) ||
+    data?.data?.message ||
+    data?.data?.error ||
+    fallback;
+  const extractMessage = (data, payload, fallback) =>
+    payload?.message ||
+    payload?.message_tr ||
+    data?.message ||
+    data?.message_tr ||
+    fallback;
 
   let lenis = null;
   if (window.Lenis && !reducedMotion && !inIframe) {
@@ -41,6 +60,7 @@
         smoothWheel: true,
         wheelMultiplier: 0.95,
       });
+      window.__msiLenis = lenis;
       if (window.gsap && window.ScrollTrigger) {
         window.gsap.registerPlugin(window.ScrollTrigger);
         lenis.on("scroll", window.ScrollTrigger.update);
@@ -151,54 +171,58 @@
       if (active) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
-    if (animate && changed && !reducedMotion) {
-      const activeView = $(
-        normalized === "news" ? "#view-news" : "#view-magazine",
-      );
-      if (window.scrollY > 240) {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+    if (animate && changed) {
+      if (window.scrollY > 40) {
+        if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+        document.documentElement.scrollTop = 0;
       }
-      if (activeView) {
-        if (window.gsap) {
-          window.gsap.killTweensOf(activeView);
-          window.gsap.fromTo(
-            activeView,
-            { opacity: 0.01, y: 14 },
-            {
-              opacity: 1,
-              y: 0,
-              duration: 0.36,
-              ease: "power3.out",
-              clearProps: "transform,opacity",
-            },
-          );
-          const leadCards = $$(
-            ".magazine-hero, .news-lead, .story-card",
-            activeView,
-          ).slice(0, 6);
-          if (leadCards.length) {
-            window.gsap.killTweensOf(leadCards);
+      if (!reducedMotion) {
+        const activeView = $(
+          normalized === "news" ? "#view-news" : "#view-magazine",
+        );
+        if (activeView) {
+          if (window.gsap) {
+            window.gsap.killTweensOf(activeView);
             window.gsap.fromTo(
-              leadCards,
-              { opacity: 0.01, y: 12 },
+              activeView,
+              { opacity: 0.01, y: 14 },
               {
                 opacity: 1,
                 y: 0,
-                duration: 0.34,
-                stagger: 0.035,
-                ease: "power2.out",
+                duration: 0.36,
+                ease: "power3.out",
                 clearProps: "transform,opacity",
               },
             );
+            const leadCards = $$(
+              ".magazine-hero, .news-lead, .story-card",
+              activeView,
+            ).slice(0, 6);
+            if (leadCards.length) {
+              window.gsap.killTweensOf(leadCards);
+              window.gsap.fromTo(
+                leadCards,
+                { opacity: 0.01, y: 12 },
+                {
+                  opacity: 1,
+                  y: 0,
+                  duration: 0.34,
+                  stagger: 0.035,
+                  ease: "power2.out",
+                  clearProps: "transform,opacity",
+                },
+              );
+            }
+          } else if (activeView.animate) {
+            activeView.animate(
+              [
+                { opacity: 0.01, transform: "translate3d(0, 12px, 0)" },
+                { opacity: 1, transform: "translate3d(0, 0, 0)" },
+              ],
+              { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+            );
           }
-        } else if (activeView.animate) {
-          activeView.animate(
-            [
-              { opacity: 0.01, transform: "translate3d(0, 12px, 0)" },
-              { opacity: 1, transform: "translate3d(0, 0, 0)" },
-            ],
-            { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
-          );
         }
       }
     }
@@ -229,7 +253,7 @@
       e.preventDefault();
       const url = new URL(location.href);
       url.searchParams.set("mode", mode);
-      url.hash = mode === "news" ? "haber" : "dergi";
+      url.hash = "";
       history.pushState(null, "", url);
       portal(mode, true);
     }),
@@ -400,10 +424,16 @@
       const titleEl = $("[data-dossier-title]", stage);
       const excerptEl = $("[data-dossier-excerpt]", stage);
       const actionsEl = $(".dossier-actions", stage);
+      const ttl = localized(sp, "title").trim();
+      const exc = localized(sp, "excerpt").trim();
+      const showExc = Boolean(exc) && exc.toLowerCase() !== ttl.toLowerCase();
       if (badgeEl) badgeEl.textContent = sp.category_badge || "ÖZEL DOSYA";
       if (pagesEl) pagesEl.textContent = sp.page_no || "";
-      if (titleEl) titleEl.textContent = localized(sp, "title");
-      if (excerptEl) excerptEl.textContent = localized(sp, "excerpt");
+      if (titleEl) titleEl.textContent = ttl;
+      if (excerptEl) {
+        excerptEl.textContent = showExc ? exc : "";
+        excerptEl.hidden = !showExc;
+      }
       if (actionsEl) {
         const oldLink = $("[data-dossier-link], .dossier-link", actionsEl);
         if (oldLink) {
@@ -676,8 +706,12 @@
         ? `${issue.page_count || 96} pages · ${issue.dossier_count || 6} special dossiers · ISSN 1306-0309`
         : `${issue.page_count || 96} sayfa · ${issue.dossier_count || 6} özel dosya · ISSN 1306-0309`;
     $("#issue-dialog-summary").textContent =
-      firstSpreadTitle &&
-      rawSummary.toLowerCase().includes(firstSpreadTitle.slice(0, 24).toLowerCase())
+      rawSummary.includes("yeni sayısının içerikleri:") ||
+      rawSummary.endsWith("...") ||
+      (firstSpreadTitle &&
+        rawSummary
+          .toLowerCase()
+          .includes(firstSpreadTitle.slice(0, 24).toLowerCase()))
         ? metaFallback
         : rawSummary || metaFallback;
     $("#issue-download").href =
@@ -698,92 +732,129 @@
     }
   });
 
-  // Subscription & Publication Offer Dialog + Online Checkout
-  async function openOffer(trigger) {
-    try {
-      const response = await fetch("/api/v1/commerce/catalog");
-      if (!response.ok) throw Error();
-      const catalog = await response.json();
-      const plan = trigger.dataset.selectPlan;
-      const item = plan
-        ? catalog.subscription_plans.find((p) => p.code === plan)
-        : catalog.commerce_products.find(
-            (p) => p.sku === trigger.dataset.selectProduct,
-          );
-      if (!item) throw Error();
-      const title = localized(item, plan ? "name" : "title");
-      $("#offer-title").textContent = title;
-      $("#offer-description").textContent = plan
-        ? localized(item, "period_label")
-        : localized(item, "description");
-      $("#offer-price").textContent = new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency: "TRY",
-        maximumFractionDigits: 0,
-      }).format(item.price_try);
+  // Subscription, Publication & Single-Article Dossier Offer Dialog + Online Checkout
+  function populateOfferDialog({
+    title,
+    description,
+    priceTry,
+    features,
+    itemType,
+    itemCode,
+  }) {
+    $("#offer-title").textContent = title;
+    $("#offer-description").textContent = description;
+    $("#offer-price").textContent = new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: "TRY",
+      maximumFractionDigits: 0,
+    }).format(Number(priceTry || 0));
 
-      const featList = $("#offer-features");
-      if (featList) {
-        featList.replaceChildren();
-        const feats = plan
-          ? boot.lang === "en"
-            ? item.features_en || []
-            : item.features_tr || []
-          : item.file_resolution_or_pages
-            ? [item.file_resolution_or_pages]
-            : [];
-        feats.forEach((f) => {
-          const li = document.createElement("li");
-          li.textContent = f;
-          featList.append(li);
-        });
-        featList.hidden = !feats.length;
-      }
+    const featList = $("#offer-features");
+    if (featList) {
+      featList.replaceChildren();
+      (features || []).forEach((f) => {
+        const li = document.createElement("li");
+        li.textContent = f;
+        featList.append(li);
+      });
+      featList.hidden = !(features && features.length);
+    }
 
-      const checkoutForm = $("#offer-checkout-form");
-      if (checkoutForm) {
-        checkoutForm.elements.item_type.value = plan
-          ? "subscription"
-          : "product";
-        checkoutForm.elements.item_code.value = plan
-          ? item.code
-          : item.sku;
-        try {
-          const savedUser = JSON.parse(storage.get("msi_active_user") || "null");
-          if (savedUser) {
-            if (!checkoutForm.elements.full_name.value && savedUser.full_name)
-              checkoutForm.elements.full_name.value = savedUser.full_name;
-            if (!checkoutForm.elements.email.value && savedUser.email)
-              checkoutForm.elements.email.value = savedUser.email;
-            if (
-              !checkoutForm.elements.organization_name.value &&
-              savedUser.organization_name
-            )
-              checkoutForm.elements.organization_name.value =
-                savedUser.organization_name;
-          }
-        } catch {}
-      }
-      const fb = $("#offer-feedback");
-      if (fb) {
-        fb.classList.remove("error");
-        fb.textContent = "";
-      }
-      const paytrWrap = $("#paytr-iframe-wrap");
-      if (paytrWrap) {
-        paytrWrap.hidden = true;
-        paytrWrap.replaceChildren();
-      }
-
-      const contact = $('.site-footer a[href^="mailto:"]');
+    const checkoutForm = $("#offer-checkout-form");
+    if (checkoutForm) {
+      checkoutForm.elements.item_type.value = itemType;
+      checkoutForm.elements.item_code.value = itemCode;
+    }
+    const fb = $("#offer-feedback");
+    if (fb) {
+      fb.classList.remove("error");
+      fb.textContent = "";
+    }
+    const paytrWrap = $("#paytr-iframe-wrap");
+    if (paytrWrap) {
+      paytrWrap.hidden = true;
+      paytrWrap.replaceChildren();
+    }
+    const contact = $('.site-footer a[href^="mailto:"]');
+    if ($("#offer-contact")) {
       $("#offer-contact").href =
         (contact?.href || "mailto:info@msidergisi.com") +
         "?subject=" +
         encodeURIComponent("MSI · " + title + " bilgi talebi");
-      openDialog("offer-dialog");
-    } catch {
-      toast("Yayın bilgileri yüklenemedi. Lütfen tekrar deneyin.");
     }
+    openDialog("offer-dialog");
+  }
+
+  async function openOffer(trigger) {
+    try {
+      const response = await fetch("/api/v1/commerce/catalog");
+      if (!response.ok) throw Error();
+      const rawCatalog = await response.json();
+      const catalog = unwrapPayload(rawCatalog);
+      const plan = trigger.dataset.selectPlan;
+      const item = plan
+        ? (catalog.subscription_plans || []).find((p) => p.code === plan)
+        : (catalog.commerce_products || []).find(
+            (p) => p.sku === trigger.dataset.selectProduct,
+          );
+      if (!item) throw Error();
+      const title = localized(item, plan ? "name" : "title");
+      const description = plan
+        ? localized(item, "period_label")
+        : localized(item, "description");
+      const feats = plan
+        ? boot.lang === "en"
+          ? item.features_en || []
+          : item.features_tr || []
+        : item.file_resolution_or_pages
+          ? [item.file_resolution_or_pages]
+          : [];
+      populateOfferDialog({
+        title,
+        description,
+        priceTry: item.price_try,
+        features: feats,
+        itemType: plan ? "subscription" : "product",
+        itemCode: plan ? item.code : item.sku,
+      });
+    } catch {
+      toast(
+        text(
+          "Yayın bilgileri yüklenemedi. Lütfen tekrar deneyin.",
+          "Publication details could not be loaded. Please try again.",
+        ),
+      );
+    }
+  }
+
+  function openSingleArticleOffer(trigger) {
+    const articleSlug = trigger.dataset.buyArticle || "";
+    const articleTitle =
+      trigger.dataset.articleTitle ||
+      $(".article-header h1")?.textContent?.trim() ||
+      text("Özel Dosya Erişimi", "Special Dossier Access");
+    const articlePrice = Number(trigger.dataset.articlePrice || 0);
+    if (!articleSlug || !(articlePrice > 0)) return;
+    populateOfferDialog({
+      title: articleTitle,
+      description: text(
+        "Tekil özel dosya / makale kalıcı tam metin dijital erişimi",
+        "Permanent full-text digital access to this special dossier",
+      ),
+      priceTry: articlePrice,
+      features: [
+        text(
+          "Ödeme onayıyla anında tam metin erişimi",
+          "Instant full-text unlock upon payment confirmation",
+        ),
+        text(
+          "Kurumsal proforma ve fatura kaydı",
+          "Official corporate proforma and invoice record",
+        ),
+      ],
+      itemType: "single_article",
+      itemCode: articleSlug,
+    });
   }
 
   $("#offer-checkout-form")?.addEventListener("submit", async (e) => {
@@ -792,8 +863,9 @@
     const btn = $("[type=submit]", form);
     const fb = $("#offer-feedback");
     const paytrWrap = $("#paytr-iframe-wrap");
-    const payload = Object.fromEntries(new FormData(form));
-    payload.distance_sales_consent = !!form.elements.distance_sales_consent?.checked;
+    const reqBody = Object.fromEntries(new FormData(form));
+    reqBody.distance_sales_consent =
+      !!form.elements.distance_sales_consent?.checked;
     btn.disabled = true;
     fb?.classList.remove("error");
     if (fb) fb.textContent = text("Sipariş oluşturuluyor…", "Creating order…");
@@ -801,19 +873,22 @@
       const response = await fetch("/api/v1/subscriptions/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(reqBody),
       });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(
-          data.error ||
+          extractError(
+            data,
             text("Sipariş oluşturulamadı.", "Order could not be created."),
+          ),
         );
       }
+      const resPayload = unwrapPayload(data);
       const iframeUrl =
-        data.paytr_iframe_url ||
-        (data.iframe_token
-          ? `https://www.paytr.com/odeme/guvenli/${encodeURIComponent(data.iframe_token)}`
+        resPayload.paytr_iframe_url ||
+        (resPayload.iframe_token
+          ? `https://www.paytr.com/odeme/guvenli/${encodeURIComponent(resPayload.iframe_token)}`
           : "");
       if (iframeUrl && paytrWrap) {
         const iframe = document.createElement("iframe");
@@ -822,15 +897,18 @@
         paytrWrap.replaceChildren(iframe);
         paytrWrap.hidden = false;
       }
-      const invNo = data.invoice_no || data.invoice?.invoice_no || "";
-      const msg =
-        data.message ||
-        data.message_tr ||
+      const invNo = resPayload.invoice_no || resPayload.invoice?.invoice_no || "";
+      const msg = extractMessage(
+        data,
+        resPayload,
         text(
           `Siparişiniz kaydedildi (${invNo}).`,
           `Your order has been registered (${invNo}).`,
-        );
-      if (fb) fb.textContent = invNo ? `${msg} [${invNo}]` : msg;
+        ),
+      );
+      if (fb)
+        fb.textContent =
+          invNo && !msg.includes(invNo) ? `${msg} [${invNo}]` : msg;
       toast(invNo ? `Sipariş kaydı oluşturuldu: ${invNo}` : msg);
     } catch (err) {
       fb?.classList.add("error");
@@ -844,10 +922,56 @@
   });
 
   document.addEventListener("click", (e) => {
+    const buyArticle = e.target.closest("[data-buy-article]");
+    if (buyArticle) {
+      e.preventDefault();
+      openSingleArticleOffer(buyArticle);
+      return;
+    }
     const offer = e.target.closest("[data-select-plan],[data-select-product]");
     if (offer) {
       e.preventDefault();
       openOffer(offer);
+      return;
+    }
+    const viewBtn = e.target.closest("[data-auth-view]");
+    if (viewBtn) {
+      e.preventDefault();
+      authView(viewBtn.dataset.authView);
+      return;
+    }
+    const copyBackup = e.target.closest("[data-copy-backup-codes]");
+    if (copyBackup) {
+      e.preventDefault();
+      const codes = $$("#totp-backup-codes-list code")
+        .map((el) => el.textContent.trim())
+        .filter(Boolean)
+        .join("\n");
+      if (codes) {
+        navigator.clipboard
+          ?.writeText(codes)
+          .then(() =>
+            toast(
+              text(
+                "Yedek kurtarma kodları panoya kopyalandı.",
+                "Backup recovery codes copied to clipboard.",
+              ),
+            ),
+          )
+          .catch(() =>
+            toast(
+              text(
+                "Kodları seçerek kopyalayabilirsiniz.",
+                "Select the codes to copy manually.",
+              ),
+            ),
+          );
+      }
+      return;
+    }
+    if (e.target.closest("[data-reload-page]")) {
+      e.preventDefault();
+      location.reload();
       return;
     }
     const close = e.target.closest("[data-close-dialog]");
@@ -870,6 +994,7 @@
     }
     if (e.target.closest('[href="#modal-login"]')) {
       e.preventDefault();
+      authView("login");
       openDialog("auth-dialog");
       return;
     }
@@ -902,15 +1027,46 @@
     if (govHint) govHint.hidden = !isGov;
   });
 
-  function authTab(name) {
+  function authView(name) {
+    const tabBar = $("#auth-dialog .auth-tabs");
+    const isTabView = name === "login" || name === "register";
+    if (tabBar) tabBar.hidden = !isTabView;
     $$("[data-auth-tab]").forEach((t) => {
       const active = t.dataset.authTab === name;
       t.setAttribute("aria-selected", String(active));
       t.tabIndex = active ? 0 : -1;
     });
-    $("#login-form").hidden = name !== "login";
-    $("#register-form").hidden = name !== "register";
+    const loginForm = $("#login-form");
+    const regForm = $("#register-form");
+    const forgotForm = $("#forgot-password-form");
+    const totpForm = $("#totp-login-form");
+    if (loginForm) loginForm.hidden = name !== "login";
+    if (regForm) regForm.hidden = name !== "register";
+    if (forgotForm) {
+      forgotForm.hidden = name !== "forgot";
+      if (
+        name === "forgot" &&
+        loginForm?.elements?.email?.value &&
+        !forgotForm.elements.email.value
+      ) {
+        forgotForm.elements.email.value = loginForm.elements.email.value;
+      }
+    }
+    if (totpForm) totpForm.hidden = name !== "totp";
+    const authTitle = $("#auth-title");
+    if (authTitle) {
+      authTitle.textContent =
+        name === "forgot"
+          ? text("Şifremi unuttum", "Reset password")
+          : name === "totp"
+            ? text("İki Aşamalı Doğrulama", "Two-Factor Verification")
+            : name === "register"
+              ? text("Hesap oluşturun", "Create account")
+              : text("Hoş geldiniz", "Welcome");
+    }
   }
+  const authTab = authView;
+
   $$("[data-auth-tab]").forEach((t) => {
     t.addEventListener("click", () => authTab(t.dataset.authTab));
     t.addEventListener("keydown", (e) => {
@@ -923,18 +1079,55 @@
     });
   });
 
+  function completeAuthenticatedLogin(msgText) {
+    const link = $(".account-link");
+    if (link) link.href = "/hesabim";
+    toast(msgText);
+    $("#auth-dialog")?.close();
+    const next = new URL(location.href).searchParams.get("next");
+    if (
+      typeof next === "string" &&
+      next.startsWith("/") &&
+      !next.startsWith("//") &&
+      !next.startsWith("/\\")
+    ) {
+      location.href = next;
+    } else if (
+      location.pathname === "/hesabim" ||
+      location.pathname.startsWith("/icerik/")
+    ) {
+      location.reload();
+    }
+  }
+
+  // Auto-open auth dialog when redirected with ?next=/... while signed out
+  (() => {
+    const nextParam = new URL(location.href).searchParams.get("next");
+    if (
+      typeof nextParam === "string" &&
+      nextParam.startsWith("/") &&
+      !nextParam.startsWith("//") &&
+      !nextParam.startsWith("/\\") &&
+      !inIframe &&
+      ($('.account-link[href="#modal-login"]') || $(".account-welcome"))
+    ) {
+      authView("login");
+      openDialog("auth-dialog");
+    }
+  })();
+
   ["login", "register"].forEach((kind) =>
     $("#" + kind + "-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const form = e.currentTarget,
         button = $("[type=submit]", form),
         feedback = $(".form-feedback", form);
-      const payload = Object.fromEntries(new FormData(form));
+      const reqPayload = Object.fromEntries(new FormData(form));
       if (kind === "register") {
-        payload.kvkk_consent = form.elements.kvkk_consent.checked;
-        payload.kvkk_acknowledged = form.elements.kvkk_consent.checked;
-        payload.email_consent = form.elements.email_consent.checked;
-        payload.ssb_interests = $$("#register-ssb-tags input:checked").map(
+        reqPayload.kvkk_consent = form.elements.kvkk_consent.checked;
+        reqPayload.kvkk_acknowledged = form.elements.kvkk_consent.checked;
+        reqPayload.email_consent = form.elements.email_consent.checked;
+        reqPayload.ssb_interests = $$("#register-ssb-tags input:checked").map(
           (i) => i.value,
         );
       }
@@ -946,40 +1139,57 @@
         const response = await fetch("/api/v1/auth/" + kind, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(reqPayload),
         });
         const data = await response.json();
         if (!response.ok)
           throw new Error(
-            data.error ||
+            extractError(
+              data,
               text("İşlem tamamlanamadı.", "Unable to complete request."),
+            ),
           );
+        const resPayload = unwrapPayload(data);
+        if (
+          kind === "login" &&
+          (resPayload.requires_totp || data.requires_totp)
+        ) {
+          const tempToken = resPayload.temp_token || data.temp_token || "";
+          const totpForm = $("#totp-login-form");
+          if (totpForm) {
+            totpForm.elements.temp_token.value = tempToken;
+            totpForm.elements.code.value = "";
+            const totpFb = $(".form-feedback", totpForm);
+            if (totpFb) {
+              totpFb.classList.remove("error");
+              totpFb.textContent = "";
+            }
+            feedback.textContent = "";
+            authView("totp");
+            totpForm.elements.code.focus();
+            return;
+          }
+        }
         feedback.textContent =
           kind === "login"
-            ? text("Giriş başarılı.", "Signed in.")
-            : data.message_tr ||
-              text(
-                "Kaydınız oluşturuldu. Giriş yapabilirsiniz.",
-                "Account created. You can sign in.",
+            ? extractMessage(
+                data,
+                resPayload,
+                text("Giriş başarılı.", "Signed in."),
+              )
+            : extractMessage(
+                data,
+                resPayload,
+                text(
+                  "Kaydınız oluşturuldu. Giriş yapabilirsiniz.",
+                  "Account created. You can sign in.",
+                ),
               );
         if (kind === "login") {
-          // SECURITY FIX (C4/H8): Removed session token and PII from localStorage.
-          // Session is managed exclusively via HttpOnly cookie server-side.
-          const link = $(".account-link");
-          if (link) link.href = "/hesabim";
-          toast(feedback.textContent);
-          $("#auth-dialog").close();
-          const next = new URL(location.href).searchParams.get("next");
-          if (
-            next &&
-            /^\/(admin(?:\/|$)|yonetim$)/.test(next) &&
-            ["site_operator", "admin"].includes(data.user.role)
-          )
-            location.href = next;
-          else if (location.pathname === "/hesabim") location.reload();
+          completeAuthenticatedLogin(feedback.textContent);
         } else {
-          authTab("login");
-          $("#login-form").elements.email.value = payload.email;
+          authView("login");
+          $("#login-form").elements.email.value = reqPayload.email;
           $(".form-feedback", $("#login-form")).textContent =
             feedback.textContent;
         }
@@ -998,12 +1208,470 @@
     }),
   );
 
+  $("#totp-login-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const button = $("[type=submit]", form);
+    const feedback = $(".form-feedback", form);
+    const tempToken = String(form.elements.temp_token?.value || "").trim();
+    const code = String(form.elements.code?.value || "").trim();
+    button.disabled = true;
+    form.setAttribute("aria-busy", "true");
+    feedback?.classList.remove("error");
+    if (feedback)
+      feedback.textContent = text("Doğrulanıyor…", "Verifying code…");
+    try {
+      const response = await fetch("/api/v1/auth/totp/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ temp_token: tempToken, code }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text(
+              "Doğrulama kodu geçersiz veya süresi dolmuş.",
+              "Verification code is invalid or expired.",
+            ),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const msg = extractMessage(
+        data,
+        resPayload,
+        text("Doğrulama başarılı. Giriş yapıldı.", "Verified and signed in."),
+      );
+      if (feedback) feedback.textContent = msg;
+      completeAuthenticatedLogin(msg);
+    } catch (err) {
+      feedback?.classList.add("error");
+      if (feedback)
+        feedback.textContent =
+          err.message ||
+          text("Doğrulama tamamlanamadı.", "Verification failed.");
+    } finally {
+      button.disabled = false;
+      form.removeAttribute("aria-busy");
+    }
+  });
+
+  $("#forgot-password-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const button = $("[type=submit]", form);
+    const feedback = $(".form-feedback", form);
+    const email = String(form.elements.email?.value || "").trim();
+    button.disabled = true;
+    form.setAttribute("aria-busy", "true");
+    feedback?.classList.remove("error");
+    if (feedback)
+      feedback.textContent = text(
+        "Bağlantı gönderiliyor…",
+        "Sending reset link…",
+      );
+    try {
+      const response = await fetch("/api/v1/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text(
+              "Şifre sıfırlama talebi gönderilemedi.",
+              "Unable to submit password reset request.",
+            ),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const msg = extractMessage(
+        data,
+        resPayload,
+        text(
+          "E-posta adresiniz kayıtlıysa şifre sıfırlama bağlantısı gönderilmiştir.",
+          "If this email is registered, a password reset link has been sent.",
+        ),
+      );
+      if (feedback) feedback.textContent = msg;
+      toast(msg);
+    } catch (err) {
+      feedback?.classList.add("error");
+      if (feedback)
+        feedback.textContent =
+          err.message ||
+          text("Bağlantı hatası oluştu.", "A connection error occurred.");
+    } finally {
+      button.disabled = false;
+      form.removeAttribute("aria-busy");
+    }
+  });
+
+  // Account Verification, Profile, 2FA TOTP & Reset-Password Delegated Handlers
+  $("#account-resend-verify")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const fb = $("#account-verify-feedback");
+    const email = btn.dataset.userEmail || "";
+    btn.disabled = true;
+    if (fb) fb.textContent = text("Gönderiliyor…", "Sending…");
+    try {
+      const response = await fetch("/api/v1/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text(
+              "Doğrulama e-postası gönderilemedi.",
+              "Verification email could not be sent.",
+            ),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const msg = extractMessage(
+        data,
+        resPayload,
+        text(
+          "Doğrulama e-postası adresinize tekrar gönderildi.",
+          "Verification email has been resent.",
+        ),
+      );
+      if (fb) fb.textContent = msg;
+      toast(msg);
+    } catch (err) {
+      if (fb) fb.textContent = err.message;
+      toast(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("#account-profile-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const btn = $("[type=submit]", form);
+    const fb = $(".form-feedback", form);
+    const fd = new FormData(form);
+    const reqBody = {
+      full_name: String(fd.get("full_name") || "").trim(),
+      job_title: String(fd.get("job_title") || "").trim(),
+      organization_name: String(fd.get("organization_name") || "").trim(),
+      organization_category: String(
+        fd.get("organization_category") || "",
+      ).trim(),
+      ssb_interests: $$('input[name="ssb_interests"]:checked', form).map(
+        (i) => i.value,
+      ),
+      email_consent: !!form.elements.email_consent?.checked,
+      marketing_emails_opted_in: !!form.elements.email_consent?.checked,
+    };
+    btn.disabled = true;
+    fb?.classList.remove("error");
+    if (fb) fb.textContent = text("Kaydediliyor…", "Saving…");
+    try {
+      const response = await fetch("/api/v1/account/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text("Profil güncellenemedi.", "Profile could not be updated."),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const msg = extractMessage(
+        data,
+        resPayload,
+        text(
+          "Profiliniz ve SSB ilgi alanlarınız güncellendi.",
+          "Your profile and SSB interests have been updated.",
+        ),
+      );
+      if (fb) fb.textContent = msg;
+      toast(msg);
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      fb?.classList.add("error");
+      if (fb) fb.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function renderBackupCodes(codes) {
+    const box = $("#totp-backup-codes-box");
+    const list = $("#totp-backup-codes-list");
+    if (!box || !list || !Array.isArray(codes) || !codes.length) return false;
+    list.replaceChildren();
+    codes.forEach((c) => {
+      const codeEl = document.createElement("code");
+      codeEl.textContent = String(c);
+      list.append(codeEl);
+    });
+    box.hidden = false;
+    return true;
+  }
+
+  $("#account-totp-setup-btn")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const fb = $("#account-totp-setup-feedback");
+    const panel = $("#account-totp-setup-panel");
+    btn.disabled = true;
+    fb?.classList.remove("error");
+    if (fb)
+      fb.textContent = text(
+        "Güvenli 2FA anahtarı üretiliyor…",
+        "Generating secure 2FA secret…",
+      );
+    try {
+      const response = await fetch("/api/v1/auth/totp/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text(
+              "2FA kurulumu başlatılamadı.",
+              "2FA setup could not be started.",
+            ),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const qrRaw =
+        resPayload.qr_svg ||
+        resPayload.qr_code_svg ||
+        resPayload.qr_code ||
+        resPayload.svg ||
+        "";
+      const secret =
+        resPayload.secret ||
+        resPayload.totp_secret ||
+        resPayload.manual_entry_key ||
+        "";
+      const qrImg = $("#account-totp-qr");
+      if (qrImg && qrRaw) {
+        qrImg.src = qrRaw.startsWith("data:image/")
+          ? qrRaw
+          : "data:image/svg+xml;utf8," + encodeURIComponent(qrRaw);
+      }
+      const secretCodeEl = $("#account-totp-secret");
+      if (secretCodeEl) secretCodeEl.textContent = secret;
+      const secretInput = $("#account-totp-secret-input");
+      if (secretInput) secretInput.value = secret;
+      if (Array.isArray(resPayload.backup_codes) && resPayload.backup_codes.length) {
+        renderBackupCodes(resPayload.backup_codes);
+      }
+      if (panel) panel.hidden = false;
+      btn.hidden = true;
+      if (fb) fb.textContent = "";
+    } catch (err) {
+      fb?.classList.add("error");
+      if (fb) fb.textContent = err.message;
+      btn.disabled = false;
+    }
+  });
+
+  $("#account-totp-verify-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const btn = $("[type=submit]", form);
+    const fb = $(".form-feedback", form);
+    const code = String(form.elements.code?.value || "").trim();
+    const secret = String(form.elements.secret?.value || "").trim();
+    btn.disabled = true;
+    fb?.classList.remove("error");
+    if (fb) fb.textContent = text("Doğrulanıyor…", "Verifying…");
+    try {
+      const response = await fetch("/api/v1/auth/totp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(secret ? { code, secret } : { code }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text(
+              "Doğrulama kodu hatalı. Lütfen tekrar deneyin.",
+              "Invalid verification code. Please try again.",
+            ),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const msg = extractMessage(
+        data,
+        resPayload,
+        text(
+          "İki aşamalı doğrulama (2FA) etkinleştirildi.",
+          "Two-factor authentication (2FA) is now enabled.",
+        ),
+      );
+      if (fb) fb.textContent = msg;
+      toast(msg);
+      const shownBackup = renderBackupCodes(resPayload.backup_codes);
+      if (shownBackup) {
+        form.hidden = true;
+      } else {
+        setTimeout(() => location.reload(), 900);
+      }
+    } catch (err) {
+      fb?.classList.add("error");
+      if (fb) fb.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("#account-totp-disable-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const btn = $("[type=submit]", form);
+    const fb = $(".form-feedback", form);
+    const password = String(form.elements.password?.value || "");
+    const code = String(form.elements.code?.value || "").trim();
+    btn.disabled = true;
+    fb?.classList.remove("error");
+    if (fb) fb.textContent = text("İşleniyor…", "Processing…");
+    try {
+      const response = await fetch("/api/v1/auth/totp/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, code }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text(
+              "2FA devre dışı bırakılamadı.",
+              "2FA could not be disabled.",
+            ),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const msg = extractMessage(
+        data,
+        resPayload,
+        text(
+          "İki aşamalı doğrulama devre dışı bırakıldı.",
+          "Two-factor authentication has been disabled.",
+        ),
+      );
+      if (fb) fb.textContent = msg;
+      toast(msg);
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      fb?.classList.add("error");
+      if (fb) fb.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("#reset-password-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const btn = $("[type=submit]", form);
+    const fb =
+      $(".form-feedback, [data-form-feedback]", form) ||
+      $("#reset-password-feedback");
+    const token = String(
+      form.elements.token?.value ||
+        new URL(location.href).searchParams.get("token") ||
+        "",
+    ).trim();
+    const newPassword = String(
+      form.elements.new_password?.value || form.elements.password?.value || "",
+    );
+    const confirmInput =
+      form.elements.confirm_password || form.elements.password_confirm;
+    if (confirmInput && confirmInput.value !== newPassword) {
+      fb?.classList.add("error");
+      const mismatchMsg = text(
+        "Yeni şifre ve şifre tekrarı eşleşmiyor.",
+        "Passwords do not match.",
+      );
+      if (fb) fb.textContent = mismatchMsg;
+      toast(mismatchMsg);
+      return;
+    }
+    btn.disabled = true;
+    fb?.classList.remove("error");
+    if (fb)
+      fb.textContent = text("Şifreniz güncelleniyor…", "Updating password…");
+    try {
+      const response = await fetch("/api/v1/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          new_password: newPassword,
+          password: newPassword,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          extractError(
+            data,
+            text(
+              "Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.",
+              "Password reset link is invalid or expired.",
+            ),
+          ),
+        );
+      }
+      const resPayload = unwrapPayload(data);
+      const msg = extractMessage(
+        data,
+        resPayload,
+        text(
+          "Şifreniz başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz.",
+          "Your password has been updated. You can now sign in.",
+        ),
+      );
+      if (fb) fb.textContent = msg;
+      toast(msg);
+      setTimeout(() => {
+        location.href = "/hesabim";
+      }, 1400);
+    } catch (err) {
+      fb?.classList.add("error");
+      if (fb) fb.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   $("[data-logout]")?.addEventListener("click", async () => {
     try {
       const response = await fetch("/api/v1/auth/logout", { method: "POST" });
       if (!response.ok) throw Error();
-      // SECURITY FIX (C4/H8): Session token no longer stored in localStorage.
-      // Only clear any legacy PII that may exist from older sessions.
       try {
         localStorage.removeItem("msi_active_user");
         localStorage.removeItem("msi_session_token");

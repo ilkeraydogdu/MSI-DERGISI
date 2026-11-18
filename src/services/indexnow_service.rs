@@ -81,8 +81,10 @@ pub async fn push_urls_now(cfg: &AppConfig, paths: &[String]) -> Result<u16, Str
         .build()
         .map_err(|e| e.to_string())?;
 
+    let api_url = std::env::var("INDEXNOW_API_URL")
+        .unwrap_or_else(|_| "https://api.indexnow.org/indexnow".to_string());
     let resp = client
-        .post("https://api.indexnow.org/indexnow")
+        .post(&api_url)
         .json(&payload)
         .send()
         .await

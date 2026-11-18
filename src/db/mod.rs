@@ -75,17 +75,24 @@ impl Database {
             .map_err(|e| format!("SQLite bağlantı hatası: {}", e))?;
         schema::init_schema(&conn).map_err(|e| format!("Şema başlatma hatası: {}", e))?;
 
-        // Phase 5: Run rusqlite_migration for schema version tracking
+        // Run rusqlite_migration for deterministic schema version tracking (001..010)
         {
             use rusqlite_migration::{Migrations, M};
             let migrations = Migrations::new(vec![
                 M::up(include_str!("../../migrations/001_initial_schema.sql")),
                 M::up(include_str!("../../migrations/002_fts_sync.sql")),
                 M::up(include_str!("../../migrations/003_data_fixes.sql")),
+                M::up(include_str!("../../migrations/004_analytics_daily_agg.sql")),
+                M::up(include_str!("../../migrations/005_totp_secret.sql")),
+                M::up(include_str!("../../migrations/006_approval_workflow.sql")),
+                M::up(include_str!("../../migrations/007_monitoring_schema.sql")),
+                M::up(include_str!("../../migrations/008_password_reset.sql")),
+                M::up(include_str!("../../migrations/009_email_verification.sql")),
+                M::up(include_str!("../../migrations/010_unsubscribe_tokens.sql")),
             ]);
-            if let Err(e) = migrations.to_latest(&mut conn) {
-                tracing::warn!("Migration uyarısı (non-fatal): {}", e);
-            }
+            migrations
+                .to_latest(&mut conn)
+                .map_err(|e| format!("Veritabanı migrasyon hatası (001..010): {}", e))?;
         }
 
         let content_count: i64 = conn
@@ -107,6 +114,12 @@ impl Database {
         }
 
         drop(conn);
+
+        // Seed RBAC roles (idempotent, runs after migrations)
+        if let Err(e) = seed::seed_user_roles(&db) {
+            tracing::warn!("RBAC role seed uyarısı: {}", e);
+        }
+
         db.refresh_l1_cache();
 
         Ok(db)

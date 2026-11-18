@@ -1,5 +1,5 @@
 use super::{
-    components::{empty_state, icon, link, localized, notification_item},
+    components::{empty_state, enrich_issue_spreads, icon, link, localized, notification_item},
     config,
 };
 use crate::engine::{security_engine::escape_html as esc, seo_router_engine};
@@ -198,12 +198,20 @@ pub fn render_with_nonce(
         .get("contact_address")
         .map(String::as_str)
         .unwrap_or("Yaşamkent Mah. 3147 Sok. No:10 Çankaya / Ankara TÜRKİYE"));
+    let enriched_issues: Vec<MagazineIssue> = issues
+        .iter()
+        .map(|iss| {
+            let mut cloned = iss.clone();
+            cloned.spreads = enrich_issue_spreads(iss, contents);
+            cloned
+        })
+        .collect();
     let bootstrap = config::json_for_script(
         &serde_json::json!({
             "lang": lang,
             "mode": mode,
             "theme": design.theme.default_mode,
-            "issues": issues,
+            "issues": enriched_issues,
             "tags": tags,
             "featuredIssue": settings.get("current_featured_issue").and_then(|v| v.parse::<i32>().ok())
         }),
@@ -242,7 +250,6 @@ pub fn render_with_nonce(
         search = icon("search"),
         bell = icon("bell"),
         moon = icon("moon"),
-        user = icon("user"),
         arrow = icon("arrow"),
         menu = icon("menu"),
         close = icon("close"),
@@ -254,8 +261,13 @@ pub fn render_with_nonce(
         },
         other_lang = if lang == "en" { "tr" } else { "en" },
         other_lang_upper = if lang == "en" { "TR" } else { "EN" },
+        active_mode = if mode == "news" { "news" } else { "magazine" },
         magazine_active = if mode == "news" { "" } else { "active" },
         news_active = if mode == "news" { "active" } else { "" },
+        switch_magazine_label = if lang == "en" { "MAGAZINE" } else { "DERGİ" },
+        switch_news_label = if lang == "en" { "NEWS" } else { "HABER" },
+        edergi_label = if lang == "en" { "E-Magazine" } else { "E-Dergi" },
+        more_topics_label = if lang == "en" { "All topics" } else { "Tüm konular" },
         year = chrono::Utc::now().format("%Y")
     );
 

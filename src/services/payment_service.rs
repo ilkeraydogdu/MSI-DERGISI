@@ -2,9 +2,12 @@
 //!
 //! Implements the official PayTR iFrame API v1 checkout & callback flow:
 //! 1. Generate HMAC-SHA256 token over `merchant_id + user_ip + merchant_oid + email + payment_amount + user_basket + no_installment + max_installment + currency + test_mode + merchant_salt`
-//! 2. POST to PayTR API to obtain `iframe_token`
+//! 2. POST to PayTR API using a connection-pooled `reqwest::Client` to obtain `iframe_token`
 //! 3. Return `iframe_token` to frontend for embedded 3D Secure checkout
 //! 4. Verify callback HMAC-SHA256 hash (`merchant_oid + merchant_salt + status + total_amount`) on payment completion
+
+use std::sync::LazyLock;
+use std::time::Duration;
 
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -12,6 +15,16 @@ use sha2::Sha256;
 use tracing::{error, info};
 
 use crate::config::AppConfig;
+use crate::utils::crypto::constant_time_eq;
+
+/// Shared, connection-pooled HTTP client for PayTR API calls.
+static PAYTR_HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .pool_max_idle_per_host(10)
+        .build()
+        .expect("Failed to build PayTR HTTP client")
+});
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -23,7 +36,7 @@ pub struct PayTrConfig {
     pub merchant_salt: String,
     /// When true, use sandbox/test mode (`test_mode = 1`)
     pub test_mode: bool,
-    /// PayTR API endpoint URL (centralized in AppConfig)
+    /// PayTR API endpoint URL (centralized in `AppConfig`)
     pub api_url: String,
 }
 
@@ -79,7 +92,7 @@ struct PayTrTokenResponse {
     reason: Option<String>,
 }
 
-/// Server-validated checkout request data
+/// Server-validated checkout request data using exact integer `amount_cents` (kuruş)
 #[derive(Debug, Clone)]
 pub struct PayTrCheckoutRequest {
     pub user_email: String,
@@ -88,7 +101,7 @@ pub struct PayTrCheckoutRequest {
     pub user_address: String,
     pub user_ip: String,
     pub merchant_oid: String,
-    pub amount_try: f64,
+    pub amount_cents: i64,
     pub item_title: String,
     pub item_code: String,
     pub currency: String,
@@ -105,6 +118,7 @@ pub struct PayTrCheckoutSession {
 
 /// Generate official PayTR iFrame HMAC-SHA256 `paytr_token`:
 /// `base64(HMAC-SHA256(merchant_key, merchant_id + user_ip + merchant_oid + email + payment_amount + user_basket + no_installment + max_installment + currency + test_mode + merchant_salt))`
+#[allow(clippy::too_many_arguments)]
 pub fn generate_paytr_hash(
     config: &PayTrConfig,
     user_ip: &str,
@@ -142,7 +156,7 @@ pub fn generate_paytr_hash(
     )
 }
 
-/// Create a PayTR checkout session by obtaining an iframe token
+/// Create a PayTR checkout session by obtaining an iframe token via the pooled HTTP client
 pub async fn create_checkout_session(
     config: &PayTrConfig,
     req: &PayTrCheckoutRequest,
@@ -152,14 +166,17 @@ pub async fn create_checkout_session(
     if !config.is_configured() {
         return Err("PayTR sanal POS yapılandırılmamış.".to_string());
     }
+    if req.amount_cents <= 0 {
+        return Err("Ödeme tutarı sıfırdan büyük olmalıdır.".to_string());
+    }
 
-    let amount_kurus = (req.amount_try * 100.0).round() as i64;
+    let amount_kurus = req.amount_cents;
     let test_mode: u8 = if config.test_mode { 1 } else { 0 };
     let no_installment: u8 = 0;
     let max_installment: u8 = 0;
 
     // PayTR expects unit price formatted as decimal TRY string inside user_basket: [["Item Name", "1200.00", 1]]
-    let price_str = format!("{:.2}", req.amount_try);
+    let price_str = format!("{}.{:02}", amount_kurus / 100, (amount_kurus % 100).abs());
     let basket_json = serde_json::json!([[req.item_title, price_str, 1]]);
     let user_basket = base64::Engine::encode(
         &base64::engine::general_purpose::STANDARD,
@@ -206,8 +223,7 @@ pub async fn create_checkout_session(
         req.merchant_oid, req.item_code
     );
 
-    let client = reqwest::Client::new();
-    let response = client
+    let response = PAYTR_HTTP_CLIENT
         .post(&config.api_url)
         .form(&api_request)
         .send()
@@ -216,6 +232,16 @@ pub async fn create_checkout_session(
             error!("PayTR API request failed: {}", e);
             format!("Ödeme geçidi bağlantı hatası: {}", e)
         })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        error!(
+            "PayTR API returned non-success status {}: {}",
+            status, body
+        );
+        return Err(format!("Ödeme geçidi HTTP hatası ({}): {}", status, body));
+    }
 
     let token_response: PayTrTokenResponse = response.json().await.map_err(|e| {
         error!("PayTR API response parse error: {}", e);
@@ -271,21 +297,7 @@ pub fn verify_callback_hash(
     constant_time_eq(expected_hash.as_bytes(), received_hash.as_bytes())
 }
 
-// SECURITY FIX (H12): Constant-time comparison without length side channel.
-// Always compares max(len_a, len_b) bytes to avoid leaking hash length via
-// early return on mismatched lengths.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    let max_len = std::cmp::max(a.len(), b.len());
-    let mut diff: u8 = if a.len() != b.len() { 1 } else { 0 };
-    for i in 0..max_len {
-        let va = if i < a.len() { a[i] } else { 0 };
-        let vb = if i < b.len() { b[i] } else { 0 };
-        diff |= va ^ vb;
-    }
-    diff == 0
-}
-
-/// Generate an alphanumeric PayTR `merchant_oid` (PayTR forbids `-` or special chars in `merchant_oid`!)
+/// Generate an alphanumeric PayTR `merchant_oid` (PayTR forbids `-` or special chars in `merchant_oid`)
 pub fn generate_merchant_oid(invoice_no: &str) -> String {
     let clean: String = invoice_no
         .chars()
@@ -342,7 +354,6 @@ mod tests {
         );
         assert_ne!(h1, h2, "Changing merchant_salt must change PayTR HMAC token");
 
-        // Verify callback HMAC
         let oid = generate_merchant_oid("MSI-2026-481920");
         assert!(oid.chars().all(|c| c.is_ascii_alphanumeric()));
 
@@ -352,7 +363,11 @@ mod tests {
             &base64::engine::general_purpose::STANDARD,
             mac.finalize().into_bytes(),
         );
-        assert!(verify_callback_hash(&cfg_a, &oid, "success", "120000", &valid_sig));
-        assert!(!verify_callback_hash(&cfg_a, &oid, "success", "999999", &valid_sig));
+        assert!(verify_callback_hash(
+            &cfg_a, &oid, "success", "120000", &valid_sig
+        ));
+        assert!(!verify_callback_hash(
+            &cfg_a, &oid, "success", "999999", &valid_sig
+        ));
     }
 }

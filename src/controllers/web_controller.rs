@@ -18,7 +18,7 @@ use crate::engine::{
 use crate::models::{ContentItem, SearchFilterQuery, SeoMetaBundle};
 use crate::services::{ad_service, content_service, media_service};
 
-fn detect_language(params: &HashMap<String, String>, headers: &HeaderMap) -> String {
+pub fn detect_language(params: &HashMap<String, String>, headers: &HeaderMap) -> String {
     if let Some(l) = params.get("lang") {
         if l.eq_ignore_ascii_case("en") {
             return "en".to_string();
@@ -28,11 +28,46 @@ fn detect_language(params: &HashMap<String, String>, headers: &HeaderMap) -> Str
         }
     }
     if let Some(cookie) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
-        if cookie.contains("msi_lang=en") {
-            return "en".to_string();
+        for part in cookie.split(';') {
+            let trimmed = part.trim();
+            if trimmed.eq_ignore_ascii_case("msi_lang=en") {
+                return "en".to_string();
+            }
+            if trimmed.eq_ignore_ascii_case("msi_lang=tr") {
+                return "tr".to_string();
+            }
         }
-        if cookie.contains("msi_lang=tr") {
-            return "tr".to_string();
+    }
+    if let Some(accept_lang) = headers
+        .get(header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+    {
+        let mut best_tag: Option<&str> = None;
+        let mut best_q: f32 = -1.0;
+        for raw_item in accept_lang.split(',') {
+            let mut segments = raw_item.split(';');
+            let tag = segments.next().unwrap_or("").trim();
+            if tag.is_empty() {
+                continue;
+            }
+            let mut q: f32 = 1.0;
+            for param in segments {
+                if let Some(val) = param.trim().strip_prefix("q=") {
+                    if let Ok(parsed) = val.trim().parse::<f32>() {
+                        q = parsed;
+                    }
+                }
+            }
+            if q > best_q {
+                best_q = q;
+                best_tag = Some(tag);
+            }
+        }
+        if let Some(primary) = best_tag {
+            let lower = primary.to_ascii_lowercase();
+            if lower.starts_with("en") && !lower.starts_with("tr") {
+                return "en".to_string();
+            }
         }
     }
     "tr".to_string()
@@ -150,17 +185,68 @@ pub async fn render_home(
     Html(full_html).into_response()
 }
 
-pub async fn render_admin(State(state): State<AppState>) -> Html<String> {
-    let design = crate::engine::design::config::load(&state.db.get_setting_map("tr"));
-    let palette = |p: &crate::engine::design::config::Palette| {
-        format!("--bg-deep:{};--bg-panel:{};--bg-card:{};--bg-input:{};--border-subtle:{};--border-bright:{};--msi-crimson:{};--msi-crimson-glow:transparent;--text-main:{};--text-secondary:{};--text-muted:{};--radius:{}px;",p.background,p.surface,p.surface,p.subtle,p.border,p.accent,p.accent,p.text,p.muted,p.muted,design.theme.radius)
-    };
-    let tokens = format!(
-        "<style>:root{{{}}}body.admin-light-mode{{{}}}</style>",
-        palette(&design.theme.dark),
-        palette(&design.theme.light)
-    );
-    Html(admin_view::render_admin_dashboard().replace("</head>", &format!("{}</head>", tokens)))
+pub async fn render_admin(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
+) -> Response {
+    let user_opt = crate::services::auth_service::session_user(&state, &headers);
+    let admin_headers = [
+        (
+            header::HeaderName::from_static("x-robots-tag"),
+            "noindex, nofollow, noarchive",
+        ),
+        (header::CACHE_CONTROL, "no-store, private"),
+    ];
+
+    if let Some(user) = user_opt {
+        if crate::extractors::operator_user::is_staff_role(&state.db, &user.role) {
+            let design = crate::engine::design::config::load(&state.db.get_setting_map("tr"));
+            let palette = |p: &crate::engine::design::config::Palette| {
+                format!(
+                    "--bg-deep:{};--bg-panel:{};--bg-card:{};--bg-input:{};--border-subtle:{};--border-bright:{};--msi-crimson:{};--msi-crimson-glow:transparent;--text-main:{};--text-secondary:{};--text-muted:{};--radius:{}px;",
+                    p.background,
+                    p.surface,
+                    p.surface,
+                    p.subtle,
+                    p.border,
+                    p.accent,
+                    p.accent,
+                    p.text,
+                    p.muted,
+                    p.muted,
+                    design.theme.radius
+                )
+            };
+            let tokens = format!(
+                "<style>:root{{{}}}body.admin-light-mode{{{}}}</style>",
+                palette(&design.theme.dark),
+                palette(&design.theme.light)
+            );
+            let safe_nonce = crate::engine::security_engine::escape_html(&csp_nonce.0);
+            let safe_admin =
+                crate::engine::security_engine::escape_html(&state.config.admin_path_secret);
+            let admin_path_script = format!(
+                "<script nonce=\"{}\">window.__MSI_ADMIN_PATH__=\"/{}\";</script>",
+                safe_nonce, safe_admin
+            );
+            let html = admin_view::render_admin_dashboard_full(
+                Some(&csp_nonce.0),
+                &state.config.admin_path_secret,
+                &user.email,
+                &user.role,
+            )
+            .replace(
+                "</head>",
+                &format!("{}{}</head>", admin_path_script, tokens),
+            );
+            return (StatusCode::OK, admin_headers, Html(html)).into_response();
+        }
+    }
+
+    let login_html =
+        admin_view::render_admin_login(Some(&csp_nonce.0), &state.config.admin_path_secret);
+    (StatusCode::OK, admin_headers, Html(login_html)).into_response()
 }
 
 fn render_shell_with_seo(
@@ -191,7 +277,7 @@ fn render_shell_with_seo(
     )
 }
 
-fn render_shared_shell(
+pub(crate) fn render_shared_shell(
     state: &AppState,
     lang: &str,
     page_title: &str,
@@ -271,9 +357,16 @@ pub async fn render_article_detail(
                 return Redirect::permanent(&rule.new_path).into_response();
             }
         }
-        return render_not_found(State(state), headers).await;
+        return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     };
     let user = authenticated_reader(&state, &headers);
+    let is_staff = user
+        .as_ref()
+        .map(|u| crate::extractors::operator_user::is_staff_role(&state.db, &u.role))
+        .unwrap_or(false);
+    if !content_service::is_publicly_visible(&item) && !is_staff {
+        return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
+    }
     let purchased = user
         .as_ref()
         .map(|u| state.db.get_user_purchased_codes(&u.email))
@@ -328,7 +421,7 @@ pub async fn render_category_page(
     };
     let lang = detect_language(&params, &headers);
     let Some(category) = state.db.get_category_by_slug(&slug) else {
-        return render_not_found(State(state), headers).await;
+        return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     };
     let ssb_filter = params.get("ssb").filter(|v| !v.is_empty()).cloned();
     let all_categories = state.db.get_all_categories();
@@ -544,7 +637,7 @@ pub async fn render_edergi_kiosk(
     let settings = state.db.get_setting_map(&lang);
     let config = crate::engine::design::config::load(&settings);
     let Some(page) = config.page("e-dergi") else {
-        return render_not_found(State(state), headers).await;
+        return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     };
     let snap = CentralQueryEngine::snapshot(&state.db).data;
     let data = PageData {
@@ -592,13 +685,14 @@ pub async fn render_subscriptions_and_store(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let settings = state.db.get_setting_map(&lang);
     let config = crate::engine::design::config::load(&settings);
     match config.page("abonelik-ve-satis") {
-        Some(page) => render_configured_page(&state, &lang, page, &settings, None),
-        None => render_not_found(State(state), headers).await,
+        Some(page) => render_configured_page(&state, &lang, page, &settings, Some(&csp_nonce.0)),
+        None => render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await,
     }
 }
 
@@ -607,6 +701,7 @@ pub async fn render_corporate_page(
     Path(slug): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let settings = state.db.get_setting_map(&lang);
@@ -625,8 +720,8 @@ pub async fn render_corporate_page(
         other => other,
     };
     match config.page(&format!("kurumsal-{}", normalized)) {
-        Some(page) => render_configured_page(&state, &lang, page, &settings, None),
-        None => render_not_found(State(state), headers).await,
+        Some(page) => render_configured_page(&state, &lang, page, &settings, Some(&csp_nonce.0)),
+        None => render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await,
     }
 }
 
@@ -712,15 +807,9 @@ pub async fn render_account_page(
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let tr = &state.translations;
-    let Some(user) = authenticated_reader(&state, &headers) else {
-        let body = format!(r##"<section class="container section-space"><div class="account-welcome"><div class="eyebrow">{eyebrow}</div><h1>{line1}<br>{line2}</h1><p>{desc}</p><a href="#modal-login" class="button primary">{login_cta}</a><a href="/abonelik-ve-satis" class="text-link">{sub_link}</a></div></section>"##,
-            eyebrow = tr.t(&lang, "account.eyebrow"),
-            line1 = tr.t(&lang, "account.heading_line1"),
-            line2 = tr.t(&lang, "account.heading_line2"),
-            desc = tr.t(&lang, "account.description"),
-            login_cta = tr.t(&lang, "account.login_cta"),
-            sub_link = tr.t(&lang, "account.subscription_link"),
-        );
+    let user_opt = authenticated_reader(&state, &headers);
+    let Some(user) = user_opt else {
+        let body = crate::engine::design::account::account_with_admin_path(None, &[], &lang, None);
         return Html(render_shared_shell(
             &state,
             &lang,
@@ -743,7 +832,7 @@ pub async fn render_account_page(
         .db
         .get_order_invoices()
         .into_iter()
-        .filter(|i| i.user_email == user.email)
+        .filter(|i| i.user_email.eq_ignore_ascii_case(&user.email))
         .collect();
     let notifications = crate::engine::notification_engine::filter_user_notifications(
         &state.db.get_system_notifications(Some(&user.email)),
@@ -752,13 +841,20 @@ pub async fn render_account_page(
     );
     let ssb_tags = state.db.get_all_ssb_tags();
 
-    let body_html = design_engine::render_reader_account_portal(
+    let admin_path_opt = if crate::extractors::operator_user::is_staff_role(&state.db, &user.role) {
+        Some(state.config.admin_path_secret.as_str())
+    } else {
+        None
+    };
+
+    let body_html = crate::engine::design::account::render_with_admin_path(
         &lang,
         &user,
         &reminders,
         &invoices,
         &notifications,
         &ssb_tags,
+        admin_path_opt,
     );
 
     Html(render_shared_shell(
@@ -767,6 +863,72 @@ pub async fn render_account_page(
         &tr.t(&lang, "account.page_title_logged_in"),
         &body_html,
         Some("/hesabim"),
+        None,
+        true,
+        Some(&csp_nonce.0),
+    ))
+    .into_response()
+}
+
+pub async fn render_reset_password_page(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
+) -> Response {
+    let lang = detect_language(&params, &headers);
+    let raw_token = params.get("token").map(String::as_str).unwrap_or("").trim();
+    let escaped_token = crate::engine::security_engine::escape_html(raw_token);
+
+    let (eyebrow, heading, desc, new_pw_lbl, confirm_pw_lbl, page_title) = if lang == "en" {
+        (
+            "ACCOUNT SECURITY · PASSWORD RESET",
+            "Set Your New Password",
+            "Enter a strong new password of at least 8 characters to secure your MSI Dergisi account.",
+            "New Password",
+            "Confirm New Password",
+            "Reset Password",
+        )
+    } else {
+        (
+            "HESAP GÜVENLİĞİ · ŞİFRE YENİLEME",
+            "Yeni Şifrenizi Belirleyin",
+            "MSI Dergisi hesabınız için en az 8 karakterden oluşan yeni şifrenizi girin.",
+            "Yeni Şifre",
+            "Yeni Şifre (Tekrar)",
+            "Şifre Sıfırlama",
+        )
+    };
+
+    let body_html = format!(
+        r#"<section class="container section-space">
+  <div class="transactional-card reset-password-card">
+    <div class="eyebrow">{eyebrow}</div>
+    <h1>{heading}</h1>
+    <p>{desc}</p>
+    <form id="reset-password-form" class="ui-form">
+      <input type="hidden" name="token" value="{escaped_token}">
+      <label>{new_pw_lbl}<input type="password" name="new_password" required minlength="8" autocomplete="new-password" placeholder="••••••••"></label>
+      <label>{confirm_pw_lbl}<input type="password" name="confirm_password" required minlength="8" autocomplete="new-password" placeholder="••••••••"></label>
+      <p class="form-feedback" data-feedback role="status"></p>
+      <button type="submit" class="button primary">Şifremi Güncelle →</button>
+    </form>
+  </div>
+</section>"#,
+        eyebrow = eyebrow,
+        heading = heading,
+        desc = desc,
+        escaped_token = escaped_token,
+        new_pw_lbl = new_pw_lbl,
+        confirm_pw_lbl = confirm_pw_lbl,
+    );
+
+    Html(render_shared_shell(
+        &state,
+        &lang,
+        page_title,
+        &body_html,
+        Some("/sifre-sifirla"),
         None,
         true,
         Some(&csp_nonce.0),
@@ -914,6 +1076,91 @@ pub async fn render_ai_plugin_json(State(state): State<AppState>) -> Response {
     )
 }
 
+pub async fn render_openapi_json(State(state): State<AppState>) -> Response {
+    let base = state.config.public_url.trim_end_matches('/');
+    let spec = serde_json::json!({
+        "openapi": "3.1.0",
+        "info": {
+            "title": "MSI Dergisi & MSI TDR Public Defense Intelligence API",
+            "version": "2.6.0",
+            "description": "Official OpenAPI 3.1.0 specification for MSI Dergisi & savunmahaber.com defense, aerospace, and naval technology content, faceted search, SSB taxonomy, and magazine archive."
+        },
+        "servers": [
+            { "url": base, "description": "Primary Production Server" }
+        ],
+        "paths": {
+            "/api/v1/health": {
+                "get": {
+                    "operationId": "getPlatformHealth",
+                    "summary": "Platform status and public entity counts",
+                    "responses": { "200": { "description": "Healthy status response" } }
+                }
+            },
+            "/api/v1/search": {
+                "get": {
+                    "operationId": "searchDefenseContent",
+                    "summary": "Faceted full-text search across defense news, analyses, interviews, and magazine issues",
+                    "parameters": [
+                        { "name": "q", "in": "query", "schema": { "type": "string" } },
+                        { "name": "category", "in": "query", "schema": { "type": "string" } },
+                        { "name": "ssb_tag", "in": "query", "schema": { "type": "string" } },
+                        { "name": "issue", "in": "query", "schema": { "type": "integer" } },
+                        { "name": "lang", "in": "query", "schema": { "type": "string", "enum": ["tr", "en"] } },
+                        { "name": "page", "in": "query", "schema": { "type": "integer" } },
+                        { "name": "per_page", "in": "query", "schema": { "type": "integer" } }
+                    ],
+                    "responses": { "200": { "description": "Paginated search results" } }
+                }
+            },
+            "/api/v1/contents": {
+                "get": {
+                    "operationId": "listPublishedContents",
+                    "summary": "List published defense articles and dossiers",
+                    "responses": { "200": { "description": "Published content list" } }
+                }
+            },
+            "/api/v1/contents/{slug}": {
+                "get": {
+                    "operationId": "getContentBySlug",
+                    "summary": "Retrieve a single defense article or dossier by slug",
+                    "parameters": [
+                        { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }
+                    ],
+                    "responses": {
+                        "200": { "description": "Article detail with paywall and related articles" },
+                        "404": { "description": "Article not found" }
+                    }
+                }
+            },
+            "/api/v1/categories": {
+                "get": {
+                    "operationId": "listCategories",
+                    "summary": "List editorial and dossier categories",
+                    "responses": { "200": { "description": "Category hierarchy" } }
+                }
+            },
+            "/api/v1/ssb-tags": {
+                "get": {
+                    "operationId": "listSsbTags",
+                    "summary": "List Defense Industry Agency (SSB) technology taxonomy tags",
+                    "responses": { "200": { "description": "SSB technology tags" } }
+                }
+            },
+            "/api/v1/issues": {
+                "get": {
+                    "operationId": "listMagazineIssues",
+                    "summary": "List MSI Dergisi & MSI TDR print/digital magazine issues",
+                    "responses": { "200": { "description": "Magazine issue archive" } }
+                }
+            }
+        }
+    });
+    typed_response(
+        "application/json; charset=utf-8",
+        serde_json::to_string_pretty(&spec).unwrap_or_default(),
+    )
+}
+
 pub async fn render_opensearch_xml(State(state): State<AppState>) -> Response {
     let brand_config = seo_router_engine::SeoBrandConfig::from_settings(&state.db.get_setting_map("tr"));
     let xml = CentralSeoEngine::generate_opensearch_xml(&state.config.public_url, &brand_config);
@@ -1022,7 +1269,8 @@ pub async fn render_legacy_html_page(
     State(state): State<AppState>,
     Path(filename): Path<String>,
     Query(_params): Query<HashMap<String, String>>,
-    _headers: HeaderMap,
+    headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     // Check seo_redirects DB table first for any registered redirect
     let old_path = format!("/{}", filename);
@@ -1056,7 +1304,7 @@ pub async fn render_legacy_html_page(
         "technology.html" | "lifestyle.html" | "travel.html" => {
             Redirect::permanent("/arama").into_response()
         }
-        _ => render_not_found(State(state), _headers).await,
+        _ => render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await,
     }
 }
 
@@ -1065,7 +1313,7 @@ pub async fn handle_fallback_or_redirect(
     uri: axum::http::Uri,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
-    Extension(_csp_nonce): Extension<CspNonce>,
+    Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
     let path = uri.path();
 
@@ -1086,6 +1334,7 @@ pub async fn handle_fallback_or_redirect(
             Path(trimmed.to_string()),
             Query(params),
             headers,
+            Extension(csp_nonce.clone()),
         )
         .await;
     }
@@ -1115,6 +1364,7 @@ pub async fn handle_fallback_or_redirect(
             Path(trimmed.to_string()),
             Query(params),
             headers,
+            Extension(csp_nonce.clone()),
         )
         .await;
     }
@@ -1132,6 +1382,7 @@ pub async fn handle_fallback_or_redirect(
                 Path(en_sub.to_string()),
                 Query(en_params),
                 headers,
+                Extension(csp_nonce.clone()),
             )
             .await;
         }
@@ -1147,40 +1398,40 @@ pub async fn handle_fallback_or_redirect(
 
     // 3. Check if path matches a category slug directly (e.g. /haberler, /ozel-dosyalar, /soylesiler)
     if state.db.get_category_by_slug(trimmed).is_some() {
-        let csp_nonce = CspNonce(String::new());
         return render_category_page(
             State(state),
             Path(trimmed.to_string()),
             Query(params),
             headers,
-            Extension(csp_nonce),
+            Extension(csp_nonce.clone()),
         )
         .await;
     }
 
     // 4. Check if path matches an article slug directly
     if state.db.get_content_by_slug(trimmed).is_some() {
-        let csp_nonce = CspNonce(String::new());
         return render_article_detail(
             State(state),
             Path(trimmed.to_string()),
             Query(params),
             headers,
-            Extension(csp_nonce),
+            Extension(csp_nonce.clone()),
         )
         .await;
     }
 
-    render_not_found(State(state), headers).await
+    render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await
 }
 
-pub async fn render_not_found(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    // 404 handler cannot extract Extension<CspNonce> because it is called from other handlers
-    // that already consumed the extension. Use None nonce — CSP will fall back to unsafe-inline
-    // for this error page only.
-    let lang = detect_language(&HashMap::new(), &headers);
+pub async fn render_not_found_with_nonce(
+    state: &AppState,
+    headers: &HeaderMap,
+    nonce: Option<&str>,
+) -> Response {
+    let lang = detect_language(&HashMap::new(), headers);
     let tr = &state.translations;
-    let body_html = format!(r##"<section class="py-5 bg-light text-center">
+    let body_html = format!(
+        r##"<section class="py-5 bg-light text-center">
         <div class="container py-5">
             <span class="badge bg-danger mb-2">{badge}</span>
             <h1 class="fw-bold mb-3">{title}</h1>
@@ -1198,16 +1449,20 @@ pub async fn render_not_found(State(state): State<AppState>, headers: HeaderMap)
         search = tr.t(&lang, "error.404_search"),
     );
     let html = render_shared_shell(
-        &state,
+        state,
         &lang,
         &tr.t(&lang, "error.404_page_title"),
         &body_html,
         None,
         None,
         true,
-        None,
+        nonce,
     );
     (StatusCode::NOT_FOUND, Html(html)).into_response()
+}
+
+pub async fn render_not_found(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    render_not_found_with_nonce(&state, &headers, None).await
 }
 
 pub async fn render_designed_page(
@@ -1221,7 +1476,7 @@ pub async fn render_designed_page(
     let settings = state.db.get_setting_map(&lang);
     let config = crate::engine::design::config::load(&settings);
     let Some(page) = config.page(&slug) else {
-        return render_not_found(State(state), headers).await;
+        return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     };
     render_configured_page(&state, &lang, page, &settings, Some(&csp_nonce.0))
 }
@@ -1461,15 +1716,19 @@ pub async fn render_author_profile(
 
     let lang = detect_language(&params, &headers);
     let all_contents = state.db.get_all_contents();
+    let is_staff = authenticated_reader(&state, &headers)
+        .as_ref()
+        .map(|u| crate::extractors::operator_user::is_staff_role(&state.db, &u.role))
+        .unwrap_or(false);
 
-    // Find all contents whose author_name matches this slug
+    // Find all publicly visible contents whose author_name matches this slug
     let mut matched_articles: Vec<&ContentItem> = all_contents
         .iter()
-        .filter(|c| author_slug_from_name(&c.author_name) == slug)
+        .filter(|c| (is_staff || content_service::is_publicly_visible(c)) && author_slug_from_name(&c.author_name) == slug)
         .collect();
 
     if matched_articles.is_empty() {
-        return render_not_found(State(state), headers).await;
+        return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     }
 
     // Sort by published_at descending
@@ -1546,4 +1805,28 @@ fn authenticated_reader(
     headers: &HeaderMap,
 ) -> Option<crate::models::UserAccount> {
     crate::services::auth_service::session_user(state, headers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_language_respects_query_cookie_and_accept_language() {
+        let mut params = HashMap::new();
+        let mut headers = HeaderMap::new();
+        assert_eq!(detect_language(&params, &headers), "tr");
+
+        headers.insert(header::ACCEPT_LANGUAGE, "en-US,en;q=0.9,tr;q=0.8".parse().unwrap());
+        assert_eq!(detect_language(&params, &headers), "en");
+
+        headers.insert(header::ACCEPT_LANGUAGE, "tr-TR,tr;q=0.9,en-US;q=0.8".parse().unwrap());
+        assert_eq!(detect_language(&params, &headers), "tr");
+
+        headers.insert(header::COOKIE, "foo=1; msi_lang=en".parse().unwrap());
+        assert_eq!(detect_language(&params, &headers), "en");
+
+        params.insert("lang".to_string(), "tr".to_string());
+        assert_eq!(detect_language(&params, &headers), "tr");
+    }
 }

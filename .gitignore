@@ -27,3 +27,6 @@ artifacts/
 
 # Large media binaries
 images/tour.mp4
+
+# IDE / local agent settings
+.claude/

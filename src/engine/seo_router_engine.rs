@@ -1316,8 +1316,8 @@ Sitemap: {base}/rss.xml?lang=en
                 Self::xml_escape(&item_url)
             ));
             rss.push_str(&format!(
-                "      <description>{}</description>\n",
-                Self::xml_escape(summary)
+                "      <description><![CDATA[{}]]></description>\n",
+                summary
             ));
             rss.push_str(&format!(
                 "      <dc:creator>{}</dc:creator>\n",
@@ -1364,17 +1364,25 @@ Sitemap: {base}/rss.xml?lang=en
                     &c.summary_tr
                 };
                 let url = format!("{}/icerik/{}", clean_base, c.slug);
-                json!({
-                    "id": url,
-                    "url": url,
-                    "title": title,
-                    "summary": summary,
-                    "image": Self::resolve_asset_url(&clean_base, &c.cover_image, default_img),
-                    "date_published": Self::to_iso8601_tr(&c.published_at),
-                    "authors": [{ "name": c.author_name }],
-                    "tags": c.ssb_tags,
-                    "language": if is_en { "en-US" } else { "tr-TR" }
-                })
+                {
+                    let body_html = if is_en && !c.body_en.is_empty() {
+                        &c.body_en
+                    } else {
+                        &c.body_tr
+                    };
+                    json!({
+                        "id": url,
+                        "url": url,
+                        "title": title,
+                        "summary": summary,
+                        "content_html": body_html,
+                        "image": Self::resolve_asset_url(&clean_base, &c.cover_image, default_img),
+                        "date_published": Self::to_iso8601_tr(&c.published_at),
+                        "authors": [{ "name": c.author_name }],
+                        "tags": c.ssb_tags,
+                        "language": if is_en { "en-US" } else { "tr-TR" }
+                    })
+                }
             })
             .collect();
 
@@ -1639,6 +1647,7 @@ mod tests {
             true_read_count: 250,
             placements: vec!["ozel-haberler".into(), "kapak-dosyalari".into()],
             ssb_tags: vec!["hava-araclari".into(), "radarlar-ve-sensorler".into()],
+            status: "published".into(),
         }
     }
 

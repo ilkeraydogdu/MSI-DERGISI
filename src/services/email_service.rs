@@ -1,6 +1,7 @@
 //! Transactional & Editorial Email Dispatch Engine (`src/services/email_service.rs`)
 //!
-//! Dispatches KVKK-consented newsletters and 5-stage subscription renewal reminders
+//! Dispatches KVKK-consented newsletters (with RFC 8058 One-Click `List-Unsubscribe` headers),
+//! 5-stage subscription renewal reminders, email verification links, and password reset links
 //! using local Postfix/MTA (`sendmail -t -i`) with RFC 2047 UTF-8 headers and Base64 MIME bodies.
 
 use base64::Engine;
@@ -12,8 +13,9 @@ use tokio::process::Command;
 use tracing::{info, warn};
 
 use crate::config::AppConfig;
-use crate::engine::security_engine::escape_html;
+use crate::engine::security_engine::{escape_html, sanitize_rich_html};
 use crate::models::{AdCampaign, NewsletterCampaign, RenewalReminderLog, UserAccount};
+use crate::services::content_service::user_has_subscriber_access;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct EmailDispatchSummary {
@@ -29,13 +31,26 @@ fn encode_rfc2047_utf8(text: &str) -> String {
     format!("=?UTF-8?B?{}?=", b64)
 }
 
-fn sanitize_header_addr(addr: &str) -> String {
-    addr.chars()
+fn sanitize_header_value(val: &str) -> String {
+    val.chars()
         .filter(|c| !matches!(c, '\r' | '\n' | '\0'))
         .collect()
 }
 
+/// Builds a standard RFC 2047 + Base64 HTML MIME message.
 pub fn build_mime_email(from: &str, to: &str, subject: &str, html_body: &str) -> String {
+    build_mime_email_with_unsubscribe(from, to, subject, html_body, None)
+}
+
+/// Builds an RFC 2047 + Base64 HTML MIME message with optional RFC 8058 One-Click
+/// `List-Unsubscribe` and `List-Unsubscribe-Post` headers for marketing/newsletter compliance.
+pub fn build_mime_email_with_unsubscribe(
+    from: &str,
+    to: &str,
+    subject: &str,
+    html_body: &str,
+    unsub_url: Option<&str>,
+) -> String {
     let encoded_subject = encode_rfc2047_utf8(subject);
     let body_b64 = base64::engine::general_purpose::STANDARD
         .encode(html_body.as_bytes())
@@ -45,17 +60,42 @@ pub fn build_mime_email(from: &str, to: &str, subject: &str, html_body: &str) ->
         .collect::<Vec<_>>()
         .join("\r\n");
 
+    let unsub_headers = match unsub_url.map(sanitize_header_value) {
+        Some(clean_url) if !clean_url.trim().is_empty() => format!(
+            "List-Unsubscribe: <{}>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n",
+            clean_url.trim()
+        ),
+        _ => String::new(),
+    };
+
     format!(
-        "From: {}\r\nTo: {}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\nX-Mailer: MSI-Dergisi-Rust-MTA/2.6\r\n\r\n{}\r\n",
-        sanitize_header_addr(from),
-        sanitize_header_addr(to),
+        "From: {}\r\nTo: {}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n{}X-Mailer: MSI-Dergisi-Rust-MTA/2.6\r\n\r\n{}\r\n",
+        sanitize_header_value(from),
+        sanitize_header_value(to),
         encoded_subject,
+        unsub_headers,
         body_b64
     )
 }
 
-pub async fn send_raw_mime(config: &AppConfig, to: &str, subject: &str, html_body: &str) -> Result<bool, String> {
-    let raw_msg = build_mime_email(&config.smtp_from, to, subject, html_body);
+pub async fn send_raw_mime(
+    config: &AppConfig,
+    to: &str,
+    subject: &str,
+    html_body: &str,
+) -> Result<bool, String> {
+    send_raw_mime_with_unsubscribe(config, to, subject, html_body, None).await
+}
+
+pub async fn send_raw_mime_with_unsubscribe(
+    config: &AppConfig,
+    to: &str,
+    subject: &str,
+    html_body: &str,
+    unsub_url: Option<&str>,
+) -> Result<bool, String> {
+    let raw_msg =
+        build_mime_email_with_unsubscribe(&config.smtp_from, to, subject, html_body, unsub_url);
 
     if !config.mail_delivery_enabled {
         info!(
@@ -100,21 +140,52 @@ pub async fn send_raw_mime(config: &AppConfig, to: &str, subject: &str, html_bod
     }
 }
 
-/// Filters KVKK-consented users matching the newsletter's target institution & SSB interest criteria.
+/// Filters KVKK-consented & marketing-opted-in users (`u.email_consent && u.marketing_emails_opted_in`)
+/// matching `target_group_filter` (`"gov_verified"`, `"active_subscribers"`, `"all"`/`""`),
+/// `target_institution`, and `target_ssb_tag`.
 pub fn filter_newsletter_recipients<'a>(
     users: &'a [UserAccount],
+    target_group_filter: &str,
     target_institution: &str,
     target_ssb_tag: &str,
 ) -> Vec<&'a UserAccount> {
+    let group = target_group_filter.trim();
     let inst = target_institution.trim();
     let tag = target_ssb_tag.trim();
+
     let inst_all = inst.is_empty() || inst == "*" || inst.eq_ignore_ascii_case("all");
     let tag_all = tag.is_empty() || tag == "*" || tag.eq_ignore_ascii_case("all");
 
+    let inst_tokens: Vec<&str> = inst
+        .split(['&', ','])
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+
     users
         .iter()
-        .filter(|u| u.email_consent && u.email.contains('@'))
-        .filter(|u| inst_all || u.organization_category.eq_ignore_ascii_case(inst))
+        .filter(|u| u.email_consent && u.marketing_emails_opted_in && u.email.contains('@'))
+        .filter(|u| {
+            if group.is_empty() || group == "*" || group.eq_ignore_ascii_case("all") {
+                true
+            } else if group.eq_ignore_ascii_case("gov_verified") {
+                u.is_gov_verified
+            } else if group.eq_ignore_ascii_case("active_subscribers")
+                || group.eq_ignore_ascii_case("subscribers")
+            {
+                user_has_subscriber_access(u)
+            } else if group.eq_ignore_ascii_case("email_verified") {
+                u.email_verified
+            } else {
+                true
+            }
+        })
+        .filter(|u| {
+            inst_all
+                || inst_tokens
+                    .iter()
+                    .any(|tok| u.organization_category.eq_ignore_ascii_case(tok))
+        })
         .filter(|u| {
             tag_all
                 || u.ssb_interests
@@ -124,11 +195,15 @@ pub fn filter_newsletter_recipients<'a>(
         .collect()
 }
 
+/// Dispatches a newsletter campaign with optional custom editorial `body_html` and
+/// RFC 8058 One-Click `List-Unsubscribe` headers per recipient.
 pub async fn dispatch_newsletter_campaign(
     config: &AppConfig,
+    db: &crate::db::Database,
     campaign: &NewsletterCampaign,
     recipients: &[&UserAccount],
     sponsor_ad: Option<&AdCampaign>,
+    body_html: Option<&str>,
 ) -> EmailDispatchSummary {
     let sponsor_html = sponsor_ad
         .map(|ad| {
@@ -147,32 +222,60 @@ pub async fn dispatch_newsletter_campaign(
         })
         .unwrap_or_default();
 
+    let editorial_body_html = match body_html.map(str::trim) {
+        Some(custom) if !custom.is_empty() => {
+            format!(
+                r#"<div style="font-size:14px;line-height:1.65;color:#242b35;">{}</div>"#,
+                sanitize_rich_html(custom)
+            )
+        }
+        _ => r#"<p style="font-size:14px;line-height:1.65;">İlgi alanlarınıza ve kurumsal profilinize özel derlenen güncel savunma, havacılık ve uzay teknolojileri bültenimiz yayındadır.</p>"#
+            .to_string(),
+    };
+
+    let base_url = config.public_url.trim_end_matches('/');
     let mut delivered = 0usize;
     let mut failed = 0usize;
 
     for user in recipients {
+        let unsub_token = uuid::Uuid::new_v4().to_string();
+        let _ = db.create_unsubscribe_token(user.id, &unsub_token);
+        let raw_unsub_url = format!("{}/abonelik-iptal?token={}", base_url, unsub_token);
+        let escaped_unsub_url = escape_html(&raw_unsub_url);
+
         let html = format!(
             r#"<!doctype html><html lang="tr"><body style="font-family:Arial,sans-serif;background:#f5f4f1;padding:24px;color:#242b35;">
             <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dcdedc;border-top:4px solid #b51230;padding:28px;">
                 <div style="font-size:11px;letter-spacing:0.14em;color:#b51230;font-weight:700;">MSI DERGİSİ · KURUMSAL SAVUNMA BÜLTENİ</div>
                 <h1 style="font-size:22px;line-height:1.3;margin:12px 0;">{}</h1>
                 <p style="font-size:14px;color:#5b626c;">Sayın <strong>{}</strong> ({}),</p>
-                <p style="font-size:14px;line-height:1.65;">İlgi alanlarınıza ve kurumsal profilinize özel derlenen güncel savunma, havacılık ve uzay teknolojileri bültenimiz yayındadır.</p>
+                {}
                 {}
                 <p style="margin:24px 0;"><a href="{}/e-dergi" style="display:inline-block;background:#b51230;color:#ffffff;padding:12px 20px;text-decoration:none;font-weight:700;font-size:13px;">Güncel Sayıyı ve Analizleri Oku →</a></p>
                 <hr style="border:0;border-top:1px solid #dcdedc;margin:24px 0;">
                 <p style="font-size:11px;color:#5b626c;">Bu ileti 6698 sayılı KVKK kapsamındaki açık e-posta izninize istinaden {} adresine gönderilmiştir. Tercihlerinizi <a href="{}/hesabim" style="color:#b51230;">Okuyucu Merkezi</a> üzerinden güncelleyebilirsiniz.</p>
+                <p style="font-size:11px;color:#5b626c;margin-top:8px;"><a href="{}" style="color:#b51230;">E-posta aboneliğinden çık</a></p>
             </div></body></html>"#,
             escape_html(&campaign.subject_tr),
             escape_html(&user.full_name),
             escape_html(&user.organization_name),
+            editorial_body_html,
             sponsor_html,
-            escape_html(&config.public_url),
+            escape_html(base_url),
             escape_html(&user.email),
-            escape_html(&config.public_url),
+            escape_html(base_url),
+            escaped_unsub_url,
         );
 
-        match send_raw_mime(config, &user.email, &campaign.subject_tr, &html).await {
+        match send_raw_mime_with_unsubscribe(
+            config,
+            &user.email,
+            &campaign.subject_tr,
+            &html,
+            Some(&raw_unsub_url),
+        )
+        .await
+        {
             Ok(true) => delivered += 1,
             Ok(false) => {}
             Err(_) => failed += 1,
@@ -207,6 +310,7 @@ pub async fn dispatch_renewal_reminder_email(
         "MSI Dergisi Abonelik Yenileme Bilgilendirmesi — {}",
         stage_human
     );
+    let base_url = config.public_url.trim_end_matches('/');
     let html = format!(
         r#"<!doctype html><html lang="tr"><body style="font-family:Arial,sans-serif;background:#f5f4f1;padding:24px;color:#242b35;">
         <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #dcdedc;border-top:4px solid #b51230;padding:28px;">
@@ -220,10 +324,74 @@ pub async fn dispatch_renewal_reminder_email(
         escape_html(&reminder.full_name),
         escape_html(&reminder.organization_name),
         reminder.days_remaining,
-        escape_html(&config.public_url),
+        escape_html(base_url),
     );
 
     send_raw_mime(config, &reminder.user_email, &subject, &html).await
+}
+
+/// Sends an email verification email with a secure token link (`/hesap-dogrula?token={token}`).
+pub async fn send_verification_email(
+    config: &AppConfig,
+    to: &str,
+    token: &str,
+    site_url: &str,
+) -> Result<bool, String> {
+    let base_url = if site_url.trim().is_empty() {
+        config.public_url.trim_end_matches('/')
+    } else {
+        site_url.trim().trim_end_matches('/')
+    };
+    let verify_link = format!("{}/hesap-dogrula?token={}", base_url, token);
+    let subject = "E-posta Doğrulama - MSI Dergisi";
+    let html = format!(
+        r#"<!doctype html><html lang="tr"><body style="font-family:Arial,sans-serif;background:#f5f4f1;padding:24px;color:#242b35;">
+        <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #dcdedc;border-top:4px solid #b51230;padding:28px;">
+            <div style="font-size:11px;letter-spacing:0.14em;color:#b51230;font-weight:700;">MSI DERGİSİ · E-POSTA DOĞRULAMA</div>
+            <h1 style="font-size:20px;margin:12px 0;">E-posta Adresinizi Doğrulayın</h1>
+            <p style="font-size:14px;line-height:1.65;">MSI Dergisi hesabınızı tamamlamak için lütfen aşağıdaki bağlantıya tıklayarak e-posta adresinizi doğrulayın.</p>
+            <p style="margin:24px 0;"><a href="{}" style="display:inline-block;background:#b51230;color:#ffffff;padding:12px 20px;text-decoration:none;font-weight:700;font-size:13px;">E-postamı Doğrula →</a></p>
+            <p style="font-size:13px;color:#5b626c;">Bu link <strong>24 saat</strong> geçerlidir. Eğer bu talebi siz yapmadıysanız, bu e-postayı görmezden gelebilirsiniz.</p>
+            <hr style="border:0;border-top:1px solid #dcdedc;margin:24px 0;">
+            <p style="font-size:11px;color:#5b626c;">Güvenliğiniz için bu bağlantıyı kimseyle paylaşmayın. Sorularınız için <a href="{}/kurumsal/iletisim" style="color:#b51230;">iletişim sayfamızı</a> ziyaret edin.</p>
+        </div></body></html>"#,
+        escape_html(&verify_link),
+        escape_html(base_url),
+    );
+
+    send_raw_mime(config, to, subject, &html).await
+}
+
+/// Sends a password reset email linking to `{public_url}/sifre-sifirla?token={token}`.
+pub async fn send_password_reset_email(
+    config: &AppConfig,
+    to: &str,
+    token: &str,
+    site_url: &str,
+) -> Result<bool, String> {
+    let base_url = if site_url.trim().is_empty() {
+        config.public_url.trim_end_matches('/')
+    } else {
+        site_url.trim().trim_end_matches('/')
+    };
+    let reset_link = format!("{}/sifre-sifirla?token={}", base_url, token);
+    let subject = "Şifre Sıfırlama - MSI Dergisi";
+    let html = format!(
+        r#"<!doctype html><html lang="tr"><body style="font-family:Arial,sans-serif;background:#f5f4f1;padding:24px;color:#242b35;">
+        <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #dcdedc;border-top:4px solid #b51230;padding:28px;">
+            <div style="font-size:11px;letter-spacing:0.14em;color:#b51230;font-weight:700;">MSI DERGİSİ · ŞİFRE SIFIRLAMA</div>
+            <h1 style="font-size:20px;margin:12px 0;">Şifre Sıfırlama Talebi</h1>
+            <p style="font-size:14px;line-height:1.65;">Hesabınız için bir şifre sıfırlama talebi aldık. Aşağıdaki bağlantıya tıklayarak yeni şifrenizi belirleyebilirsiniz.</p>
+            <p style="margin:24px 0;"><a href="{}" style="display:inline-block;background:#b51230;color:#ffffff;padding:12px 20px;text-decoration:none;font-weight:700;font-size:13px;">Şifremi Sıfırla →</a></p>
+            <p style="font-size:13px;color:#5b626c;">Bu link <strong>1 saat</strong> geçerlidir. Eğer bu talebi siz yapmadıysanız, bu e-postayı görmezden gelebilirsiniz.</p>
+            <hr style="border:0;border-top:1px solid #dcdedc;margin:24px 0;">
+            <p style="font-size:11px;color:#5b626c;">Güvenliğiniz için bu bağlantıyı kimseyle paylaşmayın. Sorularınız için <a href="{}/kurumsal/iletisim" style="color:#b51230;">iletişim sayfamızı</a> ziyaret edin.</p>
+        </div></body></html>"#,
+        escape_html(&reset_link),
+        escape_html(base_url),
+    );
+
+    send_raw_mime(config, to, subject, &html).await
 }
 
 #[cfg(test)]
@@ -231,16 +399,62 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builds_valid_rfc2047_base64_mime_message() {
-        let raw = build_mime_email(
+    fn builds_valid_rfc2047_and_rfc8058_unsubscribe_mime_message() {
+        let raw = build_mime_email_with_unsubscribe(
             "[REDACTED_SESSION_FALLBACK]",
             "okur@msb.gov.tr",
             "Özel Dosya: Çelik Kubbe & KAAN",
             "<p>Merhaba</p>",
+            Some("https://msidergisi.com/abonelik-iptal?token=abc-123"),
         );
         assert!(raw.contains("From: [REDACTED_SESSION_FALLBACK]\r\n"));
         assert!(raw.contains("To: okur@msb.gov.tr\r\n"));
         assert!(raw.contains("Subject: =?UTF-8?B?"));
         assert!(raw.contains("Content-Transfer-Encoding: base64\r\n"));
+        assert!(raw.contains("List-Unsubscribe: <https://msidergisi.com/abonelik-iptal?token=abc-123>\r\n"));
+        assert!(raw.contains("List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n"));
+    }
+
+    #[test]
+    fn filter_newsletter_recipients_enforces_kvkk_opt_in_and_target_groups() {
+        let make = |id: i64, gov: bool, tier: &str, opt_in: bool| UserAccount {
+            id,
+            email: format!("u{}@test.com", id),
+            full_name: format!("U{}", id),
+            role: if tier == "free" { "registered" } else { "subscriber_digital" }.to_string(),
+            organization_category: "SSB".to_string(),
+            organization_name: "SSB".to_string(),
+            job_title: "Uzman".to_string(),
+            is_gov_verified: gov,
+            subscription_tier: tier.to_string(),
+            subscription_expires_at: Some("2030-12-31".to_string()),
+            reminders_halted: false,
+            kvkk_consent_at: "2026-01-01".to_string(),
+            kvkk_consent_ip: "127.0.0.1".to_string(),
+            kvkk_consent_hash: "KVKK".to_string(),
+            email_consent: true,
+            ssb_interests: vec!["hava-araclari".to_string()],
+            created_at: "2026-01-01".to_string(),
+            email_verified: true,
+            marketing_emails_opted_in: opt_in,
+            totp_enabled: false,
+        };
+
+        let users = vec![
+            make(1, true, "Kamu E-Dergi Abonesi", true),
+            make(2, false, "Dijital E-Dergi Abonesi", true),
+            make(3, false, "free", true),
+            make(4, true, "Kamu E-Dergi Abonesi", false), // opted out!
+        ];
+
+        let all_opted = filter_newsletter_recipients(&users, "all", "*", "*");
+        assert_eq!(all_opted.len(), 3);
+
+        let gov_only = filter_newsletter_recipients(&users, "gov_verified", "*", "*");
+        assert_eq!(gov_only.len(), 1);
+        assert_eq!(gov_only[0].id, 1);
+
+        let active_subs = filter_newsletter_recipients(&users, "active_subscribers", "*", "*");
+        assert_eq!(active_subs.len(), 2);
     }
 }

@@ -152,3 +152,49 @@ pub const CONTENT_TYPE_VIDEO: &str = "video";
 pub const FACET_SLUG_MULTIMEDIA: &str = "multimedya";
 /// Facet slug for video source group
 pub const FACET_SLUG_VIDEO: &str = "video";
+
+// =========================================================================
+// ANALYTICS & SCORING THRESHOLDS (from audit M5, M6, M8, M11)
+// =========================================================================
+/// Minimum duration (seconds) for an analytics event to count as a true read
+pub const TRUE_READ_MIN_DURATION_SEC: i32 = 25;
+/// Minimum scroll depth percentage for an analytics event to count as a true read
+pub const TRUE_READ_MIN_SCROLL_PCT: i32 = 70;
+/// CTR calculation multiplier (clicks * this / impressions)
+pub const CTR_MULTIPLIER: f64 = 10000.0;
+/// Search relevance score boost for title match
+pub const SEARCH_SCORE_TITLE_MATCH: i64 = 25;
+/// Search relevance score boost for tag match
+pub const SEARCH_SCORE_TAG_MATCH: i64 = 10;
+/// Search relevance score boost for category match
+pub const SEARCH_SCORE_CATEGORY_MATCH: i64 = 10;
+/// Limit for recent transactions in revenue analytics
+pub const RECENT_TRANSACTIONS_LIMIT: usize = 25;
+/// Limit for top products in revenue analytics
+pub const TOP_PRODUCTS_LIMIT: usize = 50;
+
+// =========================================================================
+// MONITORING LIMITS (from audit M7, M9)
+// =========================================================================
+/// Number of lines to tail from nginx access log
+pub const NGINX_LOG_TAIL_LINES: usize = 500;
+/// Number of lines to tail from fail2ban log
+pub const F2B_LOG_TAIL_LINES: usize = 200;
+/// Capacity of the attack detection ring buffer
+pub const ATTACK_BUFFER_CAPACITY: usize = 100;
+
+// =========================================================================
+// PDF SPREAD PAGE CALCULATION (from audit M10)
+// =========================================================================
+/// Starting page offset for PDF spread generation
+pub const PDF_SPREAD_START_PAGE: usize = 8;
+/// Page increment per spread entry
+pub const PDF_SPREAD_PAGE_INCREMENT: usize = 10;
+
+// =========================================================================
+// ADVERTISEMENT SLOT & BANNER CONSTANTS
+// =========================================================================
+/// Slot code prefix for homepage right-sidebar live ads
+pub const AD_SLOT_HOME_RIGHT_PREFIX: &str = "ad-live-home-right";
+/// Image filename substring identifying MSI Dergisi graphic banners
+pub const AD_GRAPHIC_BANNER_SUBSTRING: &str = "msi-dergisi-reklam-";

@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <meta name="referrer" content="same-origin">
+    <title>MSI Komuta Geçidi — Kurumsal Yayın &amp; Yönetim Kimlik Doğrulama</title>
+    <link rel="shortcut icon" type="image/x-icon" href="/images/favicon.png">
+    <link rel="stylesheet" href="/css/icons.css" type="text/css">
+    <style>
+        @font-face {
+            font-family: "IBM Plex Sans";
+            src: url("/fonts/editorial/ibm-plex-sans-latin-ext-400-normal.woff2") format("woff2"),
+                 url("/fonts/editorial/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: "IBM Plex Sans";
+            src: url("/fonts/editorial/ibm-plex-sans-latin-ext-500-normal.woff2") format("woff2"),
+                 url("/fonts/editorial/ibm-plex-sans-latin-500-normal.woff2") format("woff2");
+            font-weight: 500;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: "IBM Plex Sans";
+            src: url("/fonts/editorial/ibm-plex-sans-latin-ext-600-normal.woff2") format("woff2"),
+                 url("/fonts/editorial/ibm-plex-sans-latin-600-normal.woff2") format("woff2");
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: "IBM Plex Sans";
+            src: url("/fonts/editorial/ibm-plex-sans-latin-ext-700-normal.woff2") format("woff2"),
+                 url("/fonts/editorial/ibm-plex-sans-latin-700-normal.woff2") format("woff2");
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: "IBM Plex Mono";
+            src: url("/fonts/editorial/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2"),
+                 url("/fonts/editorial/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: "IBM Plex Mono";
+            src: url("/fonts/editorial/ibm-plex-mono-latin-ext-600-normal.woff2") format("woff2"),
+                 url("/fonts/editorial/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: "Source Serif 4";
+            src: url("/fonts/editorial/source-serif-4-latin-ext-opsz-normal.woff2") format("woff2"),
+                 url("/fonts/editorial/source-serif-4-latin-opsz-normal.woff2") format("woff2");
+            font-weight: 400 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        :root {
+            --gw-crimson: #c91818;
+            --gw-crimson-deep: #9e1111;
+            --gw-crimson-glow: rgba(201, 24, 24, 0.22);
+            --gw-bg: #0b0f17;
+            --gw-surface: rgba(15, 21, 32, 0.92);
+            --gw-elevated: #141c2b;
+            --gw-input: #090d14;
+            --gw-border: #232f44;
+            --gw-border-strong: #354664;
+            --gw-text: #f1f5f9;
+            --gw-text-secondary: #94a3b8;
+            --gw-text-muted: #64748b;
+            --gw-emerald: #10b981;
+            --gw-amber: #f59e0b;
+            --gw-danger: #ef4444;
+            --gw-font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --gw-font-serif: "Source Serif 4", Georgia, serif;
+            --gw-font-mono: "IBM Plex Mono", ui-monospace, monospace;
+        }
+
+        body.gw-light-mode {
+            --gw-bg: #f3f4f6;
+            --gw-surface: rgba(255, 255, 255, 0.96);
+            --gw-elevated: #f8fafc;
+            --gw-input: #ffffff;
+            --gw-border: #d1d5db;
+            --gw-border-strong: #9ca3af;
+            --gw-text: #0f172a;
+            --gw-text-secondary: #334155;
+            --gw-text-muted: #64748b;
+            --gw-crimson-glow: rgba(201, 24, 24, 0.10);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            min-height: 100%;
+        }
+
+        body {
+            background-color: var(--gw-bg);
+            color: var(--gw-text);
+            font-family: var(--gw-font-sans);
+            font-size: 14px;
+            line-height: 1.55;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Ambient Tactical Mesh & Precision Grid */
+        .gw-ambient {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background:
+                radial-gradient(circle at 14% 18%, var(--gw-crimson-glow) 0%, transparent 44%),
+                radial-gradient(circle at 86% 82%, rgba(30, 64, 175, 0.14) 0%, transparent 46%);
+        }
+
+        .gw-grid-lines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.18;
+            background-image:
+                linear-gradient(to right, var(--gw-border) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--gw-border) 1px, transparent 1px);
+            background-size: 56px 56px;
+        }
+
+        .gw-noise {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.025;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+
+        /* Top Crimson Command Strip */
+        .gw-topbar {
+            position: relative;
+            z-index: 2;
+            border-top: 3px solid var(--gw-crimson);
+            border-bottom: 1px solid var(--gw-border);
+            background: var(--gw-surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 12px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .gw-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .gw-monogram {
+            background: var(--gw-crimson);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: 0.08em;
+            padding: 7px 12px;
+            border-radius: 2px;
+            font-family: var(--gw-font-mono);
+        }
+
+        .gw-brand-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gw-brand-title {
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--gw-text);
+        }
+
+        .gw-brand-sub {
+            font-size: 11.5px;
+            color: var(--gw-text-muted);
+            font-family: var(--gw-font-mono);
+        }
+
+        .gw-topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .gw-btn-ghost {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 12px;
+            border: 1px solid var(--gw-border);
+            border-radius: 2px;
+            background: transparent;
+            color: var(--gw-text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+        }
+
+        .gw-btn-ghost:hover {
+            border-color: var(--gw-crimson);
+            color: var(--gw-text);
+            background: rgba(201, 24, 24, 0.06);
+        }
+
+        /* Main Split Command Container */
+        .gw-main {
+            position: relative;
+            z-index: 2;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 36px 20px;
+        }
+
+        .gw-frame {
+            width: 100%;
+            max-width: 980px;
+            display: grid;
+            grid-template-columns: 1.05fr 1fr;
+            border: 1px solid var(--gw-border);
+            border-top: 2px solid var(--gw-crimson);
+            border-radius: 2px;
+            background: var(--gw-surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 28px 70px rgba(0, 0, 0, 0.48);
+            overflow: hidden;
+        }
+
+        @media (max-width: 840px) {
+            .gw-frame {
+                grid-template-columns: 1fr;
+            }
+            .gw-briefing {
+                border-right: none !important;
+                border-bottom: 1px solid var(--gw-border);
+            }
+        }
+
+        /* Left Column: Tactical Briefing & Posture */
+        .gw-briefing {
+            padding: 40px 36px;
+            border-right: 1px solid var(--gw-border);
+            background: linear-gradient(180deg, rgba(201, 24, 24, 0.06) 0%, transparent 65%);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 28px;
+        }
+
+        .gw-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--gw-font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--gw-crimson);
+            margin-bottom: 14px;
+        }
+
+        .gw-pulse {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--gw-emerald);
+            box-shadow: 0 0 8px var(--gw-emerald);
+        }
+
+        .gw-headline {
+            font-family: var(--gw-font-serif);
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.22;
+            letter-spacing: -0.02em;
+            color: var(--gw-text);
+            margin-bottom: 14px;
+        }
+
+        .gw-lead {
+            font-size: 13.5px;
+            color: var(--gw-text-secondary);
+            line-height: 1.65;
+        }
+
+        .gw-spec-list {
+            display: grid;
+            gap: 10px;
+            border-top: 1px solid var(--gw-border);
+            padding-top: 20px;
+        }
+
+        .gw-spec-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 12px;
+            color: var(--gw-text-secondary);
+        }
+
+        .gw-spec-item i {
+            color: var(--gw-crimson);
+            margin-top: 3px;
+            width: 14px;
+            text-align: center;
+        }
+
+        .gw-spec-code {
+            font-family: var(--gw-font-mono);
+            font-size: 11px;
+            color: var(--gw-text-muted);
+        }
+
+        /* Right Column: Authentication Console */
+        .gw-console {
+            padding: 40px 36px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .gw-console-header {
+            margin-bottom: 22px;
+        }
+
+        .gw-step-tag {
+            font-family: var(--gw-font-mono);
+            font-size: 11px;
+            color: var(--gw-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 6px;
+        }
+
+        .gw-console-title {
+            font-size: 19px;
+            font-weight: 700;
+            color: var(--gw-text);
+            letter-spacing: -0.01em;
+        }
+
+        .gw-console-desc {
+            font-size: 12.5px;
+            color: var(--gw-text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Alert Banner */
+        .gw-alert {
+            display: none;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 2px;
+            border: 1px solid var(--gw-border);
+            border-left: 3px solid var(--gw-danger);
+            background: rgba(239, 68, 68, 0.10);
+            color: var(--gw-text);
+            font-size: 12.5px;
+            margin-bottom: 18px;
+        }
+
+        .gw-alert.is-visible {
+            display: flex;
+        }
+
+        .gw-alert.is-success {
+            border-left-color: var(--gw-emerald);
+            background: rgba(16, 185, 129, 0.10);
+        }
+
+        .gw-alert.is-warning {
+            border-left-color: var(--gw-amber);
+            background: rgba(245, 158, 11, 0.10);
+        }
+
+        .gw-view {
+            display: none;
+        }
+
+        .gw-view.is-active {
+            display: block;
+        }
+
+        .gw-field {
+            margin-bottom: 16px;
+        }
+
+        .gw-label-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .gw-label {
+            font-size: 11.5px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--gw-text-secondary);
+        }
+
+        .gw-input-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .gw-input {
+            width: 100%;
+            height: 44px;
+            padding: 0 13px;
+            background: var(--gw-input);
+            border: 1px solid var(--gw-border);
+            border-radius: 2px;
+            color: var(--gw-text);
+            font-size: 14px;
+            font-family: var(--gw-font-sans);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .gw-input-mono {
+            font-family: var(--gw-font-mono);
+            font-size: 17px;
+            letter-spacing: 0.16em;
+            text-align: center;
+        }
+
+        .gw-input:focus {
+            outline: none;
+            border-color: var(--gw-crimson);
+            box-shadow: 0 0 0 2px var(--gw-crimson-glow);
+        }
+
+        .gw-pw-toggle {
+            position: absolute;
+            right: 8px;
+            background: transparent;
+            border: none;
+            color: var(--gw-text-muted);
+            padding: 6px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .gw-pw-toggle:hover {
+            color: var(--gw-text);
+        }
+
+        .gw-link-btn {
+            background: none;
+            border: none;
+            color: var(--gw-crimson);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .gw-link-btn:hover {
+            text-decoration: underline;
+        }
+
+        .gw-btn-submit {
+            width: 100%;
+            height: 46px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            background: var(--gw-crimson);
+            border: 1px solid var(--gw-crimson);
+            border-radius: 2px;
+            color: #ffffff;
+            font-size: 13.5px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .gw-btn-submit:hover:not(:disabled) {
+            background: var(--gw-crimson-deep);
+        }
+
+        .gw-btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .gw-secondary-row {
+            margin-top: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .gw-nonstaff-box {
+            padding: 18px;
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            border-left: 3px solid var(--gw-amber);
+            background: rgba(245, 158, 11, 0.08);
+            border-radius: 2px;
+            margin-bottom: 18px;
+        }
+
+        .gw-nonstaff-title {
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--gw-amber);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .gw-nonstaff-text {
+            font-size: 13px;
+            color: var(--gw-text);
+            line-height: 1.6;
+        }
+
+        .gw-footer {
+            position: relative;
+            z-index: 2;
+            padding: 14px 28px;
+            border-top: 1px solid var(--gw-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 11.5px;
+            color: var(--gw-text-muted);
+            font-family: var(--gw-font-mono);
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--gw-crimson);
+            outline-offset: 2px;
+        }
+    </style>
+</head>
+<body data-gateway-login="1" data-admin-path="/admin">
+    <div class="gw-ambient"></div>
+    <div class="gw-grid-lines"></div>
+    <div class="gw-noise"></div>
+
+    <header class="gw-topbar">
+        <div class="gw-brand">
+            <div class="gw-monogram">MSI</div>
+            <div class="gw-brand-text">
+                <span class="gw-brand-title">UMSA Prodüksiyon — Komuta &amp; Yayın Yönetim Geçidi</span>
+                <span class="gw-brand-sub">MSI Dergisi (TR) &amp; MSI Turkish Defence Review (EN) • OMS/CMS</span>
+            </div>
+        </div>
+        <div class="gw-topbar-actions">
+            <button type="button" class="gw-btn-ghost" data-login-action="toggle-theme">
+                <i class="fa-solid fa-circle-half-stroke"></i> Tema Değiştir
+            </button>
+            <a href="/" class="gw-btn-ghost">
+                <i class="fa-solid fa-arrow-left"></i> Yayına Dön
+            </a>
+        </div>
+    </header>
+
+    <main class="gw-main">
+        <div class="gw-frame">
+            <!-- Left Briefing Column -->
+            <section class="gw-briefing" aria-label="Güvenlik Protokolü Özeti">
+                <div>
+                    <div class="gw-kicker">
+                        <span class="gw-pulse"></span> YETKİLİ OPERATÖR GİRİŞ KAPISI
+                    </div>
+                    <h1 class="gw-headline">Tek Kaynaklı Yayın, Analitik ve Savunma İstihbarat Komutası.</h1>
+                    <p class="gw-lead">
+                        Bu geçit yalnızca UMSA Prodüksiyon yayın kurulu, editöryal masası, reklam operasyonları ve sistem yöneticilerinin erişimine tahsis edilmiştir. Tüm oturum açma girişimleri denetim izi (Audit Trail) altına alınmaktadır.
+                    </p>
+                </div>
+
+                <div class="gw-spec-list">
+                    <div class="gw-spec-item">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <div>
+                            <strong>Argon2id + HttpOnly Oturum İzolasyonu</strong><br>
+                            <span class="gw-spec-code">SameSite=Lax • CSP Nonce Korumalı Arayüz</span>
+                        </div>
+                    </div>
+                    <div class="gw-spec-item">
+                        <i class="fa-solid fa-key"></i>
+                        <div>
+                            <strong>İki Faktörlü Kimlik Doğrulama (TOTP 2FA)</strong><br>
+                            <span class="gw-spec-code">Authenticator Uygulaması &amp; Yedek Kurtarma Kodları</span>
+                        </div>
+                    </div>
+                    <div class="gw-spec-item">
+                        <i class="fa-solid fa-user-lock"></i>
+                        <div>
+                            <strong>Rol Tabanlı Erişim Denetimi (RBAC) &amp; Kilit Koruması</strong><br>
+                            <span class="gw-spec-code">Ardışık Hatalı Girişlerde Otomatik Geçici Blokaj</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Interactive Authentication Console -->
+            <section class="gw-console" aria-label="Kimlik Doğrulama Formu">
+                <div id="gateway-feedback" class="gw-alert" role="alert" aria-live="polite">
+                    <i id="gateway-feedback-icon" class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
+                    <div id="gateway-feedback-msg"></div>
+                </div>
+
+                <!-- STEP 1: Corporate Email + Password -->
+                <div id="view-login" class="gw-view is-active">
+                    <div class="gw-console-header">
+                        <div class="gw-step-tag">ADIM 01 / KİMLİK DOĞRULAMA</div>
+                        <h2 class="gw-console-title">Kurumsal Operatör Girişi</h2>
+                        <p class="gw-console-desc">Yetkili kurumsal e-posta adresiniz ve parolanız ile oturum açın.</p>
+                    </div>
+
+                    <form id="form-gateway-login" novalidate>
+                        <div class="gw-field">
+                            <div class="gw-label-row">
+                                <label class="gw-label" for="login-email">Kurumsal E-Posta</label>
+                            </div>
+                            <div class="gw-input-wrap">
+                                <input
+                                    type="email"
+                                    id="login-email"
+                                    name="email"
+                                    class="gw-input"
+                                    required
+                                    autocomplete="username"
+                                    placeholder="ornek@msidergisi.com"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="gw-field">
+                            <div class="gw-label-row">
+                                <label class="gw-label" for="login-password">Parola</label>
+                                <button type="button" class="gw-link-btn" data-login-action="show-forgot">Şifremi Unuttum</button>
+                            </div>
+                            <div class="gw-input-wrap">
+                                <input
+                                    type="password"
+                                    id="login-password"
+                                    name="password"
+                                    class="gw-input"
+                                    required
+                                    autocomplete="current-password"
+                                    placeholder="••••••••••••"
+                                    style="padding-right: 44px;"
+                                >
+                                <button type="button" class="gw-pw-toggle" data-login-action="toggle-password" title="Parolayı Göster / Gizle" aria-label="Parolayı Göster veya Gizle">
+                                    <i id="pw-toggle-icon" class="fa-solid fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit" id="btn-login-submit" class="gw-btn-submit">
+                            <i class="fa-solid fa-right-to-bracket"></i> Komuta Merkezine Giriş Yap
+                        </button>
+                    </form>
+                </div>
+
+                <!-- STEP 2: 2FA TOTP / Recovery Code Verification -->
+                <div id="view-totp" class="gw-view">
+                    <div class="gw-console-header">
+                        <div class="gw-step-tag">ADIM 02 / İKİ FAKTÖRLÜ DOĞRULAMA (2FA)</div>
+                        <h2 class="gw-console-title">Authenticator Doğrulama Kodu</h2>
+                        <p class="gw-console-desc">Doğrulayıcı uygulamanızdaki tek kullanımlık kodu veya kurtarma kodunuzu girin.</p>
+                    </div>
+
+                    <form id="form-gateway-totp" novalidate>
+                        <div class="gw-field">
+                            <div class="gw-label-row">
+                                <label class="gw-label" for="totp-code">Doğrulama / Kurtarma Kodu</label>
+                            </div>
+                            <div class="gw-input-wrap">
+                                <input
+                                    type="text"
+                                    id="totp-code"
+                                    name="code"
+                                    class="gw-input gw-input-mono"
+                                    required
+                                    minlength="6"
+                                    maxlength="20"
+                                    autocomplete="one-time-code"
+                                    placeholder="000000"
+                                >
+                            </div>
+                        </div>
+
+                        <button type="submit" id="btn-totp-submit" class="gw-btn-submit">
+                            <i class="fa-solid fa-shield-check"></i> Kodu Doğrula ve Devam Et
+                        </button>
+
+                        <div class="gw-secondary-row">
+                            <button type="button" class="gw-link-btn" data-login-action="show-login">
+                                <i class="fa-solid fa-arrow-left"></i> E-Posta / Parola Adımına Dön
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- STEP 3: Forgot Password -->
+                <div id="view-forgot" class="gw-view">
+                    <div class="gw-console-header">
+                        <div class="gw-step-tag">PAROLA SIFIRLAMA PROTOKOLÜ</div>
+                        <h2 class="gw-console-title">Şifremi Unuttum</h2>
+                        <p class="gw-console-desc">Kayıtlı kurumsal e-posta adresinize güvenli parola sıfırlama bağlantısı gönderilir.</p>
+                    </div>
+
+                    <form id="form-gateway-forgot" novalidate>
+                        <div class="gw-field">
+                            <div class="gw-label-row">
+                                <label class="gw-label" for="forgot-email">Kurumsal E-Posta Adresi</label>
+                            </div>
+                            <div class="gw-input-wrap">
+                                <input
+                                    type="email"
+                                    id="forgot-email"
+                                    name="email"
+                                    class="gw-input"
+                                    required
+                                    autocomplete="email"
+                                    placeholder="ornek@msidergisi.com"
+                                >
+                            </div>
+                        </div>
+
+                        <button type="submit" id="btn-forgot-submit" class="gw-btn-submit">
+                            <i class="fa-solid fa-paper-plane"></i> Sıfırlama Bağlantısı Gönder
+                        </button>
+
+                        <div class="gw-secondary-row">
+                            <button type="button" class="gw-link-btn" data-login-action="show-login">
+                                <i class="fa-solid fa-arrow-left"></i> Giriş Ekranına Dön
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- STEP 4: Non-Staff Reader RBAC Gate Notice -->
+                <div id="view-non-staff" class="gw-view">
+                    <div class="gw-console-header">
+                        <div class="gw-step-tag">ERİŞİM YETKİSİ KISITLAMASI (RBAC)</div>
+                        <h2 class="gw-console-title">Yetkisiz Rol Tespiti</h2>
+                    </div>
+
+                    <div class="gw-nonstaff-box">
+                        <div class="gw-nonstaff-title">
+                            <i class="fa-solid fa-ban"></i> Personel Dışı Hesap
+                        </div>
+                        <p class="gw-nonstaff-text">
+                            Bu geçit yalnızca yetkili yayın ve yönetim personeline açıktır. Okuyucu ve abone hesapları işlemlerini Abone ve Okuyucu Portalı üzerinden gerçekleştirebilir.
+                        </p>
+                    </div>
+
+                    <button type="button" class="gw-btn-submit" data-login-action="logout-non-staff">
+                        <i class="fa-solid fa-right-from-bracket"></i> Oturumu Kapat ve Farklı Hesapla Giriş Yap
+                    </button>
+
+                    <div class="gw-secondary-row">
+                        <a href="/hesabim" class="gw-btn-ghost" style="flex:1; justify-content:center;">
+                            <i class="fa-solid fa-user"></i> Okuyucu Hesabım
+                        </a>
+                        <a href="/" class="gw-btn-ghost" style="flex:1; justify-content:center;">
+                            <i class="fa-solid fa-house"></i> Ana Sayfaya Dön
+                        </a>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="gw-footer">
+        <span>UMSA PRODÜKSİYON LTD. ŞTİ. • SAVUNMA VE HAVACILIK YAYINCILIĞI</span>
+        <span>NOINDEX / NOFOLLOW • KORUMALI YÖNETİM GEÇİDİ</span>
+    </footer>
+
+    <script nonce="{nonce}">
+    (function () {
+        "use strict";
+
+        var NON_STAFF_ROLES = new Set([
+            "reader",
+            "registered",
+            "subscriber",
+            "subscriber_public",
+            "subscriber_individual",
+            "subscriber_corporate",
+            "member",
+            "user",
+            "guest",
+            "free"
+        ]);
+
+        var pendingTempToken = "";
+        var lockoutTimer = null;
+
+        function getCsrfToken() {
+            var match = document.cookie.split(";").map(function (c) { return c.trim(); }).find(function (c) {
+                return c.indexOf("csrf_token=") === 0;
+            });
+            return match ? decodeURIComponent(match.substring("csrf_token=".length)) : "";
+        }
+
+        function applySavedTheme() {
+            try {
+                if (localStorage.getItem("msi_admin_theme") === "light") {
+                    document.body.classList.add("gw-light-mode");
+                }
+            } catch (_) {}
+        }
+
+        function toggleTheme() {
+            var isLight = document.body.classList.toggle("gw-light-mode");
+            try {
+                localStorage.setItem("msi_admin_theme", isLight ? "light" : "dark");
+            } catch (_) {}
+        }
+
+        function clearFeedback() {
+            if (lockoutTimer) {
+                clearInterval(lockoutTimer);
+                lockoutTimer = null;
+            }
+            var box = document.getElementById("gateway-feedback");
+            var msg = document.getElementById("gateway-feedback-msg");
+            if (box) {
+                box.className = "gw-alert";
+            }
+            if (msg) {
+                msg.textContent = "";
+            }
+        }
+
+        function showFeedback(text, kind) {
+            var box = document.getElementById("gateway-feedback");
+            var msg = document.getElementById("gateway-feedback-msg");
+            var icon = document.getElementById("gateway-feedback-icon");
+            if (!box || !msg) return;
+            box.className = "gw-alert is-visible" + (kind ? " is-" + kind : "");
+            if (icon) {
+                icon.className = kind === "success"
+                    ? "fa-solid fa-circle-check"
+                    : kind === "warning"
+                        ? "fa-solid fa-clock"
+                        : "fa-solid fa-triangle-exclamation";
+            }
+            msg.textContent = text;
+        }
+
+        function startLockoutCountdown(seconds, baseMessage) {
+            if (lockoutTimer) clearInterval(lockoutTimer);
+            var remaining = Math.max(1, parseInt(seconds, 10) || 60);
+            function tick() {
+                if (remaining <= 0) {
+                    clearInterval(lockoutTimer);
+                    lockoutTimer = null;
+                    clearFeedback();
+                    return;
+                }
+                showFeedback(
+                    (baseMessage || "Çok fazla başarısız giriş denemesi algılandı.") +
+                    " Kalan kilit süresi: " + remaining + " saniye.",
+                    "warning"
+                );
+                remaining -= 1;
+            }
+            tick();
+            lockoutTimer = setInterval(tick, 1000);
+        }
+
+        function switchView(viewId) {
+            clearFeedback();
+            var views = document.querySelectorAll(".gw-view");
+            for (var i = 0; i < views.length; i++) {
+                views[i].classList.toggle("is-active", views[i].id === viewId);
+            }
+            if (viewId === "view-totp") {
+                var totpInput = document.getElementById("totp-code");
+                if (totpInput) {
+                    totpInput.value = "";
+                    totpInput.focus();
+                }
+            } else if (viewId === "view-login") {
+                var emailInput = document.getElementById("login-email");
+                if (emailInput) emailInput.focus();
+            } else if (viewId === "view-forgot") {
+                var loginEmail = document.getElementById("login-email");
+                var forgotEmail = document.getElementById("forgot-email");
+                if (forgotEmail && loginEmail && loginEmail.value && !forgotEmail.value) {
+                    forgotEmail.value = loginEmail.value.trim();
+                }
+                if (forgotEmail) forgotEmail.focus();
+            }
+        }
+
+        async function postJson(url, payload) {
+            var headers = { "Content-Type": "application/json" };
+            var csrf = getCsrfToken();
+            if (csrf) headers["X-CSRF-Token"] = csrf;
+            var res = await fetch(url, {
+                method: "POST",
+                headers: headers,
+                credentials: "same-origin",
+                body: JSON.stringify(payload || {})
+            });
+            var body = null;
+            try {
+                body = await res.json();
+            } catch (_) {
+                body = null;
+            }
+            return { ok: res.ok, status: res.status, body: body };
+        }
+
+        async function finalizeAuthenticatedSession(userObj) {
+            var role = (userObj && userObj.role ? String(userObj.role) : "").toLowerCase().trim();
+            if (!role || NON_STAFF_ROLES.has(role)) {
+                switchView("view-non-staff");
+                return;
+            }
+            try {
+                var probe = await fetch(window.location.pathname, {
+                    method: "GET",
+                    credentials: "same-origin",
+                    cache: "no-store"
+                });
+                if (probe.status === 403) {
+                    switchView("view-non-staff");
+                    return;
+                }
+                var html = await probe.text();
+                if (html.indexOf('data-gateway-login="1"') !== -1) {
+                    switchView("view-non-staff");
+                    return;
+                }
+            } catch (_) {
+                // Proceed to reload if probe fails transiently
+            }
+            window.location.reload();
+        }
+
+        async function handleLoginSubmit(e) {
+            e.preventDefault();
+            clearFeedback();
+            var emailEl = document.getElementById("login-email");
+            var pwEl = document.getElementById("login-password");
+            var btn = document.getElementById("btn-login-submit");
+            var email = (emailEl ? emailEl.value : "").trim();
+            var password = pwEl ? pwEl.value : "";
+
+            if (!email || !password) {
+                showFeedback("Lütfen kurumsal e-posta adresinizi ve parolanızı eksiksiz girin.", "error");
+                return;
+            }
+
+            if (btn) btn.disabled = true;
+            try {
+                var resp = await postJson("/api/v1/auth/login", { email: email, password: password });
+                var body = resp.body || {};
+                var data = body.data || body;
+
+                if (!resp.ok) {
+                    var remSecs = data && data.remaining_secs ? data.remaining_secs : null;
+                    if (resp.status === 429 || body.error_code === "ACCOUNT_LOCKED") {
+                        startLockoutCountdown(remSecs || 60, body.message || "Hesap geçici olarak kilitlendi.");
+                    } else if (resp.status === 403) {
+                        switchView("view-non-staff");
+                    } else {
+                        showFeedback(body.message || body.error || "Kimlik doğrulama başarısız. E-posta veya parola hatalı.", "error");
+                    }
+                    return;
+                }
+
+                if (data && data.requires_totp) {
+                    pendingTempToken = data.temp_token || "";
+                    switchView("view-totp");
+                    showFeedback(data.message || "İki faktörlü doğrulama kodu gerekli.", "warning");
+                    return;
+                }
+
+                var user = (data && data.user) || body.user || null;
+                await finalizeAuthenticatedSession(user);
+            } catch (err) {
+                showFeedback("Sunucu ile güvenli bağlantı kurulamadı. Lütfen tekrar deneyin.", "error");
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function handleTotpSubmit(e) {
+            e.preventDefault();
+            clearFeedback();
+            var codeEl = document.getElementById("totp-code");
+            var btn = document.getElementById("btn-totp-submit");
+            var code = (codeEl ? codeEl.value : "").trim();
+
+            if (!code || code.length < 6) {
+                showFeedback("Lütfen geçerli doğrulama veya kurtarma kodunuzu girin.", "error");
+                return;
+            }
+            if (!pendingTempToken) {
+                switchView("view-login");
+                showFeedback("Doğrulama oturumu zaman aşımına uğradı. Lütfen tekrar giriş yapın.", "warning");
+                return;
+            }
+
+            if (btn) btn.disabled = true;
+            try {
+                var resp = await postJson("/api/v1/auth/totp/login", {
+                    temp_token: pendingTempToken,
+                    code: code
+                });
+                var body = resp.body || {};
+                var data = body.data || body;
+
+                if (!resp.ok) {
+                    if (resp.status === 429) {
+                        startLockoutCountdown(data && data.remaining_secs ? data.remaining_secs : 60, body.message);
+                    } else {
+                        showFeedback(body.message || body.error || "Doğrulama kodu geçersiz veya süresi dolmuş.", "error");
+                    }
+                    return;
+                }
+
+                pendingTempToken = "";
+                var user = (data && data.user) || body.user || null;
+                await finalizeAuthenticatedSession(user);
+            } catch (_) {
+                showFeedback("2FA doğrulaması sırasında bağlantı hatası oluştu.", "error");
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function handleForgotSubmit(e) {
+            e.preventDefault();
+            clearFeedback();
+            var emailEl = document.getElementById("forgot-email");
+            var btn = document.getElementById("btn-forgot-submit");
+            var email = (emailEl ? emailEl.value : "").trim();
+
+            if (!email) {
+                showFeedback("Lütfen kurumsal e-posta adresinizi girin.", "error");
+                return;
+            }
+
+            if (btn) btn.disabled = true;
+            try {
+                var resp = await postJson("/api/v1/auth/forgot-password", { email: email });
+                var body = resp.body || {};
+                if (!resp.ok) {
+                    showFeedback(body.message || body.error || "Parola sıfırlama isteği gönderilemedi.", "error");
+                    return;
+                }
+                showFeedback(
+                    body.message || (body.data && body.data.message) ||
+                    "E-posta adresiniz sistemde kayıtlıysa parola sıfırlama talimatları gönderilmiştir.",
+                    "success"
+                );
+            } catch (_) {
+                showFeedback("İstek gönderilirken ağ hatası oluştu.", "error");
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function logoutNonStaff() {
+            try {
+                await postJson("/api/v1/auth/logout", {});
+            } catch (_) {}
+            switchView("view-login");
+            showFeedback("Mevcut oturum kapatıldı. Yetkili personel hesabınızla giriş yapabilirsiniz.", "success");
+        }
+
+        function togglePasswordVisibility() {
+            var pwEl = document.getElementById("login-password");
+            var icon = document.getElementById("pw-toggle-icon");
+            if (!pwEl) return;
+            var reveal = pwEl.type === "password";
+            pwEl.type = reveal ? "text" : "password";
+            if (icon) {
+                icon.className = reveal ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            applySavedTheme();
+
+            var loginForm = document.getElementById("form-gateway-login");
+            if (loginForm) loginForm.addEventListener("submit", handleLoginSubmit);
+
+            var totpForm = document.getElementById("form-gateway-totp");
+            if (totpForm) totpForm.addEventListener("submit", handleTotpSubmit);
+
+            var forgotForm = document.getElementById("form-gateway-forgot");
+            if (forgotForm) forgotForm.addEventListener("submit", handleForgotSubmit);
+
+            document.addEventListener("click", function (ev) {
+                var trigger = ev.target.closest("[data-login-action]");
+                if (!trigger) return;
+                var action = trigger.getAttribute("data-login-action");
+                if (action === "toggle-theme") {
+                    toggleTheme();
+                } else if (action === "toggle-password") {
+                    togglePasswordVisibility();
+                } else if (action === "show-forgot") {
+                    switchView("view-forgot");
+                } else if (action === "show-login") {
+                    pendingTempToken = "";
+                    switchView("view-login");
+                } else if (action === "logout-non-staff") {
+                    logoutNonStaff();
+                }
+            });
+        });
+    })();
+    </script>
+</body>
+</html>

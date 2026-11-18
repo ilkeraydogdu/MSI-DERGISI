@@ -1,18 +1,14 @@
 use crate::models::{AdCampaign, AdConflictWarning, ContentItem, UserAccount};
 
-/// Selects and ranks active `AdCampaign` items for the current page context.
+/// Selects and ranks active `AdCampaign` items from the database (`all_ads`) for the current page context.
 ///
 /// **STRICT COMPETITOR PROTECTION ON SPONSORED CONTENT**:
 /// When `content` is a sponsored article (`is_sponsored == true`), ALL competing `defense_oem`
 /// ads are filtered out (unless they belong to the exact same `sponsor_brand`), leaving ONLY
-/// `auxiliary_service` (logistics, travel, event services) and `in_house` fallback ads
-/// (`MSI Dergisi`, `AMAC Magazine`, `KasabaWorks`).
+/// `auxiliary_service` and `in_house` / `is_default_fallback` ads from the database.
 ///
-/// Multi-dimensional scoring ranks eligible ads by:
-/// 1. Reader's institution (`target_institutions` matching `user.organization_category`)
-/// 2. Content & reader SSB interest tags (`target_ssb_tags`)
-/// 3. Page & content section categories (`target_categories`)
-/// 4. Campaign `budget_score` and `is_default_fallback`
+/// Zero hardcoded mock fallback records: if contextual filtering yields no matches, selects real
+/// `is_default_fallback` rows directly from `all_ads`.
 pub fn select_ads_for_context(
     all_ads: &[AdCampaign],
     page_category: Option<&str>,
@@ -41,14 +37,9 @@ pub fn select_ads_for_context(
             }
             // Strict competitor shield on sponsored content pages
             if ad.sponsor_type.eq_ignore_ascii_case("defense_oem") {
-                if !sponsor_brand_norm.is_empty()
-                    && ad.sponsor_name.trim().to_lowercase() == sponsor_brand_norm
-                {
-                    return true;
-                }
-                return false;
+                return !sponsor_brand_norm.is_empty()
+                    && ad.sponsor_name.trim().to_lowercase() == sponsor_brand_norm;
             }
-            // Allow auxiliary_service and in_house (MSI Dergisi, AMAC Magazine, KasabaWorks)
             ad.sponsor_type.eq_ignore_ascii_case("auxiliary_service")
                 || ad.sponsor_type.eq_ignore_ascii_case("in_house")
                 || ad.is_default_fallback
@@ -157,45 +148,40 @@ pub fn select_ads_for_context(
     });
 
     let mut result: Vec<AdCampaign> = scored_ads.into_iter().map(|(_, ad)| ad).collect();
+
+    // Real DB fallback selection (zero hardcoded fake campaigns/metrics)
     if result.is_empty() {
-        result.push(AdCampaign {
-            id: 9999,
-            slot_code: "ad-inhouse-rbf-fallback".to_string(),
-            badge_label: "KURUMSAL ÇÖZÜM ORTAĞI".to_string(),
-            dimensions: "970 × 90 STANDART VARSAYILAN VİTRİN".to_string(),
-            sponsor_name: "REMOVE BEFORE PHOTOS (RBF) & MSI DERGİSİ".to_string(),
-            sponsor_type: "in_house".to_string(),
-            pill_style: "navy".to_string(),
-            title_tr: "Hava-Hava, Kara ve Deniz Platformlarında Telifli Havacılık & Savunma Fotoğrafçılığı".to_string(),
-            title_en: "Copyrighted Aviation & Defense Photography Across Air-to-Air, Land and Naval Platforms".to_string(),
-            desc_tr: "Onur Kurç & Tayfun Yaşar yönetiminde Remove Before Photos yüksek çözünürlüklü telifli savunma görsel arşivi ve MSI Dergisi kurumsal abonelik çözümleri.".to_string(),
-            desc_en: "Remove Before Photos high-resolution defense visual archive and MSI Dergisi corporate subscription solutions.".to_string(),
-            target_url: "/abonelik-ve-satis".to_string(),
-            image_url: Some("images/msi/msi-dergisi-sayi-286-kapak.webp".to_string()),
-            budget_score: 80,
-            is_default_fallback: true,
-            is_floating_popup: false,
-            is_newsletter_ad: true,
-            target_categories: vec!["*".to_string()],
-            target_ssb_tags: vec!["hava-araclari".to_string()],
-            target_institutions: vec!["*".to_string()],
-            impressions_count: 19500,
-            clicks_count: 840,
-            is_active: true,
+        let mut db_fallbacks: Vec<AdCampaign> = all_ads
+            .iter()
+            .filter(|ad| ad.is_active && ad.is_default_fallback)
+            .cloned()
+            .collect();
+        db_fallbacks.sort_by(|a, b| {
+            b.budget_score
+                .cmp(&a.budget_score)
+                .then_with(|| a.id.cmp(&b.id))
         });
+        result = db_fallbacks;
     }
+
     result
 }
 
 /// Checks whether adding or activating `new_ad` causes a keyword/category/institution quota collision
 /// against `existing_ads` (based on `max_quota_per_keyword`).
-/// Returns a detailed `AdConflictWarning` so the operator receives an interactive warning without hard-blocking override.
 pub fn check_ad_conflict(
     new_ad: &AdCampaign,
     existing_ads: &[AdCampaign],
     max_quota_per_keyword: usize,
 ) -> AdConflictWarning {
-    check_ad_conflict_with_window(new_ad, existing_ads, max_quota_per_keyword, None, None, None)
+    check_ad_conflict_with_window(
+        new_ad,
+        existing_ads,
+        max_quota_per_keyword,
+        None,
+        None,
+        None,
+    )
 }
 
 pub fn check_ad_conflict_with_window(
@@ -267,7 +253,10 @@ pub fn check_ad_conflict_with_window(
             });
 
             if shared_inst || shared_cat {
-                let label = format!("{} ({} - #{})", other.sponsor_name, other.slot_code, other.id);
+                let label = format!(
+                    "{} ({} - #{})",
+                    other.sponsor_name, other.slot_code, other.id
+                );
                 if !conflicting_campaigns.contains(&label) {
                     conflicting_campaigns.push(label);
                 }
@@ -301,7 +290,12 @@ pub fn check_ad_conflict_with_window(
 
     let window_note = match (start_date, end_date) {
         (Some(s), Some(e)) if !s.trim().is_empty() && !e.trim().is_empty() => {
-            format!(" [Tarih Aralığı: {} → {}, Mod: {}]", s.trim(), e.trim(), rotation_mode.unwrap_or("equal_rotation"))
+            format!(
+                " [Tarih Aralığı: {} → {}, Mod: {}]",
+                s.trim(),
+                e.trim(),
+                rotation_mode.unwrap_or("equal_rotation")
+            )
         }
         _ => String::new(),
     };
@@ -338,5 +332,16 @@ pub fn check_ad_conflict_with_window(
         message_tr,
         quota_limit: effective_quota,
         current_count: max_observed_count,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_db_ads_returns_empty_vec_without_hardcoded_mock() {
+        let selected = select_ads_for_context(&[], None, None, None);
+        assert!(selected.is_empty());
     }
 }

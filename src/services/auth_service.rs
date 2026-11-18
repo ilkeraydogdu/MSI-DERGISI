@@ -1,26 +1,36 @@
+use std::collections::HashSet;
+use std::sync::RwLock;
+
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
+use base64::Engine as _;
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use once_cell::sync::Lazy;
 use sha2::{Digest, Sha256};
 
 use crate::models::UserAccount;
+use crate::utils::crypto::constant_time_eq;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Time-to-live (in seconds) for dedicated TOTP 2FA pending challenge tokens (5 minutes).
+const TOTP_PENDING_TTL_SECS: i64 = 300;
+
+/// In-memory store of revoked session tokens for server-side logout enforcement.
+/// Cleared if the set exceeds 10,000 entries (tokens expire naturally after 24h).
+static REVOKED_TOKENS: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
+
 /// Legacy seed secret retained strictly for transparent migration of pre-Argon2id hashes on login.
-/// SECURITY: Now centralized in AppConfig.legacy_seed_secret; this function is kept as a
-/// compatibility shim but should be replaced with direct config access where possible.
 fn legacy_seed_secret() -> String {
     std::env::var("LEGACY_SEED_SECRET")
         .or_else(|_| std::env::var("SESSION_SECRET"))
         .unwrap_or_else(|_| "CHANGE-ME-LEGACY-SEED-SECRET".to_string())
 }
 
-/// Returns the legacy seed secret from the centralized AppConfig when available,
-/// falling back to the env-based shim for contexts without config access.
+/// Returns the legacy seed secret from the centralized `AppConfig` when available.
 pub fn legacy_seed_secret_from_config(config: &crate::config::AppConfig) -> String {
     config.legacy_seed_secret.clone()
 }
@@ -203,9 +213,36 @@ pub fn generate_session_token(user: &UserAccount, secret: &str) -> String {
     format!("{}.{}", payload, sig)
 }
 
-/// Verifies a signed session token and returns `Some(user_id)` if authentic and untampered.
+/// Revokes a session (or pending 2FA) token so it can no longer be used for authentication.
+pub fn revoke_session_token(token: &str) {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    if let Ok(mut set) = REVOKED_TOKENS.write() {
+        if set.len() >= 10_000 {
+            set.clear();
+        }
+        set.insert(trimmed.to_string());
+    }
+}
+
+/// Returns `true` if the given token has been explicitly revoked via `revoke_session_token`.
+pub fn is_token_revoked(token: &str) -> bool {
+    REVOKED_TOKENS
+        .read()
+        .map(|set| set.contains(token.trim()))
+        .unwrap_or(false)
+}
+
+/// Verifies a signed session token and returns `Some(user_id)` if authentic, untampered,
+/// unexpired (`[-60s, +86400s]`), and not revoked.
 pub fn verify_session_token(token: &str, secret: &str) -> Option<i64> {
-    let parts: Vec<&str> = token.trim().split('.').collect();
+    let trimmed = token.trim();
+    if trimmed.is_empty() || is_token_revoked(trimmed) {
+        return None;
+    }
+    let parts: Vec<&str> = trimmed.split('.').collect();
     if parts.len() != 4 {
         return None;
     }
@@ -228,7 +265,58 @@ pub fn verify_session_token(token: &str, secret: &str) -> Option<i64> {
     }
 }
 
-/// Identity is resolved from a signed, HttpOnly session, never a query parameter.
+/// Generates a dedicated, short-lived (`300s` TTL) TOTP 2FA challenge token bound to `b"MSI-TOTP-PENDING-V1:"`.
+/// Format: `{email_b64url}.{issued_ts}.{hmac_hex}` (3 segments — structurally & cryptographically
+/// incompatible with 4-segment `msi_session` cookies so `temp_token` can NEVER bypass 2FA).
+pub fn generate_totp_pending_token(user_email: &str, secret: &str) -> String {
+    let normalized_email = user_email.trim().to_lowercase();
+    let email_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(normalized_email.as_bytes());
+    let issued_ts = Utc::now().timestamp();
+    let payload = format!("{}.{}", email_b64, issued_ts);
+    let sig = sign_totp_pending_payload(&payload, secret);
+    format!("{}.{}", payload, sig)
+}
+
+/// Verifies a dedicated TOTP pending token (`b"MSI-TOTP-PENDING-V1:"`, `300s` TTL) and returns
+/// `Some(normalized_email)` if valid and unrevoked.
+pub fn verify_totp_pending_token(token: &str, secret: &str) -> Option<String> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() || is_token_revoked(trimmed) {
+        return None;
+    }
+    let parts: Vec<&str> = trimmed.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let email_b64 = parts[0];
+    if email_b64.is_empty() {
+        return None;
+    }
+    let issued_ts: i64 = parts[1].parse().ok()?;
+    let age = Utc::now().timestamp().checked_sub(issued_ts)?;
+    if !(-30..=TOTP_PENDING_TTL_SECS).contains(&age) {
+        return None;
+    }
+    let provided_sig = parts[2];
+
+    let payload = format!("{}.{}", email_b64, issued_ts);
+    let expected_sig = sign_totp_pending_payload(&payload, secret);
+    if !constant_time_eq(provided_sig.as_bytes(), expected_sig.as_bytes()) {
+        return None;
+    }
+
+    let email_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(email_b64.as_bytes())
+        .ok()?;
+    let email = String::from_utf8(email_bytes).ok()?;
+    if !email.contains('@') {
+        return None;
+    }
+    Some(email)
+}
+
+/// Identity is resolved from a signed, HttpOnly session cookie, never a query parameter.
 pub fn session_user(
     state: &crate::controllers::AppState,
     headers: &axum::http::HeaderMap,
@@ -245,10 +333,6 @@ pub fn session_user(
 }
 
 /// Determines the initial `(role, subscription_tier, is_gov_verified)` tuple for a newly registering user.
-/// - Public sector domains (`.gov.tr`, `.tsk.tr`, `.mil.tr`, etc.) automatically receive
-///   `("subscriber_public", "Kamu E-Dergi Abonesi (Ücretsiz)", true)`.
-/// - Academic `.edu.tr` domains receive `("registered", "Akademik Okur", false)`.
-/// - Standard or corporate users start as `("registered", "Standart Kayıtlı Okur", false)` until subscription purchase or operator approval.
 pub fn determine_initial_role_and_tier(email: &str, org_category: &str) -> (String, String, bool) {
     if is_public_sector_email(email) {
         return (
@@ -281,23 +365,182 @@ fn sign_session_payload(payload: &str, secret: &str) -> String {
     hex::encode(mac.finalize().into_bytes())
 }
 
-// SECURITY FIX (H12): Constant-time comparison without length side channel.
-// Always compares max(len_a, len_b) bytes to avoid leaking hash length via
-// early return on mismatched lengths.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    let max_len = std::cmp::max(a.len(), b.len());
-    let mut diff: u8 = if a.len() != b.len() { 1 } else { 0 };
-    for i in 0..max_len {
-        let va = if i < a.len() { a[i] } else { 0 };
-        let vb = if i < b.len() { b[i] } else { 0 };
-        diff |= va ^ vb;
+fn sign_totp_pending_payload(payload: &str, secret: &str) -> String {
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts arbitrary key lengths");
+    mac.update(b"MSI-TOTP-PENDING-V1:");
+    mac.update(payload.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Generates a cryptographically secure password reset token and stores it in the database.
+/// Token format: base64url(SHA-256(random_uuid + timestamp + secret))
+/// TTL: 1 hour from creation.
+pub fn generate_password_reset_token(
+    db: &crate::db::Database,
+    user_id: i64,
+    secret: &str,
+) -> Result<String, String> {
+    let random_bytes = uuid::Uuid::new_v4();
+    let timestamp = Utc::now().timestamp();
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"MSI-PASSWORD-RESET-V1:");
+    hasher.update(random_bytes.as_bytes());
+    hasher.update(b"|");
+    hasher.update(timestamp.to_string().as_bytes());
+    hasher.update(b"|");
+    hasher.update(secret.as_bytes());
+    let digest = hasher.finalize();
+
+    let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
+    let expires_at = (Utc::now() + chrono::Duration::hours(1))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let created_at = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    let conn = db
+        .open_conn()
+        .map_err(|e| format!("DB bağlantı hatası: {}", e))?;
+    conn.execute(
+        "INSERT INTO password_reset_tokens (user_id, token, expires_at, used, created_at) VALUES (?1, ?2, ?3, 0, ?4)",
+        rusqlite::params![user_id, &token, &expires_at, &created_at],
+    )
+    .map_err(|e| format!("Token kaydetme hatası: {}", e))?;
+
+    Ok(token)
+}
+
+/// Verifies a password reset token: must exist, not used, not expired.
+/// Returns Some(user_id) if valid, None otherwise.
+pub fn verify_password_reset_token(db: &crate::db::Database, token: &str) -> Option<i64> {
+    let conn = db.open_conn().ok()?;
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    conn.query_row(
+        "SELECT user_id FROM password_reset_tokens WHERE token = ?1 AND used = 0 AND expires_at > ?2",
+        rusqlite::params![token.trim(), &now],
+        |row| row.get::<_, i64>(0),
+    )
+    .ok()
+}
+
+/// Marks a password reset token as used after successful password change.
+pub fn consume_password_reset_token(db: &crate::db::Database, token: &str) -> Result<(), String> {
+    let conn = db
+        .open_conn()
+        .map_err(|e| format!("DB bağlantı hatası: {}", e))?;
+    let affected = conn
+        .execute(
+            "UPDATE password_reset_tokens SET used = 1 WHERE token = ?1 AND used = 0",
+            rusqlite::params![token.trim()],
+        )
+        .map_err(|e| format!("Token tüketme hatası: {}", e))?;
+
+    if affected == 0 {
+        return Err("Geçersiz veya zaten kullanılmış token.".to_string());
     }
-    diff == 0
+    Ok(())
+}
+
+/// Generates an email verification token and stores it in the database.
+/// TTL: 24 hours from creation.
+pub fn generate_email_verification_token(
+    db: &crate::db::Database,
+    user_id: i64,
+    email: &str,
+    secret: &str,
+) -> Result<String, String> {
+    let random_bytes = uuid::Uuid::new_v4();
+    let timestamp = Utc::now().timestamp();
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"MSI-EMAIL-VERIFY-V1:");
+    hasher.update(random_bytes.as_bytes());
+    hasher.update(b"|");
+    hasher.update(email.trim().to_lowercase().as_bytes());
+    hasher.update(b"|");
+    hasher.update(timestamp.to_string().as_bytes());
+    hasher.update(b"|");
+    hasher.update(secret.as_bytes());
+    let digest = hasher.finalize();
+
+    let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
+    let expires_at = (Utc::now() + chrono::Duration::hours(24))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let created_at = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    let conn = db
+        .open_conn()
+        .map_err(|e| format!("DB bağlantı hatası: {}", e))?;
+    conn.execute(
+        "INSERT INTO email_verification_tokens (user_id, token, expires_at, verified, created_at) VALUES (?1, ?2, ?3, 0, ?4)",
+        rusqlite::params![user_id, &token, &expires_at, &created_at],
+    )
+    .map_err(|e| format!("Verification token kaydetme hatası: {}", e))?;
+
+    Ok(token)
+}
+
+/// Verifies an email verification token and marks the user's email as verified.
+/// Returns Some(user_id) if valid and successfully applied, None otherwise.
+pub fn verify_email_token(db: &crate::db::Database, token: &str) -> Option<i64> {
+    let conn = db.open_conn().ok()?;
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    let user_id: i64 = conn
+        .query_row(
+            "SELECT user_id FROM email_verification_tokens WHERE token = ?1 AND verified = 0 AND expires_at > ?2",
+            rusqlite::params![token.trim(), &now],
+            |row| row.get(0),
+        )
+        .ok()?;
+
+    let _ = conn.execute(
+        "UPDATE email_verification_tokens SET verified = 1 WHERE token = ?1",
+        rusqlite::params![token.trim()],
+    );
+
+    let _ = conn.execute(
+        "UPDATE users SET email_verified = 1 WHERE id = ?1",
+        rusqlite::params![user_id],
+    );
+
+    drop(conn);
+    db.refresh_l1_sections(&["users"]);
+
+    Some(user_id)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample_user() -> UserAccount {
+        UserAccount {
+            id: 42,
+            email: "operator@msidergisi.com".to_string(),
+            full_name: "Test Operator".to_string(),
+            role: "site_operator".to_string(),
+            organization_category: "SSB".to_string(),
+            organization_name: "SSB".to_string(),
+            job_title: "Uzman".to_string(),
+            is_gov_verified: true,
+            subscription_tier: "Kurumsal Tam Yetki".to_string(),
+            subscription_expires_at: Some("2030-12-31".to_string()),
+            reminders_halted: false,
+            kvkk_consent_at: "2026-01-01".to_string(),
+            kvkk_consent_ip: "127.0.0.1".to_string(),
+            kvkk_consent_hash: "KVKK-TEST".to_string(),
+            email_consent: true,
+            ssb_interests: vec![],
+            created_at: "2026-01-01".to_string(),
+            email_verified: true,
+            marketing_emails_opted_in: true,
+            totp_enabled: true,
+        }
+    }
 
     #[test]
     fn argon2id_password_round_trip_and_legacy_migration() {
@@ -319,5 +562,35 @@ mod tests {
         assert!(!is_public_sector_email("muhendis@gmail.com"));
         assert!(requires_corporate_verification("muhendis@gmail.com", "SSB"));
         assert!(!requires_corporate_verification("uzman@ssb.gov.tr", "SSB"));
+    }
+
+    #[test]
+    fn session_revocation_blocks_subsequent_verification() {
+        let secret = "session-revocation-test-secret";
+        let user = sample_user();
+        let tok = generate_session_token(&user, secret);
+        assert_eq!(verify_session_token(&tok, secret), Some(42));
+        revoke_session_token(&tok);
+        assert!(is_token_revoked(&tok));
+        assert_eq!(verify_session_token(&tok, secret), None);
+    }
+
+    #[test]
+    fn totp_pending_token_cannot_bypass_2fa_as_session_cookie() {
+        let secret = "totp-domain-separation-secret";
+        let user = sample_user();
+
+        let pending_tok = generate_totp_pending_token("Operator@MSIDergisi.com", secret);
+        assert_eq!(
+            verify_totp_pending_token(&pending_tok, secret),
+            Some("operator@msidergisi.com".to_string())
+        );
+
+        // Critical security invariant: pending 2FA token MUST fail session verification
+        assert_eq!(verify_session_token(&pending_tok, secret), None);
+
+        // Critical security invariant: session token MUST fail pending 2FA verification
+        let session_tok = generate_session_token(&user, secret);
+        assert_eq!(verify_totp_pending_token(&session_tok, secret), None);
     }
 }

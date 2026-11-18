@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::design::labels_helper::localize_section_copy;
 
 pub async fn render_edergi_kiosk(
     State(state): State<AppState>,
@@ -14,7 +15,9 @@ pub async fn render_edergi_kiosk(
         return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     };
     let snap = CentralQueryEngine::snapshot(&state.db).data;
-    let selected_issue = if let Some(raw_iss) = params.get("issue").map(String::as_str).filter(|s| !s.trim().is_empty()) {
+    let selected_issue = if let Some(raw_iss) =
+        params.get("issue").map(String::as_str).filter(|s| !s.trim().is_empty())
+    {
         let Ok(num) = raw_iss.trim().parse::<i32>() else {
             return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
         };
@@ -39,29 +42,28 @@ pub async fn render_edergi_kiosk(
     };
     let body = render_page(page, &data);
     let brand_config = seo_router_engine::SeoBrandConfig::from_settings(&settings);
+    let seo_title = localize_section_copy(&lang, &page.title);
+    let seo_desc = localize_section_copy(&lang, &page.description);
     let seo = CentralSeoEngine::build_edergi_seo_meta(
         &state.config.public_url,
-        &page.title,
-        &page.description,
+        seo_title,
+        seo_desc,
         &snap.issues,
         &lang,
         &brand_config,
         &state.config.primary_domain,
         &state.config.news_domain,
     );
-    Html(design_engine::render_master_shell_with_nonce(
+    Html(home::render_shell_with_context(
+        &state,
         &lang,
         &page.mode,
-        &settings,
         &seo,
-        &snap.categories,
-        &snap.ssb_tags,
-        &snap.issues,
-        &snap.contents,
-        &snap.notifications,
         &body,
-        0,
         Some(&csp_nonce.0),
+        Some(&headers),
+        None,
+        Some("e-dergi"),
     ))
     .into_response()
 }
@@ -76,7 +78,14 @@ pub async fn render_subscriptions_and_store(
     let settings = state.db.get_setting_map(&lang);
     let config = crate::engine::design::config::load(&settings);
     match config.page("abonelik-ve-satis") {
-        Some(page) => render_configured_page(&state, &lang, page, &settings, Some(&csp_nonce.0)),
+        Some(page) => pages::render_configured_page_with_headers(
+            &state,
+            &lang,
+            page,
+            &settings,
+            Some(&csp_nonce.0),
+            Some(&headers),
+        ),
         None => render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await,
     }
 }
@@ -109,8 +118,14 @@ pub async fn render_corporate_page(
         other => other,
     };
     match config.page(&format!("kurumsal-{}", normalized)) {
-        Some(page) => render_configured_page(&state, &lang, page, &settings, Some(&csp_nonce.0)),
+        Some(page) => pages::render_configured_page_with_headers(
+            &state,
+            &lang,
+            page,
+            &settings,
+            Some(&csp_nonce.0),
+            Some(&headers),
+        ),
         None => render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await,
     }
 }
-

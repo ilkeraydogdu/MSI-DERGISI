@@ -1,9 +1,12 @@
-use crate::engine::security_engine::escape_html as esc;
-use crate::models::*;
 use super::super::config::safe_url;
+use super::super::html_dsl::HtmlBuf;
+use super::super::labels_helper::{lang_href, tr_text};
 use super::labels::{category_display_label, localized};
 use super::media::image_dimensions;
 use super::primitives::{asset, icon, link};
+use crate::engine::security_engine::escape_html as esc;
+use crate::engine::translation_engine::TranslationCache;
+use crate::models::*;
 
 pub fn article_card(c: &ContentItem, lang: &str, eager: bool) -> String {
     let title = esc(localized(lang, &c.title_tr, &c.title_en));
@@ -265,7 +268,8 @@ pub fn editorial_sidebar(
     let selected_tower = if !tower_pool.is_empty() {
         Some(tower_pool[seed_idx % tower_pool.len()])
     } else {
-        ads.iter().find(|a| a.is_active && a.image_url.is_some())
+        ads.iter()
+            .find(|a| a.is_active && !a.is_floating_popup && a.image_url.is_some())
     };
     let tower_tag = if lang == "en" { "AD" } else { "REKLAM" };
     let tower_ad = selected_tower
@@ -275,10 +279,11 @@ pub fn editorial_sidebar(
                 .as_deref()
                 .unwrap_or(crate::services::media_service::DEFAULT_AD_SIDEBAR);
             let (w, h) = image_dimensions(img).unwrap_or((533, 1600));
+            let resolved_href = lang_href(&a.target_url, lang);
             format!(
                 r#"<div class="sidebar-widget sidebar-tower-ad" data-ad-id="{id}"><a class="ad-banner-frame is-vertical" href="{href}" data-ad-click-id="{id}"><span class="ad-corner-tag">{tower_tag}</span><img src="{src}" alt="{sponsor} — {title}" loading="lazy" decoding="async" width="{w}" height="{h}"></a></div>"#,
                 id = a.id,
-                href = link(&a.target_url),
+                href = link(&resolved_href),
                 tower_tag = tower_tag,
                 src = asset(img),
                 sponsor = esc(&a.sponsor_name),
@@ -289,9 +294,124 @@ pub fn editorial_sidebar(
         })
         .unwrap_or_default();
 
+    let dir_aria = if lang == "en" { "Editorial directory" } else { "Yayın dizini" };
+    let sec_aria = if lang == "en" { "Sections" } else { "Bölümler" };
     format!(
-        r#"<aside class="editorial-sidebar" aria-label="Editorial directory"><nav class="sidebar-cat-nav" aria-label="Sections">{nav_html}</nav>{related_html}{tower_ad}</aside>"#
+        r#"<aside class="editorial-sidebar" aria-label="{dir_aria}"><nav class="sidebar-cat-nav" aria-label="{sec_aria}">{nav_html}</nav>{related_html}{tower_ad}</aside>"#
     )
+}
+
+/// Renders the non-blocking floating popup ad (`ad-floating-popup`) when active and flagged.
+pub fn floating_popup_ad(
+    ad: &AdCampaign,
+    lang: &str,
+    tr: Option<&TranslationCache>,
+) -> String {
+    if !ad.is_active || !ad.is_floating_popup {
+        return String::new();
+    }
+    let ad_id_str = ad.id.to_string();
+    let tag_lbl = tr_text(tr, lang, "ads.sponsored_tag", "SPONSORLU", "SPONSORED");
+    let close_lbl = tr_text(tr, lang, "shell.close", "Kapat", "Close");
+    let cta_lbl = tr_text(tr, lang, "ads.explore_cta", "İncele →", "Explore →");
+    let resolved_href = lang_href(&ad.target_url, lang);
+    let safe_href = if safe_url(&resolved_href) {
+        resolved_href
+    } else {
+        "#".to_string()
+    };
+    let title = localized(lang, &ad.title_tr, &ad.title_en);
+    let desc = localized(lang, &ad.desc_tr, &ad.desc_en);
+    let aria_lbl = format!("{} — {}", ad.sponsor_name, title);
+
+    let mut buf = HtmlBuf::with_capacity(1024);
+    buf.el(
+        "aside",
+        &[
+            ("id", "ad-floating-popup"),
+            ("class", "ad-floating-popup"),
+            ("data-ad-id", &ad_id_str),
+            ("data-ad-floating", "1"),
+            ("role", "complementary"),
+            ("aria-label", &aria_lbl),
+        ],
+        |b| {
+            b.el("div", &[("class", "ad-floating-head")], |h| {
+                h.el("span", &[("class", "ad-floating-sponsor")], |sp| {
+                    sp.el("strong", &[], |s| {
+                        s.text(&tag_lbl);
+                    });
+                    sp.text(" · ");
+                    sp.text(&ad.sponsor_name);
+                });
+                h.el(
+                    "button",
+                    &[
+                        ("type", "button"),
+                        ("class", "icon-button ad-floating-close"),
+                        ("data-dismiss-floating-ad", &ad_id_str),
+                        ("aria-label", &close_lbl),
+                    ],
+                    |btn| {
+                        btn.raw(&icon("close"));
+                    },
+                );
+            });
+            b.el(
+                "a",
+                &[
+                    ("class", "ad-floating-body"),
+                    ("href", &safe_href),
+                    ("data-ad-click-id", &ad_id_str),
+                ],
+                |body| {
+                    if let Some(img_path) =
+                        ad.image_url.as_deref().map(str::trim).filter(|s| !s.is_empty())
+                    {
+                        let img_src = if img_path.starts_with("https://") {
+                            img_path.to_string()
+                        } else {
+                            format!("/{}", img_path.trim_start_matches('/'))
+                        };
+                        let (w, h) = image_dimensions(img_path).unwrap_or((600, 400));
+                        let w_str = w.to_string();
+                        let h_str = h.to_string();
+                        body.void_el(
+                            "img",
+                            &[
+                                ("class", "ad-floating-img"),
+                                ("src", &img_src),
+                                ("alt", title),
+                                ("loading", "lazy"),
+                                ("decoding", "async"),
+                                ("width", &w_str),
+                                ("height", &h_str),
+                            ],
+                        );
+                    }
+                    body.el("div", &[("class", "ad-floating-copy")], |cp| {
+                        if !ad.badge_label.trim().is_empty() {
+                            cp.el("span", &[("class", "eyebrow")], |eb| {
+                                eb.text(&ad.badge_label);
+                            });
+                        }
+                        cp.el("h3", &[], |h3| {
+                            h3.text(title);
+                        });
+                        if !desc.trim().is_empty() {
+                            cp.el("p", &[], |p| {
+                                p.text(desc);
+                            });
+                        }
+                        cp.el("span", &[("class", "ad-floating-cta")], |cta| {
+                            cta.text(&cta_lbl);
+                        });
+                    });
+                },
+            );
+        },
+    );
+    buf.into_string()
 }
 
 /// Centralized notification item — used by both shell.rs (public header) and account.rs (user dashboard).

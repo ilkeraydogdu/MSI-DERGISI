@@ -22,10 +22,14 @@ pub struct PageData<'a> {
     pub featured_issue: Option<i32>,
 }
 
-pub use cards::{advertisement, article_card, editorial_sidebar, issue_card, notification_item};
+pub use super::labels_helper::is_en_content_ready;
+pub use cards::{
+    advertisement, article_card, editorial_sidebar, floating_popup_ad, issue_card,
+    notification_item,
+};
 pub use filters::enrich_issue_spreads;
 pub use labels::{CANONICAL_SSB_TAG_CODES, category_display_label, localized, ssb_tag_display_label};
-pub use layout::{breadcrumb, empty_state, page_heading};
+pub use layout::{breadcrumb, breadcrumb_localized, empty_state, page_heading};
 pub use media::image_dimensions;
 pub use primitives::{asset, icon, link};
 
@@ -46,10 +50,12 @@ pub fn render_page(page: &Page, data: &PageData<'_>) -> String {
     {
         sections
     } else {
+        let brand_lbl = if data.lang == "en" { "MSI REVIEW" } else { "MSI DERGİSİ" };
         format!(
-            "<header class=\"container page-heading section-space\"><div class=\"eyebrow\">MSI DERGİSİ</div><h1>{}</h1><p>{}</p></header>{}",
-            esc(&page.title),
-            esc(&page.description),
+            "<header class=\"container page-heading section-space\"><div class=\"eyebrow\">{}</div><h1>{}</h1><p>{}</p></header>{}",
+            brand_lbl,
+            esc(super::labels_helper::localize_section_copy(data.lang, &page.title)),
+            esc(super::labels_helper::localize_section_copy(data.lang, &page.description)),
             sections
         )
     }

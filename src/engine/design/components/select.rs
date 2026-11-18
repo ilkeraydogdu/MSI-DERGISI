@@ -34,10 +34,7 @@ pub fn select_for_page<'a>(
         })
         .collect();
     if data.lang == "en" {
-        base_items.retain(|c| {
-            c.source_group.eq_ignore_ascii_case("msi-tdr")
-                || (!c.title_en.trim().is_empty() && c.title_en != c.title_tr)
-        });
+        base_items.retain(|c| super::is_en_content_ready(c));
     }
     let mut items = base_items;
     items.sort_by(|a, b| {

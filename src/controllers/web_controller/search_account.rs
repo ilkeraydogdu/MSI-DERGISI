@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::design::labels_helper::tr_text;
 
 pub async fn render_search_page(
     State(state): State<AppState>,
@@ -86,16 +87,25 @@ async fn render_search_page_for_lang(
     let body_html = design_engine::render_search_and_filter_page(
         &lang, &facet_res, &q, &cat, &ssb, iss, &src, &sort, &state.translations,
     );
+    let seo_title = tr_text(
+        Some(&state.translations),
+        &lang,
+        "seo.search_page_title",
+        "Arama ve keşif",
+        "Search and discovery",
+    );
 
-    Html(render_shared_shell(
+    Html(home::render_shared_shell_with_request(
         state,
         &lang,
-        &state.translations.t(&lang, "seo.search_page_title"),
+        &seo_title,
         &body_html,
         Some(canonical_path),
         None,
         has_active_filter,
         Some(csp_nonce),
+        Some(headers),
+        None,
     ))
     .into_response()
 }
@@ -110,16 +120,25 @@ pub async fn render_account_page(
     let tr = &state.translations;
     let user_opt = authenticated_reader(&state, &headers);
     let Some(user) = user_opt else {
-        let body = crate::engine::design::account::account_with_admin_path(None, &[], &lang, None);
-        return Html(render_shared_shell(
+        let body = crate::engine::design::account::account_with_context(
+            None,
+            &[],
+            &lang,
+            None,
+            Some(tr),
+        );
+        let guest_title = tr_text(Some(tr), &lang, "account.page_title_guest", "Hesabım", "My Account");
+        return Html(home::render_shared_shell_with_request(
             &state,
             &lang,
-            &tr.t(&lang, "account.page_title_guest"),
+            &guest_title,
             &body,
             Some("/hesabim"),
             None,
             true,
             Some(&csp_nonce.0),
+            Some(&headers),
+            None,
         ))
         .into_response();
     };
@@ -148,7 +167,7 @@ pub async fn render_account_page(
         None
     };
 
-    let body_html = crate::engine::design::account::render_with_admin_path(
+    let body_html = crate::engine::design::account::render_with_context(
         &lang,
         &user,
         &reminders,
@@ -156,17 +175,28 @@ pub async fn render_account_page(
         &notifications,
         &ssb_tags,
         admin_path_opt,
+        Some(tr),
+        &[],
+    );
+    let logged_title = tr_text(
+        Some(tr),
+        &lang,
+        "account.page_title_logged_in",
+        "Okuyucu & Abone Kontrol Merkezi",
+        "Reader & Subscriber Control Center",
     );
 
-    Html(render_shared_shell(
+    Html(home::render_shared_shell_with_request(
         &state,
         &lang,
-        &tr.t(&lang, "account.page_title_logged_in"),
+        &logged_title,
         &body_html,
         Some("/hesabim"),
         None,
         true,
         Some(&csp_nonce.0),
+        Some(&headers),
+        None,
     ))
     .into_response()
 }
@@ -177,29 +207,56 @@ pub async fn render_reset_password_page(
     headers: HeaderMap,
     Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
-    let lang = detect_language(&params, &headers);
-    let raw_token = params.get("token").map(String::as_str).unwrap_or("").trim();
-    let escaped_token = crate::engine::security_engine::escape_html(raw_token);
+    use crate::engine::security_engine::escape_html as esc;
 
-    let (eyebrow, heading, desc, new_pw_lbl, confirm_pw_lbl, page_title) = if lang == "en" {
-        (
-            "ACCOUNT SECURITY · PASSWORD RESET",
-            "Set Your New Password",
-            "Enter a strong new password of at least 8 characters to secure your MSI Dergisi account.",
-            "New Password",
-            "Confirm New Password",
-            "Reset Password",
-        )
-    } else {
-        (
-            "HESAP GÜVENLİĞİ · ŞİFRE YENİLEME",
-            "Yeni Şifrenizi Belirleyin",
-            "MSI Dergisi hesabınız için en az 8 karakterden oluşan yeni şifrenizi girin.",
-            "Yeni Şifre",
-            "Yeni Şifre (Tekrar)",
-            "Şifre Sıfırlama",
-        )
-    };
+    let lang = detect_language(&params, &headers);
+    let tr = Some(&state.translations);
+    let raw_token = params.get("token").map(String::as_str).unwrap_or("").trim();
+    let escaped_token = esc(raw_token);
+
+    let eyebrow = tr_text(
+        tr,
+        &lang,
+        "auth.reset_eyebrow",
+        "HESAP GÜVENLİĞİ · ŞİFRE YENİLEME",
+        "ACCOUNT SECURITY · PASSWORD RESET",
+    );
+    let heading = tr_text(
+        tr,
+        &lang,
+        "auth.reset_heading",
+        "Yeni Şifrenizi Belirleyin",
+        "Set Your New Password",
+    );
+    let desc = tr_text(
+        tr,
+        &lang,
+        "auth.reset_desc",
+        "MSI Dergisi hesabınız için en az 8 karakterden oluşan yeni şifrenizi girin.",
+        "Enter a strong new password of at least 8 characters to secure your MSI Dergisi account.",
+    );
+    let new_pw_lbl = tr_text(tr, &lang, "auth.reset_new_pw", "Yeni Şifre", "New Password");
+    let confirm_pw_lbl = tr_text(
+        tr,
+        &lang,
+        "auth.reset_confirm_pw",
+        "Yeni Şifre (Tekrar)",
+        "Confirm New Password",
+    );
+    let submit_lbl = tr_text(
+        tr,
+        &lang,
+        "auth.reset_submit",
+        "Şifremi Güncelle →",
+        "Update Password →",
+    );
+    let page_title = tr_text(
+        tr,
+        &lang,
+        "auth.reset_page_title",
+        "Şifre Sıfırlama",
+        "Reset Password",
+    );
 
     let body_html = format!(
         r#"<section class="container section-space">
@@ -212,28 +269,30 @@ pub async fn render_reset_password_page(
       <label>{new_pw_lbl}<input type="password" name="new_password" required minlength="8" autocomplete="new-password" placeholder="••••••••"></label>
       <label>{confirm_pw_lbl}<input type="password" name="confirm_password" required minlength="8" autocomplete="new-password" placeholder="••••••••"></label>
       <p class="form-feedback" data-feedback role="status"></p>
-      <button type="submit" class="button primary">Şifremi Güncelle →</button>
+      <button type="submit" class="button primary">{submit_lbl}</button>
     </form>
   </div>
 </section>"#,
-        eyebrow = eyebrow,
-        heading = heading,
-        desc = desc,
+        eyebrow = esc(&eyebrow),
+        heading = esc(&heading),
+        desc = esc(&desc),
         escaped_token = escaped_token,
-        new_pw_lbl = new_pw_lbl,
-        confirm_pw_lbl = confirm_pw_lbl,
+        new_pw_lbl = esc(&new_pw_lbl),
+        confirm_pw_lbl = esc(&confirm_pw_lbl),
+        submit_lbl = esc(&submit_lbl),
     );
 
-    Html(render_shared_shell(
+    Html(home::render_shared_shell_with_request(
         &state,
         &lang,
-        page_title,
+        &page_title,
         &body_html,
         Some("/sifre-sifirla"),
         None,
         true,
         Some(&csp_nonce.0),
+        Some(&headers),
+        None,
     ))
     .into_response()
 }
-

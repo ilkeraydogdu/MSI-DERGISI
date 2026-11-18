@@ -1,4 +1,9 @@
 use super::*;
+use crate::engine::design::{
+    components::{render_page, PageData},
+    labels_helper::{lang_href, localize_section_copy, tr_text},
+};
+use crate::engine::security_engine::escape_html as esc;
 
 pub async fn render_designed_page(
     State(state): State<AppState>,
@@ -13,9 +18,17 @@ pub async fn render_designed_page(
     let Some(page) = config.page(&slug) else {
         return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     };
-    render_configured_page(&state, &lang, page, &settings, Some(&csp_nonce.0))
+    render_configured_page_with_headers(
+        &state,
+        &lang,
+        page,
+        &settings,
+        Some(&csp_nonce.0),
+        Some(&headers),
+    )
 }
 
+#[allow(dead_code)]
 pub(crate) fn render_configured_page(
     state: &AppState,
     lang: &str,
@@ -23,7 +36,17 @@ pub(crate) fn render_configured_page(
     settings: &HashMap<String, String>,
     nonce: Option<&str>,
 ) -> Response {
-    use crate::engine::design::components::{render_page, PageData};
+    render_configured_page_with_headers(state, lang, page, settings, nonce, None)
+}
+
+pub(crate) fn render_configured_page_with_headers(
+    state: &AppState,
+    lang: &str,
+    page: &crate::engine::design::config::Page,
+    settings: &HashMap<String, String>,
+    nonce: Option<&str>,
+    headers: Option<&HeaderMap>,
+) -> Response {
     let snap = CentralQueryEngine::snapshot(&state.db).data;
     let data = PageData {
         lang,
@@ -40,11 +63,13 @@ pub(crate) fn render_configured_page(
     let body = render_page(page, &data);
     let path = crate::engine::url_builder::designed_page_url(&page.slug);
     let brand_config = seo_router_engine::SeoBrandConfig::from_settings(settings);
+    let seo_title = localize_section_copy(lang, &page.title);
+    let seo_desc = localize_section_copy(lang, &page.description);
     let seo = seo_router_engine::build_seo_meta(
         &state.config.public_url,
         &path,
-        &page.title,
-        &page.description,
+        seo_title,
+        seo_desc,
         media_service::DEFAULT_OG_IMAGE,
         "website",
         lang,
@@ -53,19 +78,16 @@ pub(crate) fn render_configured_page(
         &state.config.primary_domain,
         &state.config.news_domain,
     );
-    Html(design_engine::render_master_shell_with_nonce(
+    Html(home::render_shell_with_context(
+        state,
         lang,
         &page.mode,
-        settings,
         &seo,
-        &snap.categories,
-        &snap.ssb_tags,
-        &snap.issues,
-        &snap.contents,
-        &snap.notifications,
         &body,
-        0,
         nonce,
+        headers,
+        None,
+        Some(&page.slug),
     ))
     .into_response()
 }
@@ -78,24 +100,37 @@ pub async fn render_coming_soon(
 ) -> Response {
     let lang = detect_language(&params, &headers);
     let settings_map = state.db.get_setting_map(&lang);
+    let tr = Some(&state.translations);
 
-    let (title, message, cta_label, contact_label, feedback_label) = if lang == "en" {
-        (
-            "Coming Soon",
-            "This page will be active soon. We are working on something special for our readers.",
-            "Back to Homepage",
-            "Contact Us",
-            "Send Feedback",
-        )
-    } else {
-        (
-            "Yakında",
-            "Bu sayfa yakında aktif olacak. Okuyucularımız için özel bir deneyim üzerinde çalışıyoruz.",
-            "Ana Sayfaya Dön",
-            "İletişime Geçin",
-            "Geri Bildirim Gönder",
-        )
-    };
+    let title = tr_text(tr, &lang, "coming_soon.title", "Yakında", "Coming Soon");
+    let message = tr_text(
+        tr,
+        &lang,
+        "coming_soon.message",
+        "Bu sayfa yakında aktif olacak. Okuyucularımız için özel bir deneyim üzerinde çalışıyoruz.",
+        "This page will be active soon. We are working on something special for our readers.",
+    );
+    let cta_label = tr_text(
+        tr,
+        &lang,
+        "coming_soon.home",
+        "Ana Sayfaya Dön",
+        "Back to Homepage",
+    );
+    let contact_label = tr_text(
+        tr,
+        &lang,
+        "coming_soon.contact",
+        "İletişime Geçin",
+        "Contact Us",
+    );
+    let feedback_label = tr_text(
+        tr,
+        &lang,
+        "coming_soon.feedback",
+        "Geri Bildirim Gönder",
+        "Send Feedback",
+    );
 
     let brand_name = settings_map
         .get("brand_title")
@@ -107,18 +142,20 @@ pub async fn render_coming_soon(
         .map(|s| s.as_str())
         .unwrap_or("info@savunmahaber.com");
 
+    let home_href = lang_href("/", &lang);
+    let contact_href = lang_href("/kurumsal/iletisim", &lang);
+
     let body_html = format!(
         r##"<section class="coming-soon-page">
   <div class="coming-soon-container">
     <div class="coming-soon-logo">
-      <img src="/images/logo.svg" alt="{brand}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-      <span style="display:none;font-size:2rem;font-weight:800;letter-spacing:-0.03em;color:#b91c1c;">{brand}</span>
+      <img src="/images/logo.svg" alt="{brand}">
     </div>
     <h1 class="coming-soon-title">{title}</h1>
     <p class="coming-soon-message">{message}</p>
     <div class="coming-soon-actions">
-      <a href="/" class="button primary">{cta_label}</a>
-      <a href="/kurumsal/iletisim" class="button secondary">{contact_label}</a>
+      <a href="{home_href}" class="button primary">{cta_label}</a>
+      <a href="{contact_href}" class="button secondary">{contact_label}</a>
       <a href="mailto:{email}?subject={feedback_subject}" class="text-link">{feedback_label} &rarr;</a>
     </div>
     <div class="coming-soon-footer">
@@ -150,12 +187,12 @@ pub async fn render_coming_soon(
   letter-spacing: -0.03em;
   line-height: 1.1;
   margin-bottom: 1.25rem;
-  color: var(--text-main, #1a1a1a);
+  color: var(--msi-text-primary, #1a1a1a);
 }}
 .coming-soon-message {{
   font-size: 1.125rem;
   line-height: 1.6;
-  color: var(--text-secondary, #555);
+  color: var(--msi-text-muted, #555);
   margin-bottom: 2.5rem;
 }}
 .coming-soon-actions {{
@@ -171,29 +208,30 @@ pub async fn render_coming_soon(
 }}
 .coming-soon-footer {{
   font-size: 0.8rem;
-  color: var(--text-muted, #999);
-  border-top: 1px solid var(--border-subtle, #e5e5e5);
+  color: var(--msi-text-muted, #999);
+  border-top: 1px solid var(--msi-border, #e5e5e5);
   padding-top: 1.5rem;
 }}
 </style>"##,
-        brand = brand_name,
-        title = title,
-        message = message,
-        cta_label = cta_label,
-        contact_label = contact_label,
-        email = contact_email,
+        brand = esc(brand_name),
+        title = esc(&title),
+        message = esc(&message),
+        home_href = esc(&home_href),
+        cta_label = esc(&cta_label),
+        contact_href = esc(&contact_href),
+        contact_label = esc(&contact_label),
+        email = esc(contact_email),
         feedback_subject = urlencoding::encode(if lang == "en" { "Feedback" } else { "Geri Bildirim" }),
-        feedback_label = feedback_label,
+        feedback_label = esc(&feedback_label),
         year = chrono::Utc::now().year(),
     );
 
-    let settings_map = state.db.get_setting_map(&lang);
     let brand_config = seo_router_engine::SeoBrandConfig::from_settings(&settings_map);
     let seo = seo_router_engine::build_seo_meta(
         &state.config.public_url,
         "/coming-soon",
         &format!("{} - {}", title, brand_name),
-        message,
+        &message,
         media_service::DEFAULT_OG_IMAGE,
         "website",
         &lang,
@@ -203,6 +241,16 @@ pub async fn render_coming_soon(
         &state.config.news_domain,
     );
 
-    Html(render_shell_with_seo(&state, &lang, "magazine", &seo, &body_html, Some(&csp_nonce.0))).into_response()
+    Html(home::render_shell_with_context(
+        &state,
+        &lang,
+        "magazine",
+        &seo,
+        &body_html,
+        Some(&csp_nonce.0),
+        Some(&headers),
+        None,
+        None,
+    ))
+    .into_response()
 }
-

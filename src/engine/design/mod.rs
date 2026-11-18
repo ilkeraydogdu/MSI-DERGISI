@@ -1,7 +1,10 @@
 pub mod account;
 pub mod components;
 pub mod config;
+pub mod dialogs;
 pub mod editor;
+pub mod html_dsl;
+pub mod labels_helper;
 pub mod reader;
 pub mod search;
 pub mod shell;

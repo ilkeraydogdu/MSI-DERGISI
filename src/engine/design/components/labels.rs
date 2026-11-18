@@ -71,9 +71,9 @@ pub fn ssb_tag_display_label(code: &str, lang: &str) -> String {
             "simulatorler-ve-egitim-sistemleri" => Some("Simulators & Synthetic Training"),
             "elektronik-harp-sistemleri" => Some("Electronic Warfare & Countermeasures"),
             "itki-tahrik-ve-guc-sistemleri" => Some("Propulsion, Turboshaft & Powerpacks"),
-            "hizmetler-danismanlik" => Some("Services - Defense Consultancy"),
+            "hizmetler-danismanlik" => Some("Services - Defence Consultancy"),
             "hizmetler-egitim" => Some("Services - Technical & Operational Training"),
-            "hizmetler-kurumsal-iletisim" => Some("Services - Defense PR & Exhibition Architecture"),
+            "hizmetler-kurumsal-iletisim" => Some("Services - Defence PR & Exhibition Architecture"),
             "hizmetler-kurumsal-catering" => Some("Services - Field & Summit Catering Logistics"),
             _ => None,
         }

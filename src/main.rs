@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use msi_dergisi_platform::{
-    config, controllers, db, engine, extractors, middleware, models, routes, services, utils,
+    cli, config, controllers, db, engine, extractors, middleware, models, routes, services, utils,
     workers,
 };
 
@@ -115,6 +115,14 @@ async fn main() {
 
     if std::env::args().any(|a| a == "--migrate-only") {
         info!("Migrate-only flag set; SQLite migrations & bootstrap complete.");
+        return;
+    }
+
+    if let Some(sync_opts) = cli::parse_sync_live_args(std::env::args().skip(1)) {
+        if let Err(err) = cli::run_sync_live(&cfg, &database, sync_opts).await {
+            tracing::error!("--sync-live failed: {}", err);
+            std::process::exit(1);
+        }
         return;
     }
 

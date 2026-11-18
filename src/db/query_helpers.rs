@@ -101,6 +101,56 @@ pub fn build_where_clause(filters: &[(&str, Option<&str>)]) -> (String, Vec<Stri
     }
 }
 
+/// Execute a paginated SELECT: runs COUNT(*) for total, then fetches one page of rows.
+/// Returns `(items, total_count)`. On any error returns `(Vec::new(), 0)`.
+///
+/// Replaces the repeated open_conn → COUNT → prepare → query_map → filter_map boilerplate
+/// found in ~12 repo functions (reminders, redirects, newsletters, analytics, admin_misc…).
+///
+/// # Example
+/// ```ignore
+/// let (rows, total) = query_paginated(
+///     &db,
+///     "SELECT COUNT(*) FROM seo_redirects",
+///     [],
+///     "SELECT id, old_path, new_path, status_code, hit_count
+///      FROM seo_redirects ORDER BY id DESC LIMIT ?1 OFFSET ?2",
+///     rusqlite::params![limit, offset],
+///     |r| Ok(SeoRedirectRule { id: r.get(0)?, /* … */ }),
+/// );
+/// ```
+pub fn query_paginated<T, F>(
+    db: &Database,
+    count_sql: &str,
+    count_params: impl Params,
+    data_sql: &str,
+    data_params: impl Params,
+    mapper: F,
+) -> (Vec<T>, u64)
+where
+    F: FnMut(&Row<'_>) -> rusqlite::Result<T>,
+{
+    let conn = match db.open_conn() {
+        Ok(c) => c,
+        Err(_) => return (Vec::new(), 0),
+    };
+
+    let total: u64 = conn
+        .query_row(count_sql, count_params, |r| r.get(0))
+        .unwrap_or(0);
+
+    let mut stmt = match conn.prepare(data_sql) {
+        Ok(s) => s,
+        Err(_) => return (Vec::new(), total),
+    };
+
+    let result = match stmt.query_map(data_params, mapper) {
+        Ok(rows) => (rows.filter_map(|r| r.ok()).collect(), total),
+        Err(_) => (Vec::new(), total),
+    };
+    result
+}
+
 /// Build a dynamic ORDER BY + LIMIT clause.
 pub fn build_order_limit(order_by: Option<&str>, limit: Option<usize>, offset: Option<usize>) -> String {
     let mut clause = String::new();

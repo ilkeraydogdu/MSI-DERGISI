@@ -15,6 +15,12 @@ pub struct RegisterPayload {
     pub kvkk_consent: Option<bool>,
     pub email_consent: Option<bool>,
     pub ssb_interests: Option<Vec<String>>,
+    /// Honeypot field — must be empty. Hidden from real users via CSS.
+    #[serde(default)]
+    pub website_url: Option<String>,
+    /// Unix timestamp (seconds) when the form was rendered. Anti-bot timing check.
+    #[serde(default, deserialize_with = "crate::engine::security_engine::deserialize_opt_i64")]
+    pub _form_ts: Option<i64>,
 }
 
 pub async fn register_user(
@@ -23,6 +29,40 @@ pub async fn register_user(
     Json(payload): Json<RegisterPayload>,
 ) -> Response {
     let lang = "tr";
+    let client_ip = extract_client_ip(&headers);
+
+    // ── Form Spam Protection (honeypot + timing + per-form rate limit) ──
+    let spam_result = security_engine::validate_form_submission(
+        "register",
+        &client_ip,
+        payload.website_url.as_deref(),
+        payload._form_ts,
+    );
+    match spam_result {
+        security_engine::FormSpamResult::Passed => {}
+        security_engine::FormSpamResult::HoneypotTriggered => {
+            // Silent rejection — return success to avoid revealing the trap
+            return ApiResponse::ok(json!({
+                "status": "registered",
+                "user": null,
+                "gov_auto_subscribed": false,
+                "corporate_verification_queued": false,
+                "email_verification_sent": false
+            }))
+            .into_response();
+        }
+        security_engine::FormSpamResult::TimingViolation(_) | security_engine::FormSpamResult::RateLimited { .. } => {
+            return ApiResponse::error(
+                &state.translations,
+                lang,
+                StatusCode::TOO_MANY_REQUESTS,
+                error_codes::RATE_LIMITED,
+                msg_keys::RATE_LIMIT_EXCEEDED,
+            )
+            .into_response();
+        }
+    }
+
     let email = match validation_engine::validate_email(&payload.email) {
         validation_engine::EmailValidation::Valid(e) => e,
         _ => {
@@ -235,6 +275,12 @@ pub async fn register_user(
 pub struct LoginPayload {
     pub email: String,
     pub password: String,
+    /// Honeypot field — must be empty. Hidden from real users via CSS.
+    #[serde(default)]
+    pub website_url: Option<String>,
+    /// Unix timestamp (seconds) when the form was rendered. Anti-bot timing check.
+    #[serde(default, deserialize_with = "crate::engine::security_engine::deserialize_opt_i64")]
+    pub _form_ts: Option<i64>,
 }
 
 pub async fn login_user(
@@ -242,8 +288,41 @@ pub async fn login_user(
     headers: HeaderMap,
     Json(payload): Json<LoginPayload>,
 ) -> Response {
-    let norm_email = payload.email.trim().to_lowercase();
     let client_ip = extract_client_ip(&headers);
+
+    // ── Form Spam Protection (honeypot + timing + per-form rate limit) ──
+    let spam_result = security_engine::validate_form_submission(
+        "login",
+        &client_ip,
+        payload.website_url.as_deref(),
+        payload._form_ts,
+    );
+    match spam_result {
+        security_engine::FormSpamResult::Passed => {}
+        security_engine::FormSpamResult::HoneypotTriggered => {
+            // Silent rejection — return generic auth failure to avoid revealing the trap
+            return ApiResponse::error(
+                &state.translations,
+                "tr",
+                StatusCode::UNAUTHORIZED,
+                error_codes::UNAUTHORIZED,
+                msg_keys::LOGIN_FAILED,
+            )
+            .into_response();
+        }
+        security_engine::FormSpamResult::TimingViolation(_) | security_engine::FormSpamResult::RateLimited { .. } => {
+            return ApiResponse::error(
+                &state.translations,
+                "tr",
+                StatusCode::TOO_MANY_REQUESTS,
+                error_codes::RATE_LIMITED,
+                msg_keys::RATE_LIMIT_EXCEEDED,
+            )
+            .into_response();
+        }
+    }
+
+    let norm_email = payload.email.trim().to_lowercase();
     let ip_email_key = format!("ip:{}:{}", client_ip, norm_email);
     let is_loopback = client_ip == "127.0.0.1" || client_ip == "::1";
     let ip_global_key = format!("ip_global:{}", client_ip);

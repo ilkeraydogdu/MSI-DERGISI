@@ -33,19 +33,15 @@ impl Database {
     }
 
     pub fn get_renewal_reminders_paginated(&self, limit: u32, offset: u32) -> (Vec<RenewalReminderLog>, u64) {
-        let Ok(conn) = self.open_conn() else {
-            return (Vec::new(), 0);
-        };
-        let total: u64 = conn.query_row("SELECT COUNT(*) FROM renewal_reminders", [], |r| r.get(0)).unwrap_or(0);
-        let Ok(mut stmt) = conn.prepare(
+        crate::db::query_helpers::query_paginated(
+            self,
+            "SELECT COUNT(*) FROM renewal_reminders",
+            [],
             "SELECT id, user_id, user_email, full_name, organization_name,
                     stage_label, days_remaining, status, sent_at
              FROM renewal_reminders ORDER BY days_remaining ASC, id DESC LIMIT ?1 OFFSET ?2",
-        ) else {
-            return (Vec::new(), total);
-        };
-        let rows = stmt.query_map(rusqlite::params![limit, offset], |r| {
-            Ok(RenewalReminderLog {
+            rusqlite::params![limit, offset],
+            |r| Ok(RenewalReminderLog {
                 id: r.get(0)?,
                 user_id: r.get(1)?,
                 user_email: r.get(2)?,
@@ -55,12 +51,8 @@ impl Database {
                 days_remaining: r.get(6)?,
                 status: r.get(7)?,
                 sent_at: r.get(8)?,
-            })
-        });
-        match rows {
-            Ok(iter) => (iter.filter_map(Result::ok).collect(), total),
-            Err(_) => (Vec::new(), total),
-        }
+            }),
+        )
     }
 
     pub fn mark_renewal_reminder_sent(&self, id: i64) -> rusqlite::Result<()> {

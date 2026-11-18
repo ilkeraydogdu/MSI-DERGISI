@@ -15,10 +15,10 @@ pub struct InstitutionChoice {
     pub label_en: String,
 }
 
-/// Canonical 13 official MSI institutional categories used when DB rows are not yet passed.
+/// Canonical 14 official MSI institutional categories used when DB rows are not yet passed.
 pub fn default_institution_choices() -> Vec<InstitutionChoice> {
     [
-        ("Sektör Kuruluşları", "Sektör Kuruluşları", "Defence Industry Companies"),
+        ("Sektör Kuruluşları", "Sektör Kuruluşları", "Defence Industry Organisations"),
         ("MSB", "MSB (Millî Savunma Bakanlığı)", "MoND (Ministry of National Defence)"),
         ("SSB", "SSB (Savunma Sanayii Başkanlığı)", "SSB (Presidency of Defence Industries)"),
         ("K.K.K.lığı", "K.K.K.lığı (Kara Kuvvetleri)", "Turkish Land Forces Command"),
@@ -31,6 +31,7 @@ pub fn default_institution_choices() -> Vec<InstitutionChoice> {
         ("Diğer Kamu Kurumları", "Diğer Kamu Kurumları", "Other Public Institutions"),
         ("Üniversite / Öğrenci", "Üniversite / Öğrenci", "University / Student"),
         ("Yurt Dışı Paydaş", "Yurt Dışı Paydaş", "International Stakeholder"),
+        ("savunma_medya", "Savunma Medya / Basın", "Defence Media / Press"),
     ]
     .into_iter()
     .map(|(code, tr, en)| InstitutionChoice {
@@ -41,14 +42,31 @@ pub fn default_institution_choices() -> Vec<InstitutionChoice> {
     .collect()
 }
 
+/// Loads active `institution_categories` from SQLite (Migration 012), mapping `legacy_value`
+/// (when non-empty, else `code`) as the `<option value>` so existing users, B2B analytics,
+/// and `auth_service` stay 100% aligned, falling back to `default_institution_choices` only if empty.
+pub fn institution_choices_from_db(db: &crate::db::Database) -> Vec<InstitutionChoice> {
+    let rows = db.list_institution_categories(true);
+    if rows.is_empty() {
+        return default_institution_choices();
+    }
+    rows.into_iter()
+        .map(|cat| InstitutionChoice {
+            code: if cat.legacy_value.trim().is_empty() {
+                cat.code
+            } else {
+                cat.legacy_value
+            },
+            label_tr: cat.label_tr,
+            label_en: cat.label_en,
+        })
+        .collect()
+}
+
 /// Gate preventing unapproved or TR-copied articles from appearing on `/en` public listings.
-/// In Wave 2B/merge this upgrades to `c.en_status == "approved" || c.source_group == "msi-tdr"`.
 #[inline]
 pub fn is_en_content_ready(c: &ContentItem) -> bool {
-    c.source_group.eq_ignore_ascii_case("msi-tdr")
-        || (!c.title_en.trim().is_empty()
-            && !c.body_en.trim().is_empty()
-            && c.title_en.trim() != c.title_tr.trim())
+    c.en_status == "approved" || c.source_group == "msi-tdr"
 }
 
 /// Looks up `key` in `TranslationCache` for `lang`, checking that the requested language
@@ -278,46 +296,31 @@ mod tests {
     use super::*;
     use crate::engine::translation_engine::TranslationEntry;
 
-    fn item(source: &str, title_tr: &str, title_en: &str, body_en: &str) -> ContentItem {
+    fn item(source: &str, en_status: &str, title_tr: &str, title_en: &str, body_en: &str) -> ContentItem {
         ContentItem {
             id: 1,
             slug: "test-slug".into(),
             title_tr: title_tr.into(),
             title_en: title_en.into(),
-            summary_tr: String::new(),
-            summary_en: String::new(),
             body_tr: "<p>TR</p>".into(),
             body_en: body_en.into(),
             content_type: "haberler".into(),
             source_group: source.into(),
             cover_image: "images/example.webp".into(),
-            author_name: String::new(),
-            author_title: String::new(),
-            issue_number: None,
             published_at: "2026-11-08".into(),
             read_time_min: 3,
-            visibility_level: 0,
-            single_price_try: 0.0,
-            is_sponsored: false,
-            sponsor_brand: None,
-            sponsor_legal_label: None,
-            is_featured: false,
-            video_url: None,
-            view_count: 0,
-            true_read_count: 0,
-            placements: vec![],
-            ssb_tags: vec![],
             status: "published".into(),
+            en_status: en_status.into(),
+            ..Default::default()
         }
     }
 
     #[test]
-    fn en_content_readiness_blocks_tr_copied_and_empty_body_articles() {
-        assert!(!is_en_content_ready(&item("gunluk-haber", "Aynı Başlık", "Aynı Başlık", "<p>Body</p>")));
-        assert!(!is_en_content_ready(&item("gunluk-haber", "TR", "EN Title", "   ")));
-        assert!(!is_en_content_ready(&item("gunluk-haber", "TR", "", "<p>Body</p>")));
-        assert!(is_en_content_ready(&item("gunluk-haber", "TR", "EN Title", "<p>Body</p>")));
-        assert!(is_en_content_ready(&item("msi-tdr", "TDR", "TDR", "")));
+    fn en_content_readiness_blocks_unapproved_and_allows_approved_or_tdr() {
+        assert!(!is_en_content_ready(&item("gunluk-haber", "none", "TR", "EN Title", "<p>Body</p>")));
+        assert!(!is_en_content_ready(&item("gunluk-haber", "auto_draft", "TR", "EN Title", "<p>Body</p>")));
+        assert!(is_en_content_ready(&item("gunluk-haber", "approved", "TR", "EN Title", "<p>Body</p>")));
+        assert!(is_en_content_ready(&item("msi-tdr", "none", "TDR", "TDR", "")));
     }
 
     #[test]

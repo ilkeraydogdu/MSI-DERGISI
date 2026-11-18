@@ -94,6 +94,7 @@ async fn render_home_for_lang(
     let floating_popup =
         helpers::select_floating_popup_ad(&snap.data.ads, None, None, user_opt.as_ref());
     let can_read_pdf = helpers::user_can_read_edergi_pdf(state, user_opt.as_ref());
+    let institutions = crate::engine::design::labels_helper::institution_choices_from_db(&state.db);
 
     let exec_us = t0.elapsed().as_micros();
     let full_html = shell::render_full(
@@ -111,7 +112,7 @@ async fn render_home_for_lang(
         Some(csp_nonce),
         &ShellOptions {
             tr: Some(&state.translations),
-            institutions: &[],
+            institutions: &institutions,
             floating_popup: floating_popup.as_ref(),
             can_read_pdf,
         },
@@ -219,6 +220,7 @@ pub(crate) fn render_shell_with_context(
         user_opt.as_ref(),
     );
     let can_read_pdf = helpers::user_can_read_edergi_pdf(state, user_opt.as_ref());
+    let institutions = crate::engine::design::labels_helper::institution_choices_from_db(&state.db);
     let exec_us = t0.elapsed().as_micros();
     shell::render_full(
         lang,
@@ -235,7 +237,7 @@ pub(crate) fn render_shell_with_context(
         nonce,
         &ShellOptions {
             tr: Some(&state.translations),
-            institutions: &[],
+            institutions: &institutions,
             floating_popup: floating_popup.as_ref(),
             can_read_pdf,
         },

@@ -434,6 +434,171 @@ fn sign_csrf_payload(payload: &str, secret: &str) -> String {
 // Login Brute-Force Protection (Case-Normalized)
 // =========================================================================
 
+// =========================================================================
+// FORM SPAM PROTECTION (Honeypot + Timestamp + Per-Form Rate Limiting)
+// =========================================================================
+
+static FORM_RATE_LIMIT_STORE: OnceCell<Mutex<HashMap<String, (u32, i64)>>> = OnceCell::new();
+
+/// Per-form-type rate limits (max requests per window).
+pub const FORM_RATE_REGISTER_MAX: u32 = 3;
+pub const FORM_RATE_REGISTER_WINDOW: i64 = 60; // 3 per minute
+pub const FORM_RATE_FORGOT_PW_MAX: u32 = 5;
+pub const FORM_RATE_FORGOT_PW_WINDOW: i64 = 3600; // 5 per hour
+pub const FORM_RATE_CONTACT_MAX: u32 = 2;
+pub const FORM_RATE_CONTACT_WINDOW: i64 = 60; // 2 per minute
+pub const FORM_RATE_ANALYTICS_MAX: u32 = 30;
+pub const FORM_RATE_ANALYTICS_WINDOW: i64 = 60; // 30 per minute
+
+/// Minimum time (seconds) between form render and submit to detect bots.
+pub const FORM_MIN_SUBMIT_DELAY_SECS: i64 = 2;
+/// Maximum time (seconds) before a form submission is considered expired.
+pub const FORM_MAX_SUBMIT_AGE_SECS: i64 = 1800; // 30 minutes
+
+/// Result of form spam check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FormSpamResult {
+    /// Submission passed all checks.
+    Passed,
+    /// Honeypot field was filled — silent bot detection.
+    HoneypotTriggered,
+    /// Submission was too fast (< min delay) or too old (> max age).
+    TimingViolation(String),
+    /// Per-form rate limit exceeded.
+    RateLimited { remaining_secs: i64 },
+}
+
+/// Checks the honeypot field value. Returns true if it appears to be a bot.
+/// The honeypot field should be hidden from real users via CSS (`display:none`).
+pub fn check_honeypot(value: Option<&str>) -> bool {
+    value.map(|v| !v.trim().is_empty()).unwrap_or(false)
+}
+
+/// Deserializes an optional Unix timestamp (`_form_ts`) accepting integer, numeric string,
+/// empty string (`None`), or `null` (`None`) so both JSON API clients and `FormData` payloads work.
+pub fn deserialize_opt_i64<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match opt {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::Number(n)) => n.as_i64().filter(|v| *v > 0),
+        Some(serde_json::Value::String(s)) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                trimmed.parse::<i64>().ok().filter(|v| *v > 0)
+            }
+        }
+        _ => None,
+    })
+}
+
+/// Validates the form timing anti-spam token.
+/// The token is a Unix timestamp (seconds) set when the form was rendered.
+/// When omitted (`None`) by programmatic JSON API clients, passes cleanly while still
+/// enforcing honeypot and per-IP rate limits.
+pub fn check_form_timing(rendered_ts: Option<i64>) -> FormSpamResult {
+    let Some(ts) = rendered_ts.filter(|v| *v > 0) else {
+        return FormSpamResult::Passed;
+    };
+    let now = Utc::now().timestamp();
+    if ts > now + 5 {
+        return FormSpamResult::TimingViolation("Form çok hızlı gönderildi.".to_string());
+    }
+    let elapsed = now.saturating_sub(ts);
+    if elapsed < FORM_MIN_SUBMIT_DELAY_SECS {
+        return FormSpamResult::TimingViolation(
+            "Form çok hızlı gönderildi.".to_string(),
+        );
+    }
+    if elapsed > FORM_MAX_SUBMIT_AGE_SECS {
+        return FormSpamResult::TimingViolation(
+            "Form süresi dolmuş. Lütfen sayfayı yenileyin.".to_string(),
+        );
+    }
+    FormSpamResult::Passed
+}
+
+/// Checks per-form-type rate limiting for a given client IP.
+pub fn check_form_rate_limit(form_type: &str, client_ip: &str) -> FormSpamResult {
+    if client_ip.is_empty()
+        || client_ip == "unknown"
+        || client_ip == "127.0.0.1"
+        || client_ip == "::1"
+    {
+        return FormSpamResult::Passed;
+    }
+    let (max_requests, window_secs) = match form_type {
+        "login" => (20, 60),
+        "register" => (FORM_RATE_REGISTER_MAX, FORM_RATE_REGISTER_WINDOW),
+        "forgot_password" => (FORM_RATE_FORGOT_PW_MAX, FORM_RATE_FORGOT_PW_WINDOW),
+        "contact" => (FORM_RATE_CONTACT_MAX, FORM_RATE_CONTACT_WINDOW),
+        "analytics" => (FORM_RATE_ANALYTICS_MAX, FORM_RATE_ANALYTICS_WINDOW),
+        _ => (FORM_RATE_CONTACT_MAX, FORM_RATE_CONTACT_WINDOW),
+    };
+
+    let store = FORM_RATE_LIMIT_STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut map) = store.lock() else {
+        return FormSpamResult::Passed;
+    };
+
+    let now = Utc::now().timestamp();
+    let key = format!("{}:{}", form_type, client_ip);
+
+    // Prune stale entries when store grows too large
+    if map.len() > 5_000 {
+        map.retain(|_, (_, ts)| now - *ts < window_secs * 2);
+    }
+
+    let entry = map.entry(key).or_insert((0, now));
+    if now - entry.1 >= window_secs {
+        entry.0 = 1;
+        entry.1 = now;
+    } else {
+        entry.0 += 1;
+    }
+
+    if entry.0 > max_requests {
+        let remaining = window_secs - (now - entry.1);
+        FormSpamResult::RateLimited {
+            remaining_secs: remaining.max(1),
+        }
+    } else {
+        FormSpamResult::Passed
+    }
+}
+
+/// Generates a form timing token (current Unix timestamp as string).
+/// Embed this as a hidden field value when rendering forms.
+pub fn generate_form_timing_token() -> String {
+    Utc::now().timestamp().to_string()
+}
+
+/// Comprehensive form spam check combining honeypot, timing, and rate limiting.
+/// Returns `Passed` only if all three checks succeed.
+pub fn validate_form_submission(
+    form_type: &str,
+    client_ip: &str,
+    honeypot_value: Option<&str>,
+    rendered_timestamp: Option<i64>,
+) -> FormSpamResult {
+    // 1. Honeypot check (silent — don't reveal to attacker)
+    if check_honeypot(honeypot_value) {
+        return FormSpamResult::HoneypotTriggered;
+    }
+    // 2. Timing check
+    let timing = check_form_timing(rendered_timestamp);
+    if timing != FormSpamResult::Passed {
+        return timing;
+    }
+    // 3. Rate limit check
+    check_form_rate_limit(form_type, client_ip)
+}
+
 static LOGIN_ATTEMPT_STORE: OnceCell<Mutex<HashMap<String, (u32, i64)>>> = OnceCell::new();
 
 /// Maximum failed login attempts before temporary lockout (15 minutes).

@@ -251,7 +251,7 @@ pub fn render_with_context(
     let org_options: String = inst_choices
         .iter()
         .map(|inst| {
-            let sel = if user.organization_category == inst.code {
+            let sel = if user.organization_category.eq_ignore_ascii_case(&inst.code) {
                 " selected"
             } else {
                 ""

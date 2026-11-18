@@ -5,12 +5,47 @@ use super::*;
 #[derive(Deserialize)]
 pub struct ForgotPasswordPayload {
     pub email: String,
+    /// Honeypot field — must be empty. Hidden from real users via CSS.
+    #[serde(default)]
+    pub website_url: Option<String>,
+    /// Unix timestamp (seconds) when the form was rendered. Anti-bot timing check.
+    #[serde(default, deserialize_with = "crate::engine::security_engine::deserialize_opt_i64")]
+    pub _form_ts: Option<i64>,
 }
 
 pub async fn forgot_password(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<ForgotPasswordPayload>,
 ) -> Response {
+    let client_ip = extract_client_ip(&headers);
+
+    // ── Form Spam Protection (honeypot + timing + per-form rate limit) ──
+    let spam_result = security_engine::validate_form_submission(
+        "forgot_password",
+        &client_ip,
+        payload.website_url.as_deref(),
+        payload._form_ts,
+    );
+    match spam_result {
+        security_engine::FormSpamResult::Passed => {}
+        security_engine::FormSpamResult::HoneypotTriggered => {
+            // Silent rejection — return success to avoid revealing the trap
+            return ApiResponse::ok(json!({ "sent": true })).into_response();
+        }
+        security_engine::FormSpamResult::TimingViolation(_)
+        | security_engine::FormSpamResult::RateLimited { .. } => {
+            return ApiResponse::error(
+                &state.translations,
+                "tr",
+                StatusCode::TOO_MANY_REQUESTS,
+                error_codes::RATE_LIMITED,
+                msg_keys::RATE_LIMIT_EXCEEDED,
+            )
+            .into_response();
+        }
+    }
+
     let email = match validation_engine::validate_email(&payload.email) {
         validation_engine::EmailValidation::Valid(e) => e,
         _ => {

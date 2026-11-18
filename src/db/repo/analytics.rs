@@ -142,7 +142,7 @@ impl Database {
         let norm_date: String = date.trim().chars().take(10).collect();
 
         let sql = r#"
-            INSERT OR REPLACE INTO analytics_daily_agg
+            INSERT INTO analytics_daily_agg
                 (date, content_slug, ad_id, organization_category, event_type,
                  event_count, unique_sessions, avg_duration_sec, avg_scroll_pct, true_read_count)
             SELECT
@@ -159,6 +159,12 @@ impl Database {
             FROM analytics_events
             WHERE SUBSTR(created_at, 1, 10) = ?1
             GROUP BY COALESCE(content_slug, ''), COALESCE(ad_id, 0), COALESCE(organization_category, ''), event_type
+            ON CONFLICT(date, content_slug, ad_id, organization_category, event_type) DO UPDATE SET
+                event_count=excluded.event_count,
+                unique_sessions=excluded.unique_sessions,
+                avg_duration_sec=excluded.avg_duration_sec,
+                avg_scroll_pct=excluded.avg_scroll_pct,
+                true_read_count=excluded.true_read_count
         "#;
 
         conn.execute(sql, rusqlite::params![norm_date])

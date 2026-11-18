@@ -4,7 +4,28 @@ pub async fn faceted_search_api(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    let criteria = CentralContentQueryEngine::from_params(&params);
+    // Validate and sanitize pagination boundaries
+    let (page, per_page) = crate::engine::validation_engine::validate_pagination(
+        params.get("page").map(|s| s.as_str()),
+        params.get("per_page").map(|s| s.as_str()),
+    );
+
+    // Validate and sanitize search query if present
+    let sanitized_q = params
+        .get("q")
+        .and_then(|s| crate::engine::validation_engine::validate_search_query(s));
+
+    // Build a validated params map for the query engine
+    let mut validated_params = params.clone();
+    validated_params.insert("page".to_string(), page.to_string());
+    validated_params.insert("per_page".to_string(), per_page.to_string());
+    if let Some(ref q) = sanitized_q {
+        validated_params.insert("q".to_string(), q.clone());
+    } else {
+        validated_params.remove("q");
+    }
+
+    let criteria = CentralContentQueryEngine::from_params(&validated_params);
     let result = CentralContentQueryEngine::execute(&state.db, &criteria);
     Json(json!(result))
 }

@@ -29,6 +29,7 @@ pub mod error_codes {
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
     pub const PAYMENT_GATEWAY_ERROR: &str = "PAYMENT_GATEWAY_ERROR";
     pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
+    pub const RATE_LIMITED: &str = "RATE_LIMITED";
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +69,7 @@ pub mod msg_keys {
     pub const VALIDATION_ERROR: &str = "api.error.validation_error";
     pub const PAYMENT_ERROR: &str = "api.error.payment_error";
     pub const TOO_MANY_REQUESTS: &str = "api.error.too_many_requests";
+    pub const RATE_LIMIT_EXCEEDED: &str = "api.error.too_many_requests";
 }
 
 /// Seed API-specific translation keys via centralized repo method.

@@ -167,6 +167,7 @@ pub async fn render_account_page(
         None
     };
 
+    let institutions = crate::engine::design::labels_helper::institution_choices_from_db(&state.db);
     let body_html = crate::engine::design::account::render_with_context(
         &lang,
         &user,
@@ -176,7 +177,7 @@ pub async fn render_account_page(
         &ssb_tags,
         admin_path_opt,
         Some(tr),
-        &[],
+        &institutions,
     );
     let logged_title = tr_text(
         Some(tr),

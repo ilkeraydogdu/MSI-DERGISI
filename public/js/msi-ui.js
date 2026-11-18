@@ -1121,6 +1121,25 @@
     }
   })();
 
+  // ── Anti-Spam: Initialize form timing tokens when forms become visible ──
+  function initFormTimingToken(form) {
+    if (!form) return;
+    const tsField = form.querySelector("[data-form-timing]");
+    if (tsField && !tsField.value) {
+      tsField.value = String(Math.floor(Date.now() / 1000));
+    }
+  }
+  // Set timing tokens on all auth forms at boot and ensure initialized on view switch
+  ["#login-form", "#register-form", "#forgot-password-form", "#totp-login-form"].forEach(
+    (sel) => initFormTimingToken($(sel)),
+  );
+  const _origAuthView = authView;
+  authView = function (name) {
+    _origAuthView(name);
+    const formMap = { login: "#login-form", register: "#register-form", forgot: "#forgot-password-form", totp: "#totp-login-form" };
+    initFormTimingToken($(formMap[name]));
+  };
+
   ["login", "register"].forEach((kind) =>
     $("#" + kind + "-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -1128,6 +1147,13 @@
         button = $("[type=submit]", form),
         feedback = $(".form-feedback", form);
       const reqPayload = Object.fromEntries(new FormData(form));
+      // Anti-spam: ensure honeypot is string and timing field is numeric when present
+      if (!reqPayload.website_url) reqPayload.website_url = "";
+      if (reqPayload._form_ts) {
+        reqPayload._form_ts = Number(reqPayload._form_ts) || undefined;
+      } else {
+        delete reqPayload._form_ts;
+      }
       if (kind === "register") {
         reqPayload.kvkk_consent = form.elements.kvkk_consent.checked;
         reqPayload.kvkk_acknowledged = form.elements.kvkk_consent.checked;
@@ -1278,10 +1304,17 @@
         "Sending reset link…",
       );
     try {
+      // Anti-spam: include honeypot and timing fields
+      const rawForgotTs = Number(form.elements._form_ts?.value);
+      const forgotPayload = {
+        email,
+        website_url: String(form.elements.website_url?.value || ""),
+        ...(rawForgotTs > 0 ? { _form_ts: rawForgotTs } : {}),
+      };
       const response = await fetch("/api/v1/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify(forgotPayload),
       });
       const data = await response.json();
       if (!response.ok) {

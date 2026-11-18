@@ -71,10 +71,34 @@ Disallow: /api/v1/admin/
 
 # AI Search & Generative Engine Optimization (GEO) Crawlers
 User-agent: OAI-SearchBot
-Allow: /
+Allow: /icerik/
+Allow: /kategori/
+Allow: /kurumsal/
+Allow: /e-dergi
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /admin
+Disallow: /yonetim
+Disallow: /hesabim
+Disallow: /sifre-
+Disallow: /hesap-dogrula
+Disallow: /abonelik-iptal
+Disallow: /api/
 
 User-agent: ChatGPT-User
-Allow: /
+Allow: /icerik/
+Allow: /kategori/
+Allow: /kurumsal/
+Allow: /e-dergi
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /admin
+Disallow: /yonetim
+Disallow: /hesabim
+Disallow: /sifre-
+Disallow: /hesap-dogrula
+Disallow: /abonelik-iptal
+Disallow: /api/
 
 User-agent: GPTBot
 Allow: /icerik/
@@ -84,11 +108,27 @@ Allow: /e-dergi
 Allow: /llms.txt
 Allow: /llms-full.txt
 Disallow: /admin
+Disallow: /yonetim
 Disallow: /hesabim
+Disallow: /sifre-
+Disallow: /hesap-dogrula
+Disallow: /abonelik-iptal
 Disallow: /api/
 
 User-agent: PerplexityBot
-Allow: /
+Allow: /icerik/
+Allow: /kategori/
+Allow: /kurumsal/
+Allow: /e-dergi
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /admin
+Disallow: /yonetim
+Disallow: /hesabim
+Disallow: /sifre-
+Disallow: /hesap-dogrula
+Disallow: /abonelik-iptal
+Disallow: /api/
 
 User-agent: ClaudeBot
 Allow: /icerik/
@@ -97,13 +137,49 @@ Allow: /kurumsal/
 Allow: /llms.txt
 Allow: /llms-full.txt
 Disallow: /admin
+Disallow: /yonetim
 Disallow: /hesabim
+Disallow: /sifre-
+Disallow: /hesap-dogrula
+Disallow: /abonelik-iptal
+Disallow: /api/
 
 User-agent: Google-Extended
-Allow: /
+Allow: /icerik/
+Allow: /kategori/
+Allow: /kurumsal/
+Allow: /e-dergi
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /admin
+Disallow: /yonetim
+Disallow: /hesabim
+Disallow: /sifre-
+Disallow: /hesap-dogrula
+Disallow: /abonelik-iptal
+Disallow: /api/
 
 User-agent: Applebot
-Allow: /
+Allow: /icerik/
+Allow: /kategori/
+Allow: /kurumsal/
+Allow: /e-dergi
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /admin
+Disallow: /yonetim
+Disallow: /hesabim
+Disallow: /sifre-
+Disallow: /hesap-dogrula
+Disallow: /abonelik-iptal
+Disallow: /api/
+
+# Aggressive AI scrapers — block entirely
+User-agent: Bytespider
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
 
 Host: {host}
 Sitemap: {base}/sitemap.xml

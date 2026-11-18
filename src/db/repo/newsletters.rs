@@ -35,19 +35,15 @@ impl Database {
     }
 
     pub fn get_newsletter_campaigns_paginated(&self, limit: u32, offset: u32) -> (Vec<NewsletterCampaign>, u64) {
-        let Ok(conn) = self.open_conn() else {
-            return (Vec::new(), 0);
-        };
-        let total: u64 = conn.query_row("SELECT COUNT(*) FROM newsletter_campaigns", [], |r| r.get(0)).unwrap_or(0);
-        let Ok(mut stmt) = conn.prepare(
+        crate::db::query_helpers::query_paginated(
+            self,
+            "SELECT COUNT(*) FROM newsletter_campaigns",
+            [],
             "SELECT id, subject_tr, subject_en, target_group_filter, target_institution,
                     target_ssb_tag, sponsor_ad_id, sponsor_name, recipient_count, status, sent_at
              FROM newsletter_campaigns ORDER BY id DESC LIMIT ?1 OFFSET ?2",
-        ) else {
-            return (Vec::new(), total);
-        };
-        let rows = stmt.query_map(rusqlite::params![limit, offset], |r| {
-            Ok(NewsletterCampaign {
+            rusqlite::params![limit, offset],
+            |r| Ok(NewsletterCampaign {
                 id: r.get(0)?,
                 subject_tr: r.get(1)?,
                 subject_en: r.get(2)?,
@@ -59,12 +55,8 @@ impl Database {
                 recipient_count: r.get(8)?,
                 status: r.get(9)?,
                 sent_at: r.get(10)?,
-            })
-        });
-        match rows {
-            Ok(iter) => (iter.filter_map(Result::ok).collect(), total),
-            Err(_) => (Vec::new(), total),
-        }
+            }),
+        )
     }
 
     pub fn insert_newsletter_campaign(&self, nl: &NewsletterCampaign) -> rusqlite::Result<i64> {

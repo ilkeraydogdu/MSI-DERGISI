@@ -41,9 +41,11 @@ pub use feeds::{
 pub use helpers::detect_language;
 pub(crate) use helpers::{detect_domain_mode, typed_response};
 pub use home::{render_admin, render_en_home, render_home, render_shared_shell};
+#[allow(unused_imports)]
 pub(crate) use home::render_shell_with_seo;
 pub use not_found::{render_not_found, render_not_found_with_nonce};
 pub use pages::{render_coming_soon, render_designed_page};
+#[allow(unused_imports)]
 pub(crate) use pages::render_configured_page;
 pub use redirects::{
     handle_fallback_or_redirect, redirect_account_en, redirect_account_tr, redirect_en_home,

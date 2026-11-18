@@ -507,6 +507,7 @@ mod edergi_download_tests {
             publication_type: "msi".into(),
             uploaded_pdf_file: Some("sample-4p.pdf".into()),
             spreads: vec![],
+            ..Default::default()
         };
         state.db.upsert_issue(&issue).unwrap();
 

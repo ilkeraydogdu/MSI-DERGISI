@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  msi-web:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: msi-dergisi-platform:latest
+    container_name: msi-web
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./storage:/app/storage
+      - ./public:/app/public:ro
+    env_file: .env.container
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

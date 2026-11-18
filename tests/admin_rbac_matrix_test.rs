@@ -128,11 +128,28 @@ async fn rbac_matrix_enforces_roles_and_prevents_escalation() {
     let (st, _) = send_json(&app, "DELETE", "/api/v1/admin/contents/1", Some(&ads_cookie), None).await;
     assert_eq!(st, StatusCode::FORBIDDEN);
 
-    // 5. `admin` (`*`) has full access to /me, /issues, /subscription-plans, /commerce-products, /invoices
+    // 5. `super_admin` has wildcard (`*`), while `admin` has explicit `:manage` + `roles:manage` without `*`
+    let (_, super_cookie) = make_user_and_cookie(&state, "super_qa@test.local", "super_admin");
+    let (st, super_me) = send_json(&app, "GET", "/api/v1/admin/me", Some(&super_cookie), None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(super_me["data"]["is_wildcard"], json!(true));
+
     let (_, admin_cookie) = make_user_and_cookie(&state, "admin_qa@test.local", "admin");
     let (st, me_body) = send_json(&app, "GET", "/api/v1/admin/me", Some(&admin_cookie), None).await;
     assert_eq!(st, StatusCode::OK);
-    assert_eq!(me_body["data"]["is_wildcard"], json!(true));
+    assert_eq!(me_body["data"]["is_wildcard"], json!(false));
+    let admin_perms = me_body["data"]["permissions"].as_array().expect("permissions array");
+    assert!(admin_perms.contains(&json!("roles:manage")));
+    assert!(admin_perms.contains(&json!("backup:manage")));
+
+    let (_, site_op_cookie) = make_user_and_cookie(&state, "siteop_qa@test.local", "site_operator");
+    let (st, op_me) = send_json(&app, "GET", "/api/v1/admin/me", Some(&site_op_cookie), None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(op_me["data"]["is_wildcard"], json!(false));
+    let op_perms = op_me["data"]["permissions"].as_array().expect("permissions array");
+    assert!(!op_perms.contains(&json!("roles:manage")));
+    assert!(!op_perms.contains(&json!("users:manage")));
+    assert!(!op_perms.contains(&json!("backup:manage")));
 
     // 6. Custom role with `roles:manage` + `users:manage` (WITHOUT `*`) CANNOT grant `*` or promote to `super_admin`
     let (st, _) = send_json(

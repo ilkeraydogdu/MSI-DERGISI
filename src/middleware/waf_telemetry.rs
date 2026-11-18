@@ -87,6 +87,28 @@ pub async fn central_waf_and_telemetry_middleware(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
+    // Block access to sensitive files and directories before any further processing.
+    let is_sensitive_path = path == "/.env"
+        || path.starts_with("/.env.")
+        || path.starts_with("/.git/")
+        || path == "/.git"
+        || path == "/Cargo.toml"
+        || path == "/Cargo.lock"
+        || path.starts_with("/target/")
+        || path.starts_with("/storage/db/")
+        || path.starts_with("/.claude/");
+    if is_sensitive_path {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "status": "error",
+                "code": "SENSITIVE_PATH_BLOCKED",
+                "message": "Access to this resource is forbidden."
+            })),
+        )
+            .into_response();
+    }
+
     // Deep WAF inspection (Rate Limiter + SQLi + XSS + Path Traversal)
     if let Err(log_entry) = CentralSecurityFilter::inspect_request_security(
         &path,
@@ -199,7 +221,14 @@ pub async fn central_waf_and_telemetry_middleware(
             HeaderValue::from_static("no-store, private"),
         );
     }
-    if is_admin_root || is_admin_subpage {
+    let is_noindex_path = is_admin_root
+        || is_admin_subpage
+        || path.starts_with("/hesabim")
+        || path.starts_with("/sifre-")
+        || path == "/hesap-dogrula"
+        || path == "/abonelik-iptal"
+        || path.starts_with("/api/");
+    if is_noindex_path {
         response.headers_mut().insert(
             HeaderName::from_static("x-robots-tag"),
             HeaderValue::from_static("noindex, nofollow, noarchive"),
@@ -217,12 +246,20 @@ pub async fn central_waf_and_telemetry_middleware(
         }
     }
     if !path.starts_with("/api/") && !is_static && !is_admin_root && !is_admin_subpage {
-        response.headers_mut().insert(
-            HeaderName::from_static("link"),
-            HeaderValue::from_static(
-                "</llms.txt>; rel=\"describedby\"; type=\"text/plain\", </feed.json>; rel=\"alternate\"; type=\"application/feed+json\"",
-            ),
+        let canonical_url = format!(
+            "{}{}",
+            state.config.public_url.trim_end_matches('/'),
+            path
         );
+        let link_header = format!(
+            "<{}>; rel=\"canonical\", </llms.txt>; rel=\"describedby\"; type=\"text/plain\", </feed.json>; rel=\"alternate\"; type=\"application/feed+json\"",
+            canonical_url
+        );
+        if let Ok(v) = HeaderValue::from_str(&link_header) {
+            response
+                .headers_mut()
+                .insert(HeaderName::from_static("link"), v);
+        }
     }
 
     response

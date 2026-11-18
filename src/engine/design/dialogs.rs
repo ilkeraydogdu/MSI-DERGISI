@@ -33,6 +33,26 @@ pub fn render_into(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
     render_gallery_lightbox(buf, ctx);
 }
 
+fn append_antispam_fields(f: &mut HtmlBuf) {
+    f.void_with("input", |inp| {
+        inp.attr("type", "text")
+            .attr("name", "website_url")
+            .attr("tabindex", "-1")
+            .attr("autocomplete", "off")
+            .attr(
+                "style",
+                "position:absolute;left:-9999px;opacity:0;height:0;width:0;",
+            )
+            .attr("aria-hidden", "true");
+    });
+    f.void_with("input", |inp| {
+        inp.attr("type", "hidden")
+            .attr("name", "_form_ts")
+            .attr("value", "")
+            .bool_attr("data-form-timing", true);
+    });
+}
+
 fn t(ctx: &DialogContext<'_>, key: &str, tr: &str, en: &str) -> String {
     tr_text(ctx.tr, ctx.lang, key, tr, en)
 }
@@ -492,6 +512,7 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                     ("class", "ui-form"),
                 ],
                 |f| {
+                    append_antispam_fields(f);
                     f.el("label", &[], |lbl| {
                         lbl.text(&email_lbl);
                         lbl.void_with("input", |inp| {
@@ -542,6 +563,7 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                         .bool_attr("hidden", true);
                 },
                 |f| {
+                    append_antispam_fields(f);
                     f.el("div", &[("class", "auth-step-banner")], |banner| {
                         banner.el("strong", &[], |s| {
                             s.text(&forgot_title);
@@ -588,6 +610,7 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                         .bool_attr("hidden", true);
                 },
                 |f| {
+                    append_antispam_fields(f);
                     f.el("div", &[("class", "auth-step-banner is-security")], |banner| {
                         banner.el("strong", &[], |s| {
                             s.text(&totp_title);
@@ -640,6 +663,7 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                         .bool_attr("hidden", true);
                 },
                 |f| {
+                    append_antispam_fields(f);
                     f.el("div", &[("class", "form-grid-2")], |row| {
                         row.el("label", &[], |lbl| {
                             lbl.text(&full_name_lbl);

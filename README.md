@@ -24,7 +24,7 @@ Full-stack defense/aerospace publishing and e-commerce platform for Turkish defe
 - Subscription management
 
 ### Architecture
-- 51 Rust source files
+- 168+ Rust source files (modular `routes/`, `middleware/`, `controllers/`, `db/`, `engine/`, `services/`, `workers/`)
 - ~60 REST API endpoints
 - Server-side rendered pages with CSP nonce injection
 - L1 in-memory cache (RwLock)

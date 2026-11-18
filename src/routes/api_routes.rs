@@ -24,6 +24,10 @@ pub fn build() -> Router<AppState> {
             "/api/v1/edergi/:issue_no/download-pdf",
             get(api_controller::download_edergi_pdf),
         )
+        .route(
+            "/api/v1/edergi/:issue_no/pdf",
+            get(api_controller::download_edergi_pdf),
+        )
         .route("/api/v1/auth/register", post(api_controller::register_user))
         .route("/api/v1/auth/login", post(api_controller::login_user))
         .route("/api/v1/auth/logout", post(api_controller::logout_user))

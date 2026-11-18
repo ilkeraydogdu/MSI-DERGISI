@@ -48,9 +48,31 @@ const PROTECTED_ABBREVIATIONS: &[&str] = &[
     "Say.",
 ];
 
-/// Returns `true` when a `ContentItem` is publicly visible (editorial status is `"published"` or legacy empty).
+/// Returns `true` when a `ContentItem` is publicly visible:
+/// editorial status is `"published"` (or legacy empty) AND `published_at` is not in the future.
 pub fn is_publicly_visible(item: &ContentItem) -> bool {
-    item.status.is_empty() || item.status == "published"
+    if !(item.status.is_empty() || item.status == "published") {
+        return false;
+    }
+    let raw = item.published_at.trim();
+    if raw.is_empty() {
+        return true;
+    }
+    let now_tr = Utc::now() + chrono::Duration::hours(3);
+    if let Ok(dt) = DateTime::parse_from_rfc3339(raw) {
+        return dt.with_timezone(&Utc) <= Utc::now();
+    }
+    if let Ok(ndt) = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M"))
+        .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M"))
+    {
+        return ndt <= now_tr.naive_utc();
+    }
+    if let Ok(d) = NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+        return d <= now_tr.date_naive();
+    }
+    true
 }
 
 /// Parses flexible `subscription_expires_at` formats (`%Y-%m-%d`, RFC3339, `%Y-%m-%d %H:%M:%S`,

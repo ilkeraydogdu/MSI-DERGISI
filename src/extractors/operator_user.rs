@@ -19,9 +19,16 @@ fn canonicalize_resource(res: &str) -> &str {
         "subscription" => "subscriptions",
         "setting" => "settings",
         "user" => "users",
+        "role" => "roles",
         "ad" => "ads",
         "translation" => "translations",
         "corporate_request" => "corporate_requests",
+        "issue" => "issues",
+        "invoice" => "invoices",
+        "product" => "commerce",
+        "plan" => "subscriptions",
+        "redirect" => "redirects",
+        "audit_log" | "audit_logs" => "audit",
         other => other,
     }
 }
@@ -80,9 +87,9 @@ fn permission_matches(granted_raw: &str, required_raw: &str) -> bool {
     }
 
     match r_act {
-        "read" | "view" => matches!(g_act, "read" | "view" | "write" | "publish"),
-        "write" => g_act == "write",
-        "manage" => g_act == "write",
+        "read" | "view" => matches!(g_act, "read" | "view" | "write" | "publish" | "upload"),
+        "write" => matches!(g_act, "write" | "publish"),
+        "manage" => false,
         _ => false,
     }
 }
@@ -115,7 +122,16 @@ pub fn is_staff_role(db: &crate::db::Database, role: &str) -> bool {
 
     db.get_role_permissions(role.trim())
         .or_else(|| db.get_role_permissions(&norm))
-        .map(|perms| perms.iter().any(|p| !p.trim().is_empty()))
+        .map(|perms| {
+            perms.iter().any(|p| {
+                let pt = p.trim().to_ascii_lowercase();
+                !pt.is_empty()
+                    && !matches!(
+                        pt.as_str(),
+                        "articles:read" | "articles:premium" | "edergi:read" | "edergi:download"
+                    )
+            })
+        })
         .unwrap_or(false)
 }
 

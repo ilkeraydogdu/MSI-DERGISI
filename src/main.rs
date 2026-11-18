@@ -61,26 +61,62 @@ async fn main() {
     let database = Database::new(&cfg.sqlite_db_path)
         .expect("Failed to initialize MSI Dergisi SQLite WAL database");
 
-    // Ensure configured operator account password hash is Argon2id-synced with ADMIN_DEFAULT_PASS.
-    if let Some((_, existing_hash)) = database.get_user_by_email(&cfg.admin_default_user) {
-        if !crate::services::auth_service::verify_password(
-            &cfg.admin_default_pass,
-            &cfg.session_secret,
-            &existing_hash,
-        ) || !crate::services::auth_service::is_argon2_hash(&existing_hash)
-        {
+    // Ensure configured operator account exists and its Argon2id password hash matches ADMIN_DEFAULT_PASS.
+    if !cfg.admin_default_user.trim().is_empty() && !cfg.admin_default_pass.is_empty() {
+        if let Some((_, existing_hash)) = database.get_user_by_email(&cfg.admin_default_user) {
+            if !crate::services::auth_service::verify_password(
+                &cfg.admin_default_pass,
+                &cfg.session_secret,
+                &existing_hash,
+            ) || !crate::services::auth_service::is_argon2_hash(&existing_hash)
+            {
+                let argon_hash = crate::services::auth_service::hash_password(
+                    &cfg.admin_default_pass,
+                    &cfg.session_secret,
+                );
+                let _ = database.update_user_password_hash(&cfg.admin_default_user, &argon_hash);
+                database.refresh_l1_sections(&["users"]);
+            }
+        } else {
             let argon_hash = crate::services::auth_service::hash_password(
                 &cfg.admin_default_pass,
                 &cfg.session_secret,
             );
-            let _ = database.update_user_password_hash(&cfg.admin_default_user, &argon_hash);
-            database.refresh_l1_sections(&["users"]);
+            let now = chrono::Utc::now().to_rfc3339();
+            let admin_account = crate::models::UserAccount {
+                id: 0,
+                email: cfg.admin_default_user.trim().to_lowercase(),
+                full_name: "MSI Komuta Operatörü".to_string(),
+                role: "site_operator".to_string(),
+                organization_category: "Sektör Kuruluşları".to_string(),
+                organization_name: "MSI Dergisi".to_string(),
+                job_title: "Sistem Operatörü".to_string(),
+                is_gov_verified: true,
+                subscription_tier: "Kurumsal Tam Yetki".to_string(),
+                subscription_expires_at: Some("2030-12-31".to_string()),
+                reminders_halted: true,
+                kvkk_consent_at: now.clone(),
+                kvkk_consent_ip: "127.0.0.1".to_string(),
+                kvkk_consent_hash: "ENV-BOOTSTRAP".to_string(),
+                email_consent: true,
+                ssb_interests: vec![],
+                created_at: now,
+                email_verified: true,
+                marketing_emails_opted_in: false,
+                totp_enabled: false,
+            };
+            let _ = database.create_or_update_user(&admin_account, &argon_hash);
         }
     }
 
     let _ = crate::engine::translation_engine::seed_default_translations(&database);
     let translations = crate::engine::translation_engine::TranslationCache::new();
     translations.load(database.load_all_translations());
+
+    if std::env::args().any(|a| a == "--migrate-only") {
+        info!("Migrate-only flag set; SQLite migrations & bootstrap complete.");
+        return;
+    }
 
     let monitoring_cache = if cfg.monitoring_enabled {
         Some(

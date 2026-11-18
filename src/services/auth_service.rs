@@ -205,10 +205,11 @@ pub fn generate_kvkk_consent_hash(email: &str, ip: &str, timestamp: &str, secret
 }
 
 /// Generates a cryptographically signed session token for the given `UserAccount`.
-/// Format: `{user_id}.{role}.{issued_ts}.{hmac_hex}`
+/// Format: `{user_id}.{role}.{issued_ts}.{jti}.{hmac_hex}` (5 segments).
 pub fn generate_session_token(user: &UserAccount, secret: &str) -> String {
     let issued_ts = Utc::now().timestamp();
-    let payload = format!("{}.{}.{}", user.id, user.role, issued_ts);
+    let jti = uuid::Uuid::new_v4().simple().to_string();
+    let payload = format!("{}.{}.{}.{}", user.id, user.role, issued_ts, &jti[..16]);
     let sig = sign_session_payload(&payload, secret);
     format!("{}.{}", payload, sig)
 }
@@ -243,19 +244,23 @@ pub fn verify_session_token(token: &str, secret: &str) -> Option<i64> {
         return None;
     }
     let parts: Vec<&str> = trimmed.split('.').collect();
-    if parts.len() != 4 {
+    if parts.len() != 5 {
         return None;
     }
     let user_id: i64 = parts[0].parse().ok()?;
     let role = parts[1];
     let issued_ts: i64 = parts[2].parse().ok()?;
+    let jti = parts[3];
+    if jti.is_empty() {
+        return None;
+    }
     let age = Utc::now().timestamp().checked_sub(issued_ts)?;
     if !(-60..=86400).contains(&age) {
         return None;
     }
-    let provided_sig = parts[3];
+    let provided_sig = parts[4];
 
-    let payload = format!("{}.{}.{}", user_id, role, issued_ts);
+    let payload = format!("{}.{}.{}.{}", user_id, role, issued_ts, jti);
     let expected_sig = sign_session_payload(&payload, secret);
 
     if constant_time_eq(provided_sig.as_bytes(), expected_sig.as_bytes()) {
@@ -266,14 +271,15 @@ pub fn verify_session_token(token: &str, secret: &str) -> Option<i64> {
 }
 
 /// Generates a dedicated, short-lived (`300s` TTL) TOTP 2FA challenge token bound to `b"MSI-TOTP-PENDING-V1:"`.
-/// Format: `{email_b64url}.{issued_ts}.{hmac_hex}` (3 segments — structurally & cryptographically
-/// incompatible with 4-segment `msi_session` cookies so `temp_token` can NEVER bypass 2FA).
+/// Format: `{email_b64url}.{issued_ts}.{jti}.{hmac_hex}` (4 segments — structurally & cryptographically
+/// incompatible with 5-segment `msi_session` cookies so `temp_token` can NEVER bypass 2FA).
 pub fn generate_totp_pending_token(user_email: &str, secret: &str) -> String {
     let normalized_email = user_email.trim().to_lowercase();
     let email_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(normalized_email.as_bytes());
     let issued_ts = Utc::now().timestamp();
-    let payload = format!("{}.{}", email_b64, issued_ts);
+    let jti = uuid::Uuid::new_v4().simple().to_string();
+    let payload = format!("{}.{}.{}", email_b64, issued_ts, &jti[..16]);
     let sig = sign_totp_pending_payload(&payload, secret);
     format!("{}.{}", payload, sig)
 }
@@ -286,7 +292,7 @@ pub fn verify_totp_pending_token(token: &str, secret: &str) -> Option<String> {
         return None;
     }
     let parts: Vec<&str> = trimmed.split('.').collect();
-    if parts.len() != 3 {
+    if parts.len() != 4 {
         return None;
     }
     let email_b64 = parts[0];
@@ -294,13 +300,17 @@ pub fn verify_totp_pending_token(token: &str, secret: &str) -> Option<String> {
         return None;
     }
     let issued_ts: i64 = parts[1].parse().ok()?;
+    let jti = parts[2];
+    if jti.is_empty() {
+        return None;
+    }
     let age = Utc::now().timestamp().checked_sub(issued_ts)?;
     if !(-30..=TOTP_PENDING_TTL_SECS).contains(&age) {
         return None;
     }
-    let provided_sig = parts[2];
+    let provided_sig = parts[3];
 
-    let payload = format!("{}.{}", email_b64, issued_ts);
+    let payload = format!("{}.{}.{}", email_b64, issued_ts, jti);
     let expected_sig = sign_totp_pending_payload(&payload, secret);
     if !constant_time_eq(provided_sig.as_bytes(), expected_sig.as_bytes()) {
         return None;
@@ -573,6 +583,11 @@ mod tests {
         revoke_session_token(&tok);
         assert!(is_token_revoked(&tok));
         assert_eq!(verify_session_token(&tok, secret), None);
+
+        // Immediate re-login within the same second must yield a distinct, valid token.
+        let tok2 = generate_session_token(&user, secret);
+        assert_ne!(tok, tok2);
+        assert_eq!(verify_session_token(&tok2, secret), Some(42));
     }
 
     #[test]

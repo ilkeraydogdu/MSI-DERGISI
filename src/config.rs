@@ -11,6 +11,7 @@ pub struct AppConfig {
     pub public_url: String,
     pub static_dir: String,
     pub sqlite_db_path: String,
+    pub edergi_dir: String,
     #[allow(dead_code)]
     pub mariadb_database: String,
     pub session_secret: String,
@@ -51,8 +52,9 @@ impl AppConfig {
         let _ = dotenvy::dotenv();
         let default_static_dir = env::current_dir()
             .ok()
+            .map(|p| p.join("public"))
             .and_then(|p| p.to_str().map(|s| s.to_string()))
-            .unwrap_or_else(|| ".".to_string());
+            .unwrap_or_else(|| "public".to_string());
 
         Self {
             app_name: env::var("APP_NAME").unwrap_or_else(|_| {
@@ -76,17 +78,20 @@ impl AppConfig {
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or(default_static_dir),
             sqlite_db_path: env::var("SQLITE_DB_PATH")
-                .unwrap_or_else(|_| "data/msi_platform.db".to_string()),
+                .unwrap_or_else(|_| "storage/db/msi_platform.db".to_string()),
+            edergi_dir: env::var("EDERGI_DIR")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "storage/edergi".to_string()),
             mariadb_database: env::var("MARIADB_DATABASE")
                 .unwrap_or_else(|_| "msi_dergisi_db".to_string()),
             session_secret: env::var("SESSION_SECRET")
-                .unwrap_or_else(|_| "msi-umsa-2026-tactical-secret-key".to_string()),
+                .unwrap_or_else(|_| "dev-only-session-secret-change-in-prod".to_string()),
             watermark_secret: env::var("WATERMARK_SECRET")
-                .unwrap_or_else(|_| "[REDACTED_WATERMARK_SECRET]".to_string()),
+                .unwrap_or_else(|_| "dev-only-watermark-secret-change-in-prod".to_string()),
             admin_default_user: env::var("ADMIN_DEFAULT_USER")
                 .unwrap_or_else(|_| "operator@msidergisi.com".to_string()),
-            admin_default_pass: env::var("ADMIN_DEFAULT_PASS")
-                .unwrap_or_else(|_| "[REDACTED_ADMIN_DEFAULT_PASS]".to_string()),
+            admin_default_pass: env::var("ADMIN_DEFAULT_PASS").unwrap_or_default(),
             admin_path_secret: env::var("ADMIN_PATH_SECRET")
                 .ok()
                 .map(|v| v.trim().trim_matches('/').to_string())

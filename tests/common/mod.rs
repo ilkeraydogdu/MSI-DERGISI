@@ -37,6 +37,7 @@ pub fn test_config(db_path: &str) -> AppConfig {
         public_url: "https://test.msidergisi.com".into(),
         static_dir: "/tmp/msi_test_static".into(),
         sqlite_db_path: db_path.to_string(),
+        edergi_dir: "/tmp/msi_test_edergi".into(),
         mariadb_database: "test_db".into(),
         session_secret: "test-session-secret-key-for-unit-tests".into(),
         watermark_secret: "TEST-WATERMARK-SECRET".into(),

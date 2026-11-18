@@ -14,7 +14,12 @@ pub fn render(
     tr: &crate::engine::translation_engine::TranslationCache,
 ) -> String {
     let url = |cat: &str, ssb: &str, iss: Option<i32>| {
-        crate::engine::url_builder::search_facet_url(q, cat, ssb, iss, source, sort)
+        crate::engine::url_builder::search_facet_url_lang(lang, q, cat, ssb, iss, source, sort)
+    };
+    let search_path = if lang.eq_ignore_ascii_case("en") {
+        "/en/search"
+    } else {
+        "/arama"
     };
     let categories: String = facets
         .category_facets
@@ -70,9 +75,10 @@ pub fn render(
         .collect();
     let results = if facets.items.is_empty() {
         format!(
-            "<div class=\"empty-state\"><h2>{}</h2><p>{}</p><a class=\"button secondary\" href=\"/arama\">{}</a></div>",
+            "<div class=\"empty-state\"><h2>{}</h2><p>{}</p><a class=\"button secondary\" href=\"{}\">{}</a></div>",
             tr.t(lang, "search.no_results_title"),
             tr.t(lang, "search.no_results_desc"),
+            search_path,
             tr.t(lang, "search.clear_filters")
         )
     } else {
@@ -116,11 +122,17 @@ pub fn render(
         )
     })
     .collect();
+    let results_text = if lang.eq_ignore_ascii_case("en") {
+        format!("results · showing {} items", facets.items.len())
+    } else {
+        format!("sonuç · {} içerik gösteriliyor", facets.items.len())
+    };
     format!(
-        r#"<section class="container section-space"><div class="page-heading"><div class="eyebrow">{eyebrow}</div><h1>{heading}</h1><p>{description}</p></div><form class="search-form" action="/arama" method="get"><label class="search-query">{query_label}<input name="q" type="search" value="{q}" placeholder="{placeholder}"></label><input type="hidden" name="category" value="{category}"><input type="hidden" name="ssb_tag" value="{tag}"><input type="hidden" name="issue" value="{issue}"><label>{source_lbl}<select name="source_group">{source_options}</select></label><label>{sort_lbl}<select name="sort">{sort_options}</select></label><button class="button primary" type="submit">{submit}</button></form><div class="search-summary"><span><strong>{total}</strong> {results_text}</span><a class="text-link" href="/arama">{clear}</a></div><div class="search-layout"><aside class="search-filters"><details open><summary>{filter_cats}</summary><a class="facet-link" href="{all_cat_url}">{all_cats}</a>{categories}</details><details open><summary>{filter_tags_lbl}</summary><a class="facet-link" href="{all_tag_url}">{all_topics}</a>{tags}</details><details><summary>{filter_issues_lbl}</summary><a class="facet-link" href="{all_issue_url}">{all_issues}</a>{issues}</details></aside><div>{results}</div></div></section>"#,
+        r#"<section class="container section-space"><div class="page-heading"><div class="eyebrow">{eyebrow}</div><h1>{heading}</h1><p>{description}</p></div><form class="search-form" action="{search_path}" method="get"><label class="search-query">{query_label}<input name="q" type="search" value="{q}" placeholder="{placeholder}"></label><input type="hidden" name="category" value="{category}"><input type="hidden" name="ssb_tag" value="{tag}"><input type="hidden" name="issue" value="{issue}"><label>{source_lbl}<select name="source_group">{source_options}</select></label><label>{sort_lbl}<select name="sort">{sort_options}</select></label><button class="button primary" type="submit">{submit}</button></form><div class="search-summary"><span><strong>{total}</strong> {results_text}</span><a class="text-link" href="{search_path}">{clear}</a></div><div class="search-layout"><aside class="search-filters"><details open><summary>{filter_cats}</summary><a class="facet-link" href="{all_cat_url}">{all_cats}</a>{categories}</details><details open><summary>{filter_tags_lbl}</summary><a class="facet-link" href="{all_tag_url}">{all_topics}</a>{tags}</details><details><summary>{filter_issues_lbl}</summary><a class="facet-link" href="{all_issue_url}">{all_issues}</a>{issues}</details></aside><div>{results}</div></div></section>"#,
         eyebrow = tr.t(lang, "search.eyebrow"),
         heading = tr.t(lang, "search.heading"),
         description = tr.t(lang, "search.description"),
+        search_path = search_path,
         query_label = tr.t(lang, "search.query_label"),
         q = esc(q),
         placeholder = tr.t(lang, "search.placeholder"),
@@ -131,7 +143,7 @@ pub fn render(
         sort_lbl = tr.t(lang, "search.sort_label"),
         submit = tr.t(lang, "search.submit"),
         total = facets.total_matches,
-        results_text = format!("sonuç · {} içerik gösteriliyor", facets.items.len()),
+        results_text = results_text,
         clear = tr.t(lang, "search.clear_filters"),
         filter_cats = tr.t(lang, "search.filter_categories"),
         all_cat_url = url("", tag, issue),

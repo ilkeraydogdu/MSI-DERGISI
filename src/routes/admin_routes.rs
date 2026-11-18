@@ -9,6 +9,7 @@ use crate::controllers::{api_controller, AppState};
 pub fn build() -> Router<AppState> {
     Router::new()
         // ── Admin OMS/CMS REST API (/api/v1/admin/*) ───────────────────
+        .route("/api/v1/admin/me", get(api_controller::admin_me))
         .route("/api/v1/admin/overview", get(api_controller::admin_overview))
         .route(
             "/api/v1/admin/design",
@@ -40,6 +41,10 @@ pub fn build() -> Router<AppState> {
             "/api/v1/admin/contents/:id/versions",
             get(api_controller::admin_list_content_versions)
                 .post(api_controller::admin_create_content_version),
+        )
+        .route(
+            "/api/v1/admin/contents/:id/versions/:version/restore",
+            post(api_controller::admin_restore_content_version),
         )
         .route(
             "/api/v1/admin/contents/:id/submit-review",
@@ -118,12 +123,24 @@ pub fn build() -> Router<AppState> {
             get(api_controller::admin_list_categories).post(api_controller::admin_insert_category),
         )
         .route(
+            "/api/v1/admin/categories/:id",
+            put(api_controller::admin_update_category).delete(api_controller::admin_delete_category),
+        )
+        .route(
             "/api/v1/admin/ssb-tags",
             get(api_controller::admin_list_ssb_tags).post(api_controller::admin_insert_ssb_tag),
         )
         .route(
+            "/api/v1/admin/ssb-tags/:code",
+            put(api_controller::admin_update_ssb_tag).delete(api_controller::admin_delete_ssb_tag),
+        )
+        .route(
             "/api/v1/admin/newsletters",
             get(api_controller::admin_list_newsletters).post(api_controller::admin_insert_newsletter),
+        )
+        .route(
+            "/api/v1/admin/newsletters/:id",
+            delete(api_controller::admin_delete_newsletter),
         )
         .route("/api/v1/admin/reminders", get(api_controller::admin_list_reminders))
         .route(
@@ -133,6 +150,10 @@ pub fn build() -> Router<AppState> {
         .route(
             "/api/v1/admin/redirects",
             get(api_controller::admin_list_redirects).post(api_controller::admin_insert_redirect),
+        )
+        .route(
+            "/api/v1/admin/redirects/:id",
+            delete(api_controller::admin_delete_redirect),
         )
         .route("/api/v1/admin/export/open-data", get(api_controller::admin_export_open_data))
         .route(
@@ -146,10 +167,57 @@ pub fn build() -> Router<AppState> {
         )
         .route("/api/v1/admin/media-library", get(api_controller::admin_list_media_library))
         .route(
+            "/api/v1/admin/media-library/:id",
+            put(api_controller::admin_update_media_item)
+                .delete(api_controller::admin_delete_media_item),
+        )
+        .route(
+            "/api/v1/admin/issues",
+            get(api_controller::admin_list_issues).post(api_controller::admin_upsert_issue),
+        )
+        .route(
+            "/api/v1/admin/issues/:issue_number",
+            delete(api_controller::admin_delete_issue),
+        )
+        .route(
+            "/api/v1/admin/edergi-files/:name",
+            get(api_controller::admin_preview_edergi_pdf),
+        )
+        .route(
+            "/api/v1/admin/subscription-plans",
+            get(api_controller::admin_list_subscription_plans)
+                .post(api_controller::admin_upsert_subscription_plan),
+        )
+        .route(
+            "/api/v1/admin/subscription-plans/:code",
+            delete(api_controller::admin_delete_subscription_plan),
+        )
+        .route(
+            "/api/v1/admin/commerce-products",
+            get(api_controller::admin_list_commerce_products)
+                .post(api_controller::admin_upsert_commerce_product),
+        )
+        .route(
+            "/api/v1/admin/commerce-products/:id",
+            delete(api_controller::admin_delete_commerce_product),
+        )
+        .route("/api/v1/admin/invoices", get(api_controller::admin_list_invoices))
+        .route(
+            "/api/v1/admin/invoices/:id/mark-paid",
+            post(api_controller::admin_mark_invoice_paid),
+        )
+        .route(
             "/api/v1/admin/audit-logs",
             get(api_controller::admin_list_audit_logs).post(api_controller::admin_insert_audit_log),
         )
-        .route("/api/v1/admin/users", get(api_controller::admin_list_users))
+        .route(
+            "/api/v1/admin/users",
+            get(api_controller::admin_list_users).post(api_controller::admin_create_user),
+        )
+        .route(
+            "/api/v1/admin/users/:id",
+            put(api_controller::admin_update_user).delete(api_controller::admin_delete_user),
+        )
         .route(
             "/api/v1/admin/users/:id/assign-role",
             post(api_controller::admin_assign_role_to_user),

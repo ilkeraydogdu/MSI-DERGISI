@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_publication_type() -> String {
+    "msi".to_string()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MagazinePageSpread {
     pub page_no: String,
@@ -29,5 +33,9 @@ pub struct MagazineIssue {
     pub summary_tr: String,
     pub summary_en: String,
     pub pdf_path: String,
+    #[serde(default = "default_publication_type")]
+    pub publication_type: String,
+    #[serde(default)]
+    pub uploaded_pdf_file: Option<String>,
     pub spreads: Vec<MagazinePageSpread>,
 }

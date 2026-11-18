@@ -80,7 +80,7 @@ impl CentralContentQueryEngine {
             snap.data
                 .contents
                 .iter()
-                .filter(|c| c.status.is_empty() || c.status == "published")
+                .filter(|c| crate::services::content_service::is_publicly_visible(c))
                 .cloned()
                 .collect()
         };

@@ -25,10 +25,30 @@ pub fn spawn_monitoring_worker(state: AppState, cancel: CancellationToken) {
             &cache,
         )
         .await;
+        {
+            let slow_cfg = cfg.clone();
+            let slow_db = state.db.clone();
+            let slow_cache = cache.clone();
+            tokio::spawn(async move {
+                ms::tick_slow_checks(
+                    &slow_cfg.monitoring_vhosts_path,
+                    &slow_cfg.monitoring_nginx_log_path,
+                    &slow_cfg.monitoring_cert_path,
+                    slow_cfg.monitoring_retention_days,
+                    &slow_db,
+                    &slow_cache,
+                )
+                .await;
+            });
+        }
 
         let mut fast_t = tokio::time::interval(fast);
         let mut medium_t = tokio::time::interval(medium);
         let mut slow_t = tokio::time::interval(slow);
+        // Consume immediate first ticks already handled by startup warm-up above.
+        fast_t.tick().await;
+        medium_t.tick().await;
+        slow_t.tick().await;
         loop {
             tokio::select! {
                 _ = cancel.cancelled() => {

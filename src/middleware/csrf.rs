@@ -16,22 +16,39 @@ use crate::config::AppConfig;
 ///
 /// Returns `None` if validation passes, or `Some(Response)` with an error
 /// if validation fails.
+fn extract_url_host(raw: &str) -> &str {
+    let without_scheme = raw
+        .trim()
+        .strip_prefix("https://")
+        .or_else(|| raw.trim().strip_prefix("http://"))
+        .unwrap_or(raw.trim());
+    let host_port = without_scheme.split('/').next().unwrap_or("");
+    host_port.split(':').next().unwrap_or("")
+}
+
+fn host_matches_domain(origin_host: &str, domain: &str) -> bool {
+    let oh = origin_host.trim().to_ascii_lowercase();
+    let dom = extract_url_host(domain).to_ascii_lowercase();
+    if oh.is_empty() || dom.is_empty() {
+        return false;
+    }
+    oh == dom || oh.ends_with(&format!(".{dom}"))
+}
+
 pub fn validate_csrf(req: &Request, config: &AppConfig) -> Option<Response> {
     // Origin verification
     if let Some(origin) = req.headers().get("origin").and_then(|v| v.to_str().ok()) {
-        let host = req
+        let req_host = req
             .headers()
             .get(axum::http::header::HOST)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        let origin_host = origin
-            .trim_start_matches("https://")
-            .trim_start_matches("http://")
-            .trim_end_matches('/');
-        let allowed = origin_host.eq_ignore_ascii_case(host)
-            || config.public_url.trim_end_matches('/').ends_with(origin_host)
-            || origin_host.ends_with(&config.primary_domain)
-            || origin_host.ends_with(&config.news_domain);
+        let origin_host = extract_url_host(origin);
+        let allowed = !origin_host.is_empty()
+            && (host_matches_domain(origin_host, req_host)
+                || host_matches_domain(origin_host, &config.public_url)
+                || host_matches_domain(origin_host, &config.primary_domain)
+                || host_matches_domain(origin_host, &config.news_domain));
         if !allowed {
             return Some(
                 (
@@ -47,9 +64,8 @@ pub fn validate_csrf(req: &Request, config: &AppConfig) -> Option<Response> {
         }
     }
 
-    // Double-submit cookie token verification
-    let uses_cookie_auth = cookie_value(req, "msi_session").is_some()
-        && req.headers().get(axum::http::header::AUTHORIZATION).is_none();
+    // Double-submit cookie token verification: ALWAYS enforce when msi_session cookie is present
+    let uses_cookie_auth = cookie_value(req, "msi_session").is_some();
 
     match cookie_value(req, "csrf_token") {
         Some(cookie_token) => {

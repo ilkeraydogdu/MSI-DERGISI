@@ -2,15 +2,31 @@
 target/
 
 # SQLite database files
-data/*.db
-data/*.db-wal
-data/*.db-shm
+storage/db/*.db
+storage/db/*.db-wal
+storage/db/*.db-shm
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Runtime storage & uploaded PDFs/artifacts
+storage/edergi/
+storage/artifacts/
 
 # Environment variables and secrets - NEVER commit credentials
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
 
-# Log files
+# Log files & backups
 *.log
+*.bak
+*.bak*
 
 # Node.js dependencies
 node_modules/
@@ -19,14 +35,12 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Generated artifacts
-artifacts/design-review/browser-report.json
-# Customer request files and design artifacts (not part of source)
-musteriIstekleri/
-artifacts/
+# Customer request files and design template copies (local reference only)
+docs/specifications/
+docs/design-reference/
 
 # Large media binaries
-images/tour.mp4
+public/images/tour.mp4
 
 # IDE / local agent settings
 .claude/

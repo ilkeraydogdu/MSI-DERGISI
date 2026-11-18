@@ -89,10 +89,11 @@ impl Database {
                 M::up(include_str!("../../migrations/008_password_reset.sql")),
                 M::up(include_str!("../../migrations/009_email_verification.sql")),
                 M::up(include_str!("../../migrations/010_unsubscribe_tokens.sql")),
+                M::up(include_str!("../../migrations/011_rbac_issues_commerce_cleanup.sql")),
             ]);
             migrations
                 .to_latest(&mut conn)
-                .map_err(|e| format!("Veritabanı migrasyon hatası (001..010): {}", e))?;
+                .map_err(|e| format!("Veritabanı migrasyon hatası (001..011): {}", e))?;
         }
 
         let content_count: i64 = conn

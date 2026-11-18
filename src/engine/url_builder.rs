@@ -73,9 +73,28 @@ pub fn search_facet_url(
     source_group: &str,
     sort: &str,
 ) -> String {
+    search_facet_url_lang("tr", q, category, ssb_tag, issue, source_group, sort)
+}
+
+/// Language-aware search facet URL (`"/en/search?..."` for English, `"/arama?..."` for Turkish).
+pub fn search_facet_url_lang(
+    lang: &str,
+    q: &str,
+    category: &str,
+    ssb_tag: &str,
+    issue: Option<i32>,
+    source_group: &str,
+    sort: &str,
+) -> String {
+    let base = if lang.eq_ignore_ascii_case("en") {
+        "/en/search"
+    } else {
+        "/arama"
+    };
     let esc = |s: &str| -> String { urlencoding::encode(s).to_string() };
     format!(
-        "/arama?q={}&amp;category={}&amp;ssb_tag={}&amp;issue={}&amp;source_group={}&amp;sort={}",
+        "{}?q={}&amp;category={}&amp;ssb_tag={}&amp;issue={}&amp;source_group={}&amp;sort={}",
+        base,
         esc(q),
         esc(category),
         esc(ssb_tag),

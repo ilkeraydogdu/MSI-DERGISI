@@ -28,19 +28,35 @@ impl CentralSearchEngine {
         out
     }
 
+    fn canonical_category_slug(slug: &str) -> &str {
+        if slug.eq_ignore_ascii_case("kapak-dosyalari") {
+            "kapak-dosyasi"
+        } else if slug.eq_ignore_ascii_case("basyazi") {
+            "basyazilar"
+        } else if slug.eq_ignore_ascii_case("advertorial") {
+            "advertorials"
+        } else if slug.eq_ignore_ascii_case("ozel-dosyalar") {
+            "ozel-dosya"
+        } else {
+            slug
+        }
+    }
+
     pub fn item_matches_category(item: &ContentItem, cat_slug: &str) -> bool {
         let slug = cat_slug.trim();
         if slug.is_empty() || slug.eq_ignore_ascii_case("all") {
             return true;
         }
-        if item.content_type.eq_ignore_ascii_case(slug) {
+        let canon_target = Self::canonical_category_slug(slug);
+        if item.content_type.eq_ignore_ascii_case(slug)
+            || Self::canonical_category_slug(&item.content_type).eq_ignore_ascii_case(canon_target)
+        {
             return true;
         }
-        if item
-            .placements
-            .iter()
-            .any(|p| p.eq_ignore_ascii_case(slug))
-        {
+        if item.placements.iter().any(|p| {
+            p.eq_ignore_ascii_case(slug)
+                || Self::canonical_category_slug(p).eq_ignore_ascii_case(canon_target)
+        }) {
             return true;
         }
         // Dynamic: match any source_group value directly (no hardcoded slugs)
@@ -219,12 +235,22 @@ impl CentralSearchEngine {
             true
         };
 
-        // 1. Filter matching items
+        // 1. Filter matching items (apply language source separation when browsing without explicit query/source filter)
         let mut matched_items: Vec<ContentItem> = all_contents
             .iter()
             .filter(|item| matches_with_skip(item, ""))
             .cloned()
             .collect();
+        if source_filter.is_none() && query.q.as_deref().unwrap_or("").trim().is_empty() {
+            if query.lang.as_deref() == Some("tr") {
+                matched_items.retain(|item| !item.source_group.eq_ignore_ascii_case("msi-tdr"));
+            } else if query.lang.as_deref() == Some("en") {
+                matched_items.retain(|item| {
+                    item.source_group.eq_ignore_ascii_case("msi-tdr")
+                        || (!item.title_en.trim().is_empty() && item.title_en != item.title_tr)
+                });
+            }
+        }
 
         // 2. Sort matched items
         let sort_mode = query.sort_by.as_deref().unwrap_or("newest");
@@ -267,25 +293,56 @@ impl CentralSearchEngine {
         }
 
         // 3. Compute exact live facet counts
-        // Category Facets
-        // Dynamic: include all categories that have content (no hardcoded group_type slugs)
+        // Category Facets — editorial & dossier sections only (exclude corporate/duplicate alias slugs & empty facets)
+        let lang_matches = |item: &ContentItem| -> bool {
+            if source_filter.is_some() || !query.q.as_deref().unwrap_or("").trim().is_empty() {
+                return true;
+            }
+            match query.lang.as_deref() {
+                Some("tr") => !item.source_group.eq_ignore_ascii_case("msi-tdr"),
+                Some("en") => {
+                    item.source_group.eq_ignore_ascii_case("msi-tdr")
+                        || (!item.title_en.trim().is_empty() && item.title_en != item.title_tr)
+                }
+                _ => true,
+            }
+        };
         let category_facets: Vec<FacetBucket> = categories
             .iter()
-            .filter(|c| !c.slug.is_empty())
-            .map(|c| {
+            .filter(|c| {
+                !c.slug.is_empty()
+                    && !matches!(
+                        c.group_type.as_str(),
+                        "kurumsal" | "abonelik" | "gelecek-faz"
+                    )
+                    && !matches!(
+                        c.slug.as_str(),
+                        "kapak-dosyalari" | "basyazi" | "advertorial" | "ozel-dosyalar"
+                    )
+            })
+            .filter_map(|c| {
                 let count = all_contents
                     .iter()
                     .filter(|item| {
                         matches_with_skip(item, "category")
+                            && lang_matches(item)
                             && Self::item_matches_category(item, &c.slug)
                     })
                     .count();
-                FacetBucket {
+                let is_selected = query
+                    .category
+                    .as_deref()
+                    .map(|sel| sel.eq_ignore_ascii_case(&c.slug))
+                    .unwrap_or(false);
+                if count == 0 && !is_selected {
+                    return None;
+                }
+                Some(FacetBucket {
                     code: c.slug.clone(),
                     label_tr: c.name_tr.clone(),
                     label_en: c.name_en.clone(),
                     count,
-                }
+                })
             })
             .collect();
 

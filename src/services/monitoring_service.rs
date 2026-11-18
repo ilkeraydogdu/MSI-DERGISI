@@ -210,8 +210,8 @@ pub async fn tick_domain_and_traffic(
         }
     };
 
-    // Check domain health with semaphore-limited concurrency (max 5, zero `.unwrap()`)
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(5));
+    // Check domain health with semaphore-limited concurrency (max 12, zero `.unwrap()`)
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(12));
     let mut domain_handles = Vec::with_capacity(vhosts.len());
 
     for vhost in &vhosts {
@@ -391,7 +391,7 @@ pub async fn tick_slow_checks(
     }
 
     let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(4))
         .build()
     {
         Ok(c) => c,
@@ -404,8 +404,8 @@ pub async fn tick_slow_checks(
         }
     };
 
-    // SEO checks (batched, max 3 concurrent, zero `.unwrap()`)
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(3));
+    // SEO checks (batched, max 12 concurrent, zero `.unwrap()`)
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(12));
     let mut seo_handles = Vec::with_capacity(fresh_vhosts.len());
 
     for vhost in &fresh_vhosts {

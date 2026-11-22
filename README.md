@@ -8,7 +8,7 @@ Full-stack Turkish defense, aerospace, and security publishing, digital magazine
 
 - **Backend:** Pure Rust (`msi-dergisi-platform` v2.6.0) + Axum 0.7 + Tokio async runtime + `HtmlBuf` SSR DSL
 - **Database:** SQLite in WAL mode (`52` tables, idempotent migrations `001`..`017`) + PostgreSQL 16 reference schema parity (`migrations_pg/001`..`017`)
-- **Frontend:** Pure Vanilla CSS & Vanilla JS + local vendor GSAP / ScrollTrigger / Lenis / Chart.js + Pure-Rust WebAssembly Editorial Studio (`src/editorial/` -> `storage/editorial-pkg/editorial_studio.{js,wasm}`)
+- **Frontend:** Pure Vanilla CSS & Vanilla JS + local vendor GSAP / ScrollTrigger / Lenis / Chart.js + Pure-Rust WebAssembly Editorial Studio (`src/editorial/` -> `storage/editorial-pkg/{editorial_studio.js,editorial_studio_bg.wasm}`, served at `/{admin}/editor/studio.{js,wasm}`)
 - **Languages:** Bilingual TR / EN portal (`?lang=` > `msi_lang` cookie > weighted `Accept-Language`) + extensible DB-backed translations, approval workflow, defense glossary, and locale management
 - **Payment & Mail:** PayTR POS gateway (`POST /api/v1/payments/paytr-callback` & compatible alias `POST /api/v1/payments/paytr/callback`) + Postfix / `plesk-sendmail` MTA
 - **SEO & Feeds:** Multi-brand `Host` routing, IndexNow, XML/News/Image sitemaps, RSS, JSON Feed, OpenSearch, `llms.txt`, `1,334` 301 redirects, Schema.org JSON-LD, and strict `noindex, nofollow` 404 hygiene

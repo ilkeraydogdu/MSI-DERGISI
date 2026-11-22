@@ -61,7 +61,7 @@ Bu belge, `docs/specifications/` klasöründeki dört resmi müşteri dokümanı
 | **REQ-022** | Reklam kota çakışması (`409 Conflict`) & takvim kalıcılığı | `migrations/016` (`start_date`, `end_date`, `rotation_mode`), `force_override`, `/api/v1/admin/ads/check-conflict` | **Doğrulandı** |
 | **REQ-023** | Sponsorlu içeriklerde rakip reklam koruması | `reader.rs`, `ad_service.rs` (sponsorlu sayfalarda dış rakip reklam bastırma) | **Doğrulandı** |
 | **REQ-024** | Okuma derinliği, video, reklam & gerçek `data-ssb-tag` telemetrisi | `reader.rs` (`data-ssb-tag`), `public/js/msi-ui.js`, `POST /api/v1/analytics/track` | **Doğrulandı** |
-| **REQ-025** | Okuyucu/kohort analitiği & `k >= 3` anonimleştirme | `/api/v1/admin/analytics/readers` (`src/controllers/api_controller/analytics.rs`) | **Doğrulandı** |
+| **REQ-025** | Okuyucu/kohort analitiği & `k >= 3` anonimleştirme | `/api/v1/admin/analytics/readers` (`src/controllers/api_controller/admin_analytics.rs`) | **Doğrulandı** |
 | **REQ-026** | Kurumsal içerik/reklam analitiği & otomatik ay sonu B2B e-posta raporu | `src/workers/b2b_report_worker.rs`, `/api/v1/admin/analytics/sponsor-report` | **Doğrulandı** |
 | **REQ-027** | E-Bültenler, 8 e-posta grubu, zamanlama, sponsor bandı & RFC 8058 abonelik iptali | `email_groups = 8`, `newsletter_scheduler.rs`, `src/services/email_service.rs`, canlı `plesk-sendmail` | **Doğrulandı** |
 | **REQ-028** | Otomatik abonelikler, PayTR POS & fatura üretimi | `POST /api/v1/payments/paytr-callback` + `/api/v1/payments/paytr/callback` (`api_routes.rs:66-67`), HMAC + oto-fatura | **Doğrulandı** |
@@ -97,7 +97,7 @@ Bu belge, `docs/specifications/` klasöründeki dört resmi müşteri dokümanı
   - Masaüstünde yan yana kontrol paneli ve canlı önizleme `iframe`, mobilde (`390x844`) 36px+ dokunmatik hedefli `Kontroller / Canlı Önizleme` geçiş çubuğu (`.mobile-studio-switcher`), `#editor-account-link` (`/hesabim`), RBAC kontrollü `#editor-studio-link` (`/podmin/editor`) ve `data-admin-path="/podmin"` dönüş bağlantısı.
 
 ### 3.3. Pure-Rust WASM Editör Stüdyosu (`/podmin/editor`)
-- `src/editorial/` (`common.rs` + `wasm/*.rs`), `src/engine/design/editorial_studio.rs`, `public/css/admin/editorial-studio.css` (`?v=35`), `storage/editorial-pkg/editorial_studio.{js,wasm}` (`/{admin}/editor/studio.{js,wasm}`):
+- `src/editorial/` (`common.rs` + `wasm/*.rs`), `src/engine/design/editorial_studio.rs`, `public/css/admin/editorial-studio.css` (`?v=35`), `storage/editorial-pkg/{editorial_studio.js,editorial_studio_bg.wasm}` (`/{admin}/editor/studio.wasm` gömülü `editorial_studio_bg.wasm` dosyasını, `/{admin}/editor/studio.js` ise `editorial_studio.js` dosyasını sunar):
   - Tek Cargo paketi altında derlenen Pure-Rust WebAssembly editör arayüzü (`--build-editorial-wasm`) ve `/api/v1/admin/editorial/*` altında `31` REST ucu.
   - İçerik kilitleri (`editorial_lock_service.rs`), sürüm revizyonları ve geri alma, `6` tohumlanmış RSS/web araştırma kaynağı (`editorial_research_sources`), görsel medya kütüphanesi & filigran, X/Telegram sosyal paylaşım, `(publication_type, issue_number)` `409` ayrıştırması, `editorial_scheduler` zamanlı yayın, sRGB WCAG AA kontrastı, dinamik `admin_path()` gezinme bağlantıları, mobil `#menu-msi-theme-toggle` ve `Tasarım Stüdyosu` kısayolu.
 
@@ -129,7 +129,7 @@ Bu belge, `docs/specifications/` klasöründeki dört resmi müşteri dokümanı
 ## 5. Müşteriye Satış & Canlı Yayın Doğrulama Özeti
 
 - **Derleme, WASM & Statik Analiz (`2026-11-22`):**
-  - `cargo run --bin msi-dergisi-platform -- --build-editorial-wasm`: Gömülü Editör Stüdyosu (`storage/editorial-pkg/editorial_studio.{js,wasm}`) hatasız derlendi.
+  - `cargo run --bin msi-dergisi-platform -- --build-editorial-wasm`: Gömülü Editör Stüdyosu (`storage/editorial-pkg/{editorial_studio.js,editorial_studio_bg.wasm}`; `/{admin}/editor/studio.wasm` gömülü `editorial_studio_bg.wasm` ikilisini sunar) hatasız derlendi.
   - `cargo build --release --workspace`: 0 hata ile tamamlandı (`22 MB` optimize release ikilisi; `/usr/local/bin/msi-dergisi-platform` ile özdeş SHA-256: `d74c7a3ab18015f8c0c4b31e75ce1dcc5f7c568b158981cc7489eda55b6d3af0`).
 - **Otomatik Rust Test Paketi (`cargo test --all`):**
   - Kütüphane birim testleri (`src/lib.rs`: `197 passed, 1 ignored`), `16` entegrasyon test paketi (`account_portal_test`, `admin_rbac_matrix_test`, `editorial_studio_integration_test`, `fts_smoke`, `live_parity_routes_test`, `m1_spec_parity_test`, `m2_edergi_test`, `m3_reader_parity_test`, `m4_admin_ui_test`, `option_b_api_test`, `payment_webhook_test`, `seo_generation_test`, `tier5_adversarial_test` vb.) ve doc-test dahil **toplam `313 passed, 0 failed, 2 ignored`** (`0` hata).
@@ -140,7 +140,7 @@ Bu belge, `docs/specifications/` klasöründeki dört resmi müşteri dokümanı
 - **Canlı Sistem, Veritabanı & E-Posta Teslim Doğrulaması (`https://trusting-brahmagupta.194-110-169-165.plesk.page`):**
   - **Systemd Servisi:** `msi-rust-web.service` `active (running)` (`PRAGMA user_version = 17`, `52` tablo, `recommendation_rules=7`, `custom_fields=7`, `magazine_issues=22`, `storage/edergi/` `22` PDF, `journalctl` **0 `WARN`/`ERROR`**).
   - **Canlı HTTPS Uçları:** `/api/v1/health` (`200 OK`), `/podmin` (`200 OK`, `?v=35` + `podmin-fighter-vertical.webp`), `/msi-komuta` (`404 Not Found`, `x-robots-tag: noindex, nofollow`, `<meta name="robots" content="noindex, nofollow" />`, sıfır `canonical`/`hreflang`/`og:url`), `/podmin/tasarim` (`303 -> /podmin`), `/podmin/editor` (`303 -> /podmin`), `/hesabim` (`200 OK`, `?v=35`), `/api/v1/public/related` (normal yazıda ilişkili kayıtlar, sponsorlu yazıda `[]`), `POST /api/v1/payments/paytr-callback` ve `/paytr/callback` (hatalı imzada `403`).
-  - **Canlı `plesk-sendmail` Doğrulaması:** `POST /api/v1/auth/register` ile `mail@ilkeraydogdu.com.tr` adresine gerçek doğrulama e-postası gönderilmiş; `/var/log/maillog` üzerinde `plesk-sendmail` (`dk_sign: PASS`, `dmarc: PASS`, `arc-sign: PASS`) ve `postfix/pipe` (`status=sent (delivered via plesk_virtual service)`) + Dovecot `INBOX` teslimi kanıtlanmış, ardından geçici test kaydı veritabanından ve L1 önbellekten temizlenmiştir (`users = 0`).
+  - **Canlı `plesk-sendmail` Doğrulaması:** `POST /api/v1/auth/register` ile `mail@ilkeraydogdu.com.tr` adresine gerçek doğrulama e-postası gönderilmiş; `/var/log/maillog` üzerinde `plesk-sendmail` (`dk_sign: PASS`, `dmarc: PASS`, `arc-sign: PASS`) ve `postfix/pipe` (`status=sent (delivered via plesk_virtual service)`) + Dovecot `INBOX` teslimi kanıtlanmış, ardından geçici test kaydı veritabanından ve L1 önbellekten temizlenmiştir (`test kullanıcısı = 0`).
 
 ---
 

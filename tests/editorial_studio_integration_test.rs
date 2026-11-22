@@ -983,3 +983,137 @@ async fn list_articles_normalizes_cover_image_and_orders_by_published_at_desc() 
         json!("/images/msi/old-cover.webp")
     );
 }
+
+#[tokio::test]
+async fn editorial_restore_revision_prefers_id_over_colliding_version() {
+    let env = setup_env("rev_id_vs_ver_collision");
+    let chief_cookie = create_staff_cookie(
+        &env.state,
+        "chief.collision@test.local",
+        "Genel Yayın Yönetmeni",
+        "editor_in_chief",
+    );
+
+    // 1. Seed an earlier article & version snapshot so content_versions.id != version for later articles
+    let (st_seed, _) = send_json(
+        &env.app,
+        &env.state,
+        "POST",
+        "/api/v1/admin/editorial/articles",
+        Some(&chief_cookie),
+        Some(json!({
+            "id": "0",
+            "title": "Önceki Makale",
+            "content": "<p>Önceki içerik</p>",
+            "status": "publish",
+            "slug": "onceki-makale-offset"
+        })),
+    )
+    .await;
+    assert_eq!(st_seed, StatusCode::OK);
+
+    // 2. Create target article and save 4 revisions:
+    //    rev 1..3 => V1, rev 4 => V2. Because of the earlier snapshot, id = version + offset (>= 1).
+    let (st_c, cr_json) = send_json(
+        &env.app,
+        &env.state,
+        "POST",
+        "/api/v1/admin/editorial/articles",
+        Some(&chief_cookie),
+        Some(json!({
+            "id": "0",
+            "title": "Çakışma Testi V1",
+            "content": "<p>Birinci sürüm gövde</p>",
+            "status": "draft",
+            "slug": "cakisma-testi-makale"
+        })),
+    )
+    .await;
+    assert_eq!(st_c, StatusCode::OK);
+    let art_id = cr_json["id"].as_str().expect("article id").to_string();
+
+    for status in ["pending_review", "publish"] {
+        let (st_u, _) = send_json(
+            &env.app,
+            &env.state,
+            "POST",
+            "/api/v1/admin/editorial/articles",
+            Some(&chief_cookie),
+            Some(json!({
+                "id": art_id,
+                "title": "Çakışma Testi V1",
+                "content": "<p>Birinci sürüm gövde</p>",
+                "status": status,
+                "slug": "cakisma-testi-makale"
+            })),
+        )
+        .await;
+        assert_eq!(st_u, StatusCode::OK);
+    }
+
+    let (st_v2, _) = send_json(
+        &env.app,
+        &env.state,
+        "POST",
+        "/api/v1/admin/editorial/articles",
+        Some(&chief_cookie),
+        Some(json!({
+            "id": art_id,
+            "title": "Çakışma Testi V2",
+            "content": "<p>İkinci sürüm gövde</p>",
+            "status": "publish",
+            "slug": "cakisma-testi-makale"
+        })),
+    )
+    .await;
+    assert_eq!(st_v2, StatusCode::OK);
+
+    let (st_revs, revs_json) = send_json(
+        &env.app,
+        &env.state,
+        "GET",
+        &format!("/api/v1/admin/editorial/articles/{art_id}/revisions"),
+        Some(&chief_cookie),
+        None,
+    )
+    .await;
+    assert_eq!(st_revs, StatusCode::OK);
+    let revisions = revs_json["revisions"].as_array().expect("revisions array");
+    let v1_rev = revisions
+        .iter()
+        .find(|r| r["title"] == json!("Çakışma Testi V1"))
+        .expect("find V1 revision");
+    let v1_rev_id = v1_rev["id"].as_i64().unwrap();
+
+    // Verify collision condition actually exists in DB (v1_rev.id == V2's version == 4)
+    let art_id_num: i64 = art_id.parse().unwrap();
+    let conn = env.state.db.open_conn().unwrap();
+    let colliding_v2_title: String = conn
+        .query_row(
+            "SELECT title_tr FROM content_versions WHERE content_id = ?1 AND version = ?2",
+            rusqlite::params![art_id_num, v1_rev_id],
+            |r| r.get(0),
+        )
+        .expect("expected colliding version == v1_rev_id on V2 row");
+    assert_eq!(colliding_v2_title, "Çakışma Testi V2");
+    drop(conn);
+
+    // 3. Restoring by v1_rev_id must select id = v1_rev_id (V1), NOT version = v1_rev_id (V2)
+    let (st_restore, restore_json) = send_json(
+        &env.app,
+        &env.state,
+        "POST",
+        &format!("/api/v1/admin/editorial/articles/{art_id}/revisions/{v1_rev_id}/restore"),
+        Some(&chief_cookie),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(st_restore, StatusCode::OK);
+    assert_eq!(restore_json["article"]["title"], json!("Çakışma Testi V1"));
+    assert!(
+        restore_json["article"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Birinci sürüm gövde")
+    );
+}

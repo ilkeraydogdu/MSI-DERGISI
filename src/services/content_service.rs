@@ -269,7 +269,7 @@ fn turkish_lowercase(s: &str) -> String {
     out
 }
 
-fn fold_eq_tr(a: &str, b: &str) -> bool {
+pub fn fold_eq_tr(a: &str, b: &str) -> bool {
     let a_t = a.trim();
     let b_t = b.trim();
     turkish_lowercase(a_t) == turkish_lowercase(b_t)

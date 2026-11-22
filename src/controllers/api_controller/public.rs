@@ -802,10 +802,31 @@ pub async fn public_personalized_feed(
     let rules = state.db.get_recommendation_rules();
     let user_org = user_opt
         .as_ref()
-        .map(|u| u.organization_category.as_str())
+        .map(|u| u.organization_category.trim())
+        .unwrap_or("");
+    let user_org_name = user_opt
+        .as_ref()
+        .map(|u| u.organization_name.trim())
         .unwrap_or("");
 
-    let mut scored: Vec<(i64, String, i64, &ContentItem)> = all_contents
+    let interest_set: std::collections::HashSet<String> = interests
+        .iter()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let has_interests = !interest_set.is_empty();
+
+    struct PersonalizedScored<'a> {
+        primary_score: i64,
+        inst_rule_boost: i64,
+        rule_boost: i64,
+        is_featured: bool,
+        published_at: &'a str,
+        view_count: i64,
+        item: &'a ContentItem,
+    }
+
+    let mut scored: Vec<PersonalizedScored<'_>> = all_contents
         .iter()
         .filter(|c| {
             is_organic_public_item(c, lang)
@@ -816,41 +837,97 @@ pub async fn public_personalized_feed(
                 )
         })
         .map(|c| {
-            let mut score: i64 = 0;
-            for interest in &interests {
-                if c.ssb_tags.iter().any(|t| t.eq_ignore_ascii_case(interest)) {
-                    score += 100;
-                }
-            }
+            let interest_matches: i64 = if !has_interests {
+                0
+            } else {
+                interest_set
+                    .iter()
+                    .filter(|interest| {
+                        c.ssb_tags
+                            .iter()
+                            .any(|t| t.trim().eq_ignore_ascii_case(interest))
+                    })
+                    .count() as i64
+            };
+
+            let mut rule_boost: i64 = 0;
+            let mut inst_rule_boost: i64 = 0;
             for rule in rules.iter().filter(|r| r.is_active) {
-                if rule.recommended_content_slug.eq_ignore_ascii_case(&c.slug)
-                    && (rule.target_institution.is_empty()
-                        || rule.target_institution == "*"
-                        || rule.target_institution.eq_ignore_ascii_case("all")
-                        || (!user_org.is_empty()
-                            && rule.target_institution.eq_ignore_ascii_case(user_org)))
-                {
-                    score += 50 + (rule.priority as i64 * 5);
+                if !rule.recommended_content_slug.eq_ignore_ascii_case(&c.slug) {
+                    continue;
+                }
+                let src = rule.source_tag_or_cat.trim();
+                let source_matches = !has_interests
+                    || src.is_empty()
+                    || src == "*"
+                    || src.eq_ignore_ascii_case("all")
+                    || interest_set.contains(&src.to_ascii_lowercase())
+                    || (interest_matches > 0
+                        && (c.content_type.eq_ignore_ascii_case(src)
+                            || c.placements.iter().any(|p| p.eq_ignore_ascii_case(src))));
+                if !source_matches {
+                    continue;
+                }
+
+                let inst = rule.target_institution.trim();
+                let is_inst_wildcard =
+                    inst.is_empty() || inst == "*" || inst.eq_ignore_ascii_case("all");
+                let is_inst_exact = !is_inst_wildcard
+                    && ((!user_org.is_empty() && content_service::fold_eq_tr(inst, user_org))
+                        || (!user_org_name.is_empty()
+                            && content_service::fold_eq_tr(inst, user_org_name)));
+                if !is_inst_wildcard && !is_inst_exact {
+                    continue;
+                }
+
+                rule_boost += 50 + (rule.priority as i64 * 5);
+                if is_inst_exact {
+                    inst_rule_boost += 1;
+                    rule_boost += 60;
                 }
             }
-            if c.is_featured {
-                score += 10;
+
+            let primary_score = if has_interests {
+                interest_matches
+            } else {
+                rule_boost + if c.is_featured { 10 } else { 0 }
+            };
+
+            PersonalizedScored {
+                primary_score,
+                inst_rule_boost,
+                rule_boost,
+                is_featured: c.is_featured,
+                published_at: c.published_at.as_str(),
+                view_count: c.view_count,
+                item: c,
             }
-            (score, c.published_at.clone(), c.view_count, c)
         })
         .collect();
 
     scored.sort_by(|a, b| {
-        b.0.cmp(&a.0)
-            .then_with(|| b.1.cmp(&a.1))
-            .then_with(|| b.2.cmp(&a.2))
-            .then_with(|| b.3.id.cmp(&a.3.id))
+        if has_interests {
+            b.primary_score
+                .cmp(&a.primary_score)
+                .then_with(|| b.inst_rule_boost.cmp(&a.inst_rule_boost))
+                .then_with(|| b.published_at.cmp(a.published_at))
+                .then_with(|| b.rule_boost.cmp(&a.rule_boost))
+                .then_with(|| b.is_featured.cmp(&a.is_featured))
+                .then_with(|| b.view_count.cmp(&a.view_count))
+                .then_with(|| b.item.id.cmp(&a.item.id))
+        } else {
+            b.primary_score
+                .cmp(&a.primary_score)
+                .then_with(|| b.published_at.cmp(a.published_at))
+                .then_with(|| b.view_count.cmp(&a.view_count))
+                .then_with(|| b.item.id.cmp(&a.item.id))
+        }
     });
 
     let items: Vec<Value> = scored
         .into_iter()
         .take(limit)
-        .map(|(_, _, _, c)| serialize_feed_card(c, lang))
+        .map(|s| serialize_feed_card(s.item, lang))
         .collect();
 
     ApiResponse::ok(json!({

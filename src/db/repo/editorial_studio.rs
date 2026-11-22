@@ -1150,6 +1150,7 @@ impl Database {
             .query_row(
                 "SELECT version FROM content_versions
                  WHERE content_id = ?1 AND (id = ?2 OR version = ?2)
+                 ORDER BY CASE WHEN id = ?2 THEN 0 ELSE 1 END, version DESC
                  LIMIT 1",
                 params![content_id, rev_or_ver_id],
                 |r| r.get(0),

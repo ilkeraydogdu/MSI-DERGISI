@@ -1915,3 +1915,193 @@ async fn t19_t4_01_editorial_workflow_approval_serves_200() {
 
     cleanup_test_db(&db_path);
 }
+
+#[tokio::test]
+async fn t20_personalized_feed_scopes_recommendation_rules_and_ranks_ssb_recency_above_featured_backlog() {
+    let (state, db_path) = build_test_state("m6_t20_pers_rank");
+    let app = build_test_router(&state);
+
+    // Create 15 older featured deniz-araclari articles to simulate featured backlog > limit(12)
+    for i in 1..=15 {
+        let mut old_feat = fixture_content(1200 + i);
+        old_feat.id = 0;
+        old_feat.slug = format!("t20-old-featured-deniz-{}", i);
+        old_feat.title_tr = format!("Eski Öne Çıkan Deniz Haberi {}", i);
+        old_feat.published_at = format!("2025-05-{:02} 10:00:00", i);
+        old_feat.is_featured = true;
+        old_feat.is_sponsored = false;
+        old_feat.ssb_tags = vec!["deniz-araclari".into()];
+        state.db.upsert_content(&old_feat).unwrap();
+    }
+
+    let now = chrono::Utc::now();
+    let ts_air = (now - chrono::Duration::minutes(5)).format("%Y-%m-%d %H:%M:%S").to_string();
+    let ts_fresh = (now - chrono::Duration::minutes(10)).format("%Y-%m-%d %H:%M:%S").to_string();
+    let ts_multi = (now - chrono::Duration::minutes(20)).format("%Y-%m-%d %H:%M:%S").to_string();
+    let ts_navy = (now - chrono::Duration::days(10)).format("%Y-%m-%d %H:%M:%S").to_string();
+
+    // Create an unrelated hava-araclari article promoted by an active wildcard recommendation_rule
+    let mut air_rule_target = fixture_content(1250);
+    air_rule_target.id = 0;
+    air_rule_target.slug = "t20-air-rule-target".into();
+    air_rule_target.title_tr = "Hava Araçları Kural Hedefi".into();
+    air_rule_target.content_type = "haberler".into();
+    air_rule_target.source_group = "gunluk-haber".into();
+    air_rule_target.published_at = ts_air;
+    air_rule_target.is_featured = true;
+    air_rule_target.is_sponsored = false;
+    air_rule_target.ssb_tags = vec!["hava-araclari".into()];
+    state.db.upsert_content(&air_rule_target).unwrap();
+
+    // Create a newer non-featured deniz-araclari article and a multi-tag match article
+    let mut fresh_naval = fixture_content(1251);
+    fresh_naval.id = 0;
+    fresh_naval.slug = "t20-fresh-naval".into();
+    fresh_naval.title_tr = "Yeni Deniz Platformu Haberi".into();
+    fresh_naval.content_type = "haberler".into();
+    fresh_naval.source_group = "gunluk-haber".into();
+    fresh_naval.published_at = ts_fresh;
+    fresh_naval.is_featured = false;
+    fresh_naval.is_sponsored = false;
+    fresh_naval.ssb_tags = vec!["deniz-araclari".into()];
+    state.db.upsert_content(&fresh_naval).unwrap();
+
+    let mut multi_match = fixture_content(1252);
+    multi_match.id = 0;
+    multi_match.slug = "t20-multi-tag-match".into();
+    multi_match.title_tr = "Deniz ve Radar Ortak Haberi".into();
+    multi_match.content_type = "haberler".into();
+    multi_match.source_group = "gunluk-haber".into();
+    multi_match.published_at = ts_multi;
+    multi_match.is_featured = false;
+    multi_match.is_sponsored = false;
+    multi_match.ssb_tags = vec!["deniz-araclari".into(), "radarlar-ve-sensorler".into()];
+    state.db.upsert_content(&multi_match).unwrap();
+
+    // Create an older Dz.K.K.lığı-targeted deniz-araclari article for REQ-012 / REQ-039 check
+    let mut navy_inst_target = fixture_content(1253);
+    navy_inst_target.id = 0;
+    navy_inst_target.slug = "t20-navy-inst-target".into();
+    navy_inst_target.title_tr = "Dz.K.K.lığı Özel Deniz Analizi".into();
+    navy_inst_target.content_type = "haberler".into();
+    navy_inst_target.source_group = "gunluk-haber".into();
+    navy_inst_target.published_at = ts_navy;
+    navy_inst_target.is_featured = false;
+    navy_inst_target.is_sponsored = false;
+    navy_inst_target.ssb_tags = vec!["deniz-araclari".into()];
+    state.db.upsert_content(&navy_inst_target).unwrap();
+
+    {
+        let conn = state.db.open_conn().unwrap();
+        conn.execute(
+            "INSERT INTO recommendation_rules (rule_name, source_tag_or_cat, target_institution, recommended_content_slug, priority, is_active)
+             VALUES ('T20 Air Wildcard', 'hava-araclari', '*', 't20-air-rule-target', 100, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO recommendation_rules (rule_name, source_tag_or_cat, target_institution, recommended_content_slug, priority, is_active)
+             VALUES ('T20 Navy Scoped', 'deniz-araclari', 'Dz.K.K.lığı', 't20-navy-inst-target', 80, 1)",
+            [],
+        )
+        .unwrap();
+    }
+    state.db.refresh_l1_sections(&["recommendation_rules"]);
+
+    // 1. Anonymous ?interests=deniz-araclari&limit=12 must place fresh_naval above older featured backlog & unrelated air rule
+    let (st_anon, _, anon_txt) = get_text(
+        &app,
+        "/api/v1/public/personalized?interests=deniz-araclari&limit=12",
+        None,
+    )
+    .await;
+    assert_eq!(st_anon, StatusCode::OK);
+    let anon_json: Value = serde_json::from_str(&anon_txt).unwrap();
+    let anon_items = unwrap_data(&anon_json)["items"].as_array().unwrap();
+    assert_eq!(anon_items[0]["slug"], "t20-fresh-naval");
+    assert!(
+        !anon_items.iter().any(|i| i["slug"] == "t20-air-rule-target"),
+        "Unrelated hava-araclari rule target must not displace matching deniz-araclari items"
+    );
+
+    // 2. Multi-interest reader: 2 matching SSB tags beats 1 matching SSB tag even if slightly older
+    let (st_multi, _, multi_txt) = get_text(
+        &app,
+        "/api/v1/public/personalized?interests=deniz-araclari,radarlar-ve-sensorler&limit=6",
+        None,
+    )
+    .await;
+    assert_eq!(st_multi, StatusCode::OK);
+    let multi_json: Value = serde_json::from_str(&multi_txt).unwrap();
+    let multi_items = unwrap_data(&multi_json)["items"].as_array().unwrap();
+    assert_eq!(multi_items[0]["slug"], "t20-multi-tag-match");
+
+    // 3. Institutional recommendation rule (REQ-012 / REQ-039) boosts for matching org, not mismatched org
+    let (u_navy, navy_cookie) = create_user_with_session(
+        &state,
+        "t20_navy@dzkk.tsk.tr",
+        "UserPass123!",
+        "DzKK Okur",
+        "subscriber_public",
+        "Dz.K.K.lığı",
+        "Deniz Kuvvetleri",
+        true,
+        "Kamu",
+    );
+    let (u_sec, sector_cookie) = create_user_with_session(
+        &state,
+        "t20_sector@savunma.example",
+        "UserPass123!",
+        "Sektor Okur",
+        "subscriber_digital",
+        "Sektör Kuruluşları",
+        "SAVTEK",
+        false,
+        "Dijital",
+    );
+    for uid in [u_navy.id, u_sec.id] {
+        let u = state.db.get_user_by_id(uid).unwrap();
+        state
+            .db
+            .update_user_profile(
+                u.id,
+                &u.full_name,
+                &u.organization_category,
+                &u.organization_name,
+                &u.job_title,
+                &["deniz-araclari".to_string()],
+                u.email_consent,
+            )
+            .unwrap();
+    }
+
+    let (st_navy, _, navy_txt) = get_text(
+        &app,
+        "/api/v1/public/personalized?limit=6",
+        Some(&navy_cookie),
+    )
+    .await;
+    assert_eq!(st_navy, StatusCode::OK);
+    let navy_json: Value = serde_json::from_str(&navy_txt).unwrap();
+    let navy_items = unwrap_data(&navy_json)["items"].as_array().unwrap();
+    assert_eq!(
+        navy_items[0]["slug"], "t20-navy-inst-target",
+        "Matching target_institution + source_tag_or_cat rule should boost for Dz.K.K.lığı reader"
+    );
+
+    let (st_sec, _, sec_txt) = get_text(
+        &app,
+        "/api/v1/public/personalized?limit=6",
+        Some(&sector_cookie),
+    )
+    .await;
+    assert_eq!(st_sec, StatusCode::OK);
+    let sec_json: Value = serde_json::from_str(&sec_txt).unwrap();
+    let sec_items = unwrap_data(&sec_json)["items"].as_array().unwrap();
+    assert_eq!(
+        sec_items[0]["slug"], "t20-fresh-naval",
+        "Mismatched organization must not receive Dz.K.K.lığı rule boost"
+    );
+
+    cleanup_test_db(&db_path);
+}

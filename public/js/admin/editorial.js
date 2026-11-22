@@ -206,9 +206,15 @@
       }
     }
     if ((sendReview || payload.status === "pending_review") && savedId) {
-      await apiRequest(`/api/v1/admin/contents/${encodeURIComponent(savedId)}/submit-review`, {
+      const revRes = await apiRequest(`/api/v1/admin/contents/${encodeURIComponent(savedId)}/submit-review`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
       });
+      if (!revRes.ok) {
+        setVal("c-id", String(savedId));
+        showToast(revRes.errorMessage || t("admin.toast.review_submit_failed", "İçerik kaydedildi ancak onaya gönderilemedi.", "Content saved, but failed to submit for review."), true);
+        await ctx.refreshAllData();
+        return;
+      }
     }
     showToast(sendReview || payload.status === "pending_review" ? t("admin.toast.content_saved_review", "İçerik kaydedildi ve onaya gönderildi.") : payload.status === "draft" ? t("admin.toast.content_saved_draft", "İçerik taslak olarak kaydedildi.") : t("admin.toast.content_saved_published", "İçerik kaydedildi ve yayına alındı."));
     resetContentForm();
@@ -353,7 +359,8 @@
       _pendingApprovalAction = el.getAttribute("data-decision");
       setVal("approval-note", "");
       const ok = _pendingApprovalAction === "approve";
-      if (byId("approval-modal-title")) byId("approval-modal-title").textContent = ok ? t("admin.form.approve_and_publish", "İçeriği Onayla ve Yayınla") : t("admin.form.reject_content", "İçeriği Reddet");
+      const titleTarget = byId("approval-modal-title-text") || byId("approval-modal-title");
+      if (titleTarget) titleTarget.textContent = ok ? t("admin.form.approve_and_publish", "İçeriği Onayla ve Yayınla", "Approve and Publish Content") : t("admin.form.reject_content", "İçeriği Reddet", "Reject Content");
       const btn = byId("approval-confirm-btn");
       if (btn) { btn.textContent = ok ? t("admin.action.approve_and_publish", "Onayla ve Yayınla") : t("admin.action.reject", "Reddet"); btn.className = ok ? "btn-cmd btn-cmd-emerald" : "btn-cmd btn-cmd-danger"; }
       ctx.openModal?.("approval-modal", byId("approval-note"));

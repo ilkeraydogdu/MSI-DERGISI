@@ -51,14 +51,31 @@ pub async fn redirect_newsletter_unsub_en(Path(token): Path<String>) -> Response
     .into_response()
 }
 
+fn sanitize_nav_token(raw: Option<&str>) -> Option<String> {
+    let s = raw?.trim().trim_start_matches('#');
+    if s.is_empty()
+        || s.len() > 40
+        || !s
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return None;
+    }
+    Some(s.to_string())
+}
+
 pub async fn switch_locale(
     Path(locale): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
     let norm = locale.trim().to_ascii_lowercase();
     if norm != "tr" && norm != "en" {
         return (StatusCode::BAD_REQUEST, "Invalid locale").into_response();
     }
+
+    let query_tab = sanitize_nav_token(params.get("tab").map(String::as_str));
+    let query_hash = sanitize_nav_token(params.get("hash").map(String::as_str));
 
     let req_host = headers
         .get(header::HOST)
@@ -94,14 +111,28 @@ pub async fn switch_locale(
 
     let location = match safe_referer_path {
         Some(ref p) => {
-            let (base, query_opt) = p.split_once('?').map(|(b, q)| (b, Some(q))).unwrap_or((p, None));
+            let without_frag = p.split('#').next().unwrap_or(p);
+            let (base, query_opt) = without_frag
+                .split_once('?')
+                .map(|(b, q)| (b, Some(q)))
+                .unwrap_or((without_frag, None));
             if base == "/" || base == "/en" {
-                if norm == "en" { "/en".to_string() } else { "/".to_string() }
+                let target = if norm == "en" { "/en" } else { "/" };
+                if let Some(ref h) = query_hash {
+                    format!("{}#{}", target, h)
+                } else {
+                    target.to_string()
+                }
             } else if base == "/search" || base == "/en/search" || base == "/arama" {
                 let target_base = if norm == "en" { "/en/search" } else { "/arama" };
-                match query_opt {
+                let with_q = match query_opt {
                     Some(q) if !q.is_empty() => format!("{}?{}", target_base, q),
                     _ => target_base.to_string(),
+                };
+                if let Some(ref h) = query_hash {
+                    format!("{}#{}", with_q, h)
+                } else {
+                    with_q
                 }
             } else {
                 let mut pairs: Vec<String> = query_opt
@@ -110,12 +141,41 @@ pub async fn switch_locale(
                     .filter(|kv| !kv.is_empty() && !kv.starts_with("lang="))
                     .map(str::to_string)
                     .collect();
-                pairs.push(format!("lang={}", norm));
-                format!("{}?{}", base, pairs.join("&"))
+                if base == "/hesabim" {
+                    let referer_tab = pairs
+                        .iter()
+                        .find_map(|kv| kv.strip_prefix("tab="))
+                        .and_then(|v| sanitize_nav_token(Some(v)));
+                    let active_tab = query_tab.clone().or(referer_tab).or(query_hash.clone());
+                    pairs.retain(|kv| !kv.starts_with("tab="));
+                    if let Some(ref tab_val) = active_tab {
+                        pairs.push(format!("tab={}", tab_val));
+                    }
+                    pairs.push(format!("lang={}", norm));
+                    let dest = format!("{}?{}", base, pairs.join("&"));
+                    if let Some(ref tab_val) = active_tab {
+                        format!("{}#{}", dest, tab_val)
+                    } else {
+                        dest
+                    }
+                } else {
+                    pairs.push(format!("lang={}", norm));
+                    let dest = format!("{}?{}", base, pairs.join("&"));
+                    if let Some(ref h) = query_hash {
+                        format!("{}#{}", dest, h)
+                    } else {
+                        dest
+                    }
+                }
             }
         }
         None => {
-            if norm == "en" { "/en".to_string() } else { "/".to_string() }
+            let target = if norm == "en" { "/en" } else { "/" };
+            if let Some(ref h) = query_hash {
+                format!("{}#{}", target, h)
+            } else {
+                target.to_string()
+            }
         }
     };
 
@@ -129,8 +189,10 @@ pub async fn switch_locale(
     } else {
         ""
     };
+    // SECURITY FIX: Add HttpOnly flag to msi_lang cookie for consistency with other cookies.
+    // Language preference doesn't need JS access, and HttpOnly prevents XSS-based cookie theft.
     let cookie = format!(
-        "msi_lang={}; Path=/; Max-Age=31536000; SameSite=Lax{}",
+        "msi_lang={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{}",
         norm, secure_flag
     );
 

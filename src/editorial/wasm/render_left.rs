@@ -161,7 +161,7 @@ pub fn render_left_panel_inner(s: &AppState) -> String {
     );
 
     format!(
-        r#"<div class="px-4 pt-4 pb-2 shrink-0 flex items-center justify-between gap-2 border-b border-zinc-100 mb-2">
+        r#"<div class="px-4 pt-4 pb-2.5 shrink-0 flex items-center justify-between flex-wrap gap-2 border-b border-zinc-100 mb-2">
             <div class="flex bg-zinc-100 p-1.5 rounded-full border border-zinc-200/50 shadow-inner overflow-hidden">
                 {t_pub}
                 {t_drafts}
@@ -177,14 +177,14 @@ pub fn render_left_panel_inner(s: &AppState) -> String {
             {body}
         </div>
         <div class="px-3.5 py-2.5 border-t border-zinc-200 bg-zinc-100/90 shrink-0 space-y-1.5 select-none">
-            <div class="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-zinc-500">
+            <div class="flex items-center justify-between gap-2 flex-wrap text-[11.5px] font-black uppercase tracking-wider text-zinc-500">
                 <div class="flex items-center gap-2">
                     <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
                     <span>YAYIN SİSTEMİ AKTİF</span>
                 </div>
                 <span id="left-pub-total-label">TOPLAM: {pub_total} YAYIN</span>
             </div>
-            <div class="flex items-center justify-between text-[8.5px] font-semibold text-zinc-400 border-t border-zinc-200/60 pt-1.5">
+            <div class="flex items-center justify-between gap-2 flex-wrap text-xs font-semibold text-zinc-400 border-t border-zinc-200/60 pt-1.5">
                 <span>© 2026 MSI Dergisi • Editör Stüdyosu</span>
                 <a href="{admin_href}" class="text-zinc-500 hover:text-brand-600 font-bold transition-colors">
                     Komuta Merkezi
@@ -263,9 +263,9 @@ fn render_published_tab(s: &AppState) -> String {
             "p-2.5 gap-1.5 min-w-0"
         };
         let title_clamp = if is_grid {
-            "text-[11px] line-clamp-3"
+            "text-xs line-clamp-3"
         } else {
-            "text-[10.5px] line-clamp-2"
+            "text-xs line-clamp-2"
         };
         let list_spot_html = if !is_grid {
             art.spot
@@ -292,7 +292,7 @@ fn render_published_tab(s: &AppState) -> String {
 
         let publisher_html = match art.publisher_name.as_deref().filter(|p| !p.is_empty()) {
             Some(pub_name) => format!(
-                r#"<div class="text-[9px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">{} {}</div>"#,
+                r#"<div class="text-[11.5px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">{} {}</div>"#,
                 icons::user("w-3 h-3"),
                 escape_html(pub_name)
             ),
@@ -323,8 +323,8 @@ fn render_published_tab(s: &AppState) -> String {
                 <div role="button" tabindex="0" data-action="select-article" data-article-source="published" data-article-id="{id}" class="text-left flex flex-1 overflow-hidden cursor-pointer {inner_dir}">
                     <div class="bg-zinc-100 overflow-hidden relative border-zinc-100 shrink-0 {thumb_wrap}">
                         {thumb_html}
-                        <div class="absolute left-2 flex items-center gap-2 {badge_pos}">
-                            <span class="text-[7px] font-black uppercase tracking-widest text-emerald-700 bg-white/90 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">YAYINLANDI</span>
+                        <div class="absolute left-2 right-2 flex items-center flex-wrap gap-1.5 {badge_pos}">
+                            <span class="text-[11.5px] font-black uppercase tracking-wide text-emerald-700 bg-white/90 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">YAYINLANDI</span>
                         </div>
                         {share_btn}
                     </div>
@@ -335,14 +335,14 @@ fn render_published_tab(s: &AppState) -> String {
                             {list_spot_html}
                         </div>
                         <div class="flex flex-col gap-1.5">
-                            <div class="flex items-center justify-between">
-                                <div class="text-[8.5px] font-bold text-zinc-400 flex items-center gap-1.5">
+                            <div class="flex items-center justify-between gap-1.5 flex-wrap">
+                                <div class="text-[11.5px] font-bold text-zinc-400 flex items-center gap-1.5">
                                     <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
                                     {pub_date}
                                 </div>
                                 <div class="flex items-center gap-1.5 text-zinc-400">
-                                    <span class="flex items-center gap-0.5 text-[9px]" title="Görüntülenme">{eye_ico} {views}</span>
-                                    <span class="flex items-center gap-0.5 text-[9px]" title="Yorumlar">{msg_ico} {comments}</span>
+                                    <span class="flex items-center gap-0.5 text-[11.5px]" title="Görüntülenme">{eye_ico} {views}</span>
+                                    <span class="flex items-center gap-0.5 text-[11.5px]" title="Yorumlar">{msg_ico} {comments}</span>
                                     <button type="button" data-action="refresh-stats" data-article-id="{id}" class="hover:text-brand-500 transition-colors" title="İstatistikleri Güncelle">{ref_ico}</button>
                                     {del_btn}
                                 </div>
@@ -375,7 +375,7 @@ fn render_published_tab(s: &AppState) -> String {
                 )
             };
             format!(
-                r#"<button type="button" data-action="load-more" data-kind="published" {dis} class="col-span-full w-full py-3 mt-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-50">{label}</button>"#
+                r#"<button type="button" data-action="load-more" data-kind="published" {dis} class="col-span-full w-full min-h-[38px] px-4 mt-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-[10px] font-semibold text-[13px] transition-colors disabled:opacity-50">{label}</button>"#
             )
         } else {
             String::new()
@@ -385,8 +385,8 @@ fn render_published_tab(s: &AppState) -> String {
         format!(
             r#"<div class="col-span-full py-12 text-center space-y-4">
                 <div class="w-12 h-12 bg-zinc-100 rounded-full flex items-center justify-center mx-auto">{}</div>
-                <div class="text-[10px] font-black uppercase tracking-widest text-zinc-400">Yayınlanan Haber Yok</div>
-                <button type="button" data-action="new-article" class="text-[10px] font-black uppercase tracking-widest text-brand-600 hover:underline">İlk Haberi Oluştur</button>
+                <div class="text-xs font-black uppercase tracking-wider text-zinc-400">Yayınlanan Haber Yok</div>
+                <button type="button" data-action="new-article" class="text-xs font-black uppercase tracking-wider text-brand-600 hover:underline">İlk Haberi Oluştur</button>
             </div>"#,
             icons::check_circle2("w-6 h-6 text-zinc-400")
         )
@@ -403,7 +403,7 @@ fn render_published_tab(s: &AppState) -> String {
     format!(
         r#"<div class="space-y-4">
             <div class="flex items-center justify-between px-1">
-                <h2 class="text-[10px] font-black uppercase tracking-widest text-zinc-400">Yayınlanan Haberler ({count})</h2>
+                <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Yayınlanan Haberler ({count})</h2>
             </div>
             <div class="grid gap-3 {grid_cls}">
                 {cards}
@@ -442,7 +442,7 @@ fn render_drafts_tab(s: &AppState) -> String {
         let is_selected = !art.id.is_empty() && sel_id == art.id.as_str();
         let is_in_editor = !art.id.is_empty() && editing_id == art.id.as_str();
         let in_editor_pill = if is_in_editor {
-            r#"<span class="text-[7px] font-black uppercase tracking-widest text-white bg-brand-500 px-1.5 py-0.5 rounded shadow-sm">EDİTÖRDE</span>"#
+            r#"<span class="text-[11.5px] font-black uppercase tracking-wide text-white bg-brand-500 px-1.5 py-0.5 rounded shadow-sm">EDİTÖRDE</span>"#
         } else {
             ""
         };
@@ -463,9 +463,9 @@ fn render_drafts_tab(s: &AppState) -> String {
             "p-2.5 gap-1.5 min-w-0"
         };
         let title_clamp = if is_grid {
-            "text-[11px] line-clamp-3"
+            "text-xs line-clamp-3"
         } else {
-            "text-[10.5px] line-clamp-2"
+            "text-xs line-clamp-2"
         };
         let list_spot_html = if !is_grid {
             art.spot
@@ -480,7 +480,7 @@ fn render_drafts_tab(s: &AppState) -> String {
 
         let (badge_html, dot_cls, date_str) = match art.status.as_str() {
             "pending_review" => (
-                r#"<span class="text-[7px] font-black uppercase tracking-widest text-amber-800 bg-amber-100/95 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">ONAY BEKLİYOR</span>"#,
+                r#"<span class="text-[11.5px] font-black uppercase tracking-wide text-amber-800 bg-amber-100/95 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">ONAY BEKLİYOR</span>"#,
                 "bg-amber-500",
                 format_card_datetime(
                     art.created_at
@@ -490,12 +490,12 @@ fn render_drafts_tab(s: &AppState) -> String {
                 ),
             ),
             "future" => (
-                r#"<span class="text-[7px] font-black uppercase tracking-widest text-amber-700 bg-amber-50/95 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">ZAMANLANDI</span>"#,
+                r#"<span class="text-[11.5px] font-black uppercase tracking-wide text-amber-700 bg-amber-50/95 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">ZAMANLANDI</span>"#,
                 "bg-amber-400",
                 format_card_datetime(art.effective_scheduled_at(), "ZAMANLANDI"),
             ),
             "archived" => (
-                r#"<span class="text-[7px] font-black uppercase tracking-widest text-zinc-700 bg-zinc-200/95 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">ARŞİV</span>"#,
+                r#"<span class="text-[11.5px] font-black uppercase tracking-wide text-zinc-700 bg-zinc-200/95 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">ARŞİV</span>"#,
                 "bg-zinc-400",
                 format_card_datetime(
                     art.created_at
@@ -505,7 +505,7 @@ fn render_drafts_tab(s: &AppState) -> String {
                 ),
             ),
             _ => (
-                r#"<span class="text-[7px] font-black uppercase tracking-widest text-zinc-600 bg-white/90 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">TASLAK</span>"#,
+                r#"<span class="text-[11.5px] font-black uppercase tracking-wide text-zinc-600 bg-white/90 backdrop-blur px-1.5 py-0.5 rounded shadow-sm">TASLAK</span>"#,
                 "bg-zinc-300",
                 format_card_datetime(
                     art.created_at
@@ -542,7 +542,7 @@ fn render_drafts_tab(s: &AppState) -> String {
                 <div role="button" tabindex="0" data-action="select-draft" data-article-id="{id}" class="text-left flex flex-1 overflow-hidden cursor-pointer {inner_dir}">
                     <div class="bg-zinc-100 overflow-hidden relative border-zinc-100 shrink-0 {thumb_wrap}">
                         {thumb_html}
-                        <div class="absolute left-2 flex items-center gap-1.5 {badge_pos}">
+                        <div class="absolute left-2 right-2 flex items-center flex-wrap gap-1.5 {badge_pos}">
                             {badge_html}
                             {in_editor_pill}
                         </div>
@@ -554,7 +554,7 @@ fn render_drafts_tab(s: &AppState) -> String {
                             {list_spot_html}
                         </div>
                         <div class="flex items-center justify-between">
-                            <div class="text-[8.5px] font-bold text-zinc-400 flex items-center gap-1.5">
+                            <div class="text-[11.5px] font-bold text-zinc-400 flex items-center gap-1.5">
                                 <span class="w-1 h-1 rounded-full {dot_cls}"></span>
                                 {date_str}
                             </div>
@@ -581,7 +581,7 @@ fn render_drafts_tab(s: &AppState) -> String {
                 )
             };
             format!(
-                r#"<button type="button" data-action="load-more" data-kind="draft" {dis} class="col-span-full w-full py-3 mt-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-50">{label}</button>"#
+                r#"<button type="button" data-action="load-more" data-kind="draft" {dis} class="col-span-full w-full min-h-[38px] px-4 mt-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-[10px] font-semibold text-[13px] transition-colors disabled:opacity-50">{label}</button>"#
             )
         } else {
             String::new()
@@ -591,7 +591,7 @@ fn render_drafts_tab(s: &AppState) -> String {
         format!(
             r#"<div class="col-span-full py-12 text-center space-y-4">
                 <div class="w-12 h-12 bg-zinc-100 rounded-full flex items-center justify-center mx-auto">{}</div>
-                <div class="text-[10px] font-black uppercase tracking-widest text-zinc-400">Taslak Yok</div>
+                <div class="text-xs font-black uppercase tracking-wider text-zinc-400">Taslak Yok</div>
             </div>"#,
             icons::save("w-6 h-6 text-zinc-400")
         )
@@ -638,7 +638,7 @@ fn render_drafts_tab(s: &AppState) -> String {
     format!(
         r#"<div class="space-y-3">
             <div class="flex items-center justify-between px-1">
-                <h2 class="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-2">
                     {save_ico}
                     Taslaklar ({count})
                 </h2>

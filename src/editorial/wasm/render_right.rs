@@ -24,8 +24,8 @@ pub fn render_editor_conflict_banner(s: &AppState) -> String {
                 <span class="hf-conflict-pulse"></span>
                 {lock_ico}
                 <div class="min-w-0">
-                    <div class="text-[11px] font-black text-amber-900 leading-snug">Bu haber şu an {uname} tarafından düzenleniyor</div>
-                    <div class="text-[9.5px] font-semibold text-amber-700">Üzerine yazma çakışmasını önlemek için kaydetmeden önce koordinasyon sağlayın.</div>
+                    <div class="hf-conflict-title text-xs font-bold leading-snug">Bu haber şu an {uname} tarafından düzenleniyor</div>
+                    <div class="hf-conflict-desc text-[11px] font-medium">Üzerine yazma çakışmasını önlemek için kaydetmeden önce koordinasyon sağlayın.</div>
                 </div>
             </div>
         </div>"#,
@@ -78,7 +78,7 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
         };
         let line_html = if n < 4 {
             let l_cls = if step > n { "bg-zinc-900" } else { "bg-zinc-100" };
-            format!(r#"<div class="w-4 h-[1px] {l_cls}"></div>"#)
+            format!(r#"<div class="w-3 h-[1px] {l_cls}"></div>"#)
         } else {
             String::new()
         };
@@ -90,7 +90,7 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
         };
         steps_dots.push_str(&format!(
             r#"<div class="flex items-center">
-                <button type="button" data-action="set-wizard-step" data-step="{n}" title="{dot_title}" class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black cursor-pointer transition-all hover:scale-110 {dot_cls}">{n}</button>
+                <button type="button" data-action="set-wizard-step" data-step="{n}" title="{dot_title}" class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black cursor-pointer transition-all hover:scale-110 {dot_cls}">{n}</button>
                 {line_html}
             </div>"#
         ));
@@ -106,7 +106,7 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
     let canon_header_title = s.canonical_editing_article().title;
     let rev_header_btn = if !s.editing_article.id.trim().is_empty() {
         format!(
-            r#"<button type="button" data-action="open-revisions-modal" data-article-id="{aid}" data-article-title="{atitle}" title="Revizyon Geçmişi" class="h-7 px-2.5 flex items-center gap-1 rounded-full bg-zinc-100 text-zinc-600 hover:bg-brand-50 hover:text-brand-600 text-[9.5px] font-black uppercase tracking-wider transition-all">
+            r#"<button type="button" data-action="open-revisions-modal" data-article-id="{aid}" data-article-title="{atitle}" title="Revizyon Geçmişi" class="min-h-[36px] px-3 flex items-center gap-1.5 rounded-[10px] bg-zinc-100 text-zinc-700 hover:bg-brand-50 hover:text-brand-600 text-xs font-semibold transition-all">
                 {hist_ico}
                 <span class="hidden sm:inline">Revizyonlar</span>
             </button>"#,
@@ -133,13 +133,13 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
                 ""
             };
         let next_lbl = if step == 2 && s.is_cropping {
-            "İŞLENİYOR..."
+            "İşleniyor..."
         } else {
-            "İLERLE"
+            "İlerle"
         };
         format!(
-            r#"<div class="h-16 px-6 border-t border-zinc-100 flex items-center justify-end bg-zinc-50 shrink-0 mt-auto">
-                <button id="btn-wizard-next" type="button" data-action="wizard-next" {next_dis} class="px-8 py-3 bg-zinc-900 text-white rounded-full text-[10px] font-black uppercase hover:bg-brand-500 transition-all shadow-lg disabled:opacity-50">{next_lbl}</button>
+            r#"<div class="min-h-[60px] px-6 py-3 border-t border-zinc-100 flex items-center justify-end bg-zinc-50 shrink-0 mt-auto">
+                <button id="btn-wizard-next" type="button" data-action="wizard-next" {next_dis} class="px-6 min-h-[40px] bg-brand-500 text-white rounded-[10px] text-[13.5px] font-semibold hover:bg-brand-600 transition-all shadow-sm disabled:opacity-50">{next_lbl}</button>
             </div>"#
         )
     } else {
@@ -156,14 +156,14 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
         };
         let delete_draft_btn = if is_dr && s.caps().can_delete {
             format!(
-                r#"<button type="button" data-action="delete-editing-draft" title="Taslağı Kalıcı Olarak Sil (Veritabanından kaldırır)" class="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">{del_ico}</button>"#,
+                r#"<button type="button" data-action="delete-editing-draft" title="Taslağı Kalıcı Olarak Sil (Veritabanından kaldırır)" class="w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-red-500 hover:bg-red-50 rounded-[10px] transition-all">{del_ico}</button>"#,
                 del_ico = icons::trash2("w-3.5 h-3.5"),
             )
         } else {
             String::new()
         };
         format!(
-            r#"{delete_draft_btn}<button type="button" data-action="clear-editor" title="{title_tip}" class="h-7 px-2.5 flex items-center gap-1 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 text-[9.5px] font-black uppercase tracking-wider transition-all">
+            r#"{delete_draft_btn}<button type="button" data-action="clear-editor" title="{title_tip}" class="min-h-[36px] px-3 flex items-center gap-1.5 rounded-[10px] bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 text-xs font-semibold transition-all">
                 {x_ico}
                 <span class="hidden sm:inline">{label}</span>
             </button>"#,
@@ -171,23 +171,23 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
         )
     } else {
         format!(
-            r#"<button type="button" data-action="clear-editor" title="Editörü Temizle" class="w-8 h-8 flex items-center justify-center text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">{trash_ico}</button>"#,
+            r#"<button type="button" data-action="clear-editor" title="Editörü Temizle" class="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-[10px] transition-all">{trash_ico}</button>"#,
             trash_ico = icons::trash2("w-3.5 h-3.5"),
         )
     };
 
     format!(
-        r#"<div class="flex-none p-2 lg:p-3 pb-0 z-10 bg-white">
-            <div class="flex items-center justify-between mb-0 pb-0 border-b border-zinc-50 h-10 px-1">
-                <div class="flex items-center gap-2">
+        r#"<div class="flex-none p-3 lg:p-4 pb-2 z-10 bg-white">
+            <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-zinc-100 min-h-[40px]">
+                <div class="flex items-center gap-2 min-w-0">
                     {left_nav_html}
                     <div class="flex items-center gap-1.5">
                         {steps_dots}
-                        <h2 class="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-2 hidden sm:block">{step_title}</h2>
+                        <h2 class="text-xs font-semibold text-zinc-500 ml-2 hidden sm:block">{step_title}</h2>
                     </div>
                 </div>
-                <div class="flex items-center gap-1.5">
-                    <button type="button" data-action="open-preview-modal" title="Haberi Tam Ekran Önizle" class="h-7 px-2.5 flex items-center gap-1 rounded-full bg-zinc-900 text-white hover:bg-brand-500 text-[9.5px] font-black uppercase tracking-wider shadow-sm transition-all">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <button type="button" data-action="open-preview-modal" title="Haberi Tam Ekran Önizle" class="min-h-[36px] px-3 flex items-center gap-1.5 rounded-[10px] bg-zinc-900 text-white hover:bg-brand-500 text-xs font-semibold shadow-sm transition-all">
                         {eye_ico}
                         <span class="hidden sm:inline">Önizle</span>
                     </button>
@@ -197,8 +197,8 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
             </div>
             <div id="hf-editor-lock-slot">{lock_banner}</div>
         </div>
-        <div id="right-scroll" class="flex-1 overflow-y-auto p-2 lg:p-3 custom-scrollbar flex flex-col">
-            <div class="flex-1 flex flex-col space-y-2 max-w-4xl mx-auto w-full px-1">
+        <div id="right-scroll" class="flex-1 overflow-y-auto p-4 lg:p-5 custom-scrollbar flex flex-col">
+            <div class="flex-1 flex flex-col space-y-3 max-w-4xl mx-auto w-full">
                 {step_body}
             </div>
         </div>
@@ -210,7 +210,7 @@ pub fn render_right_panel_inner(s: &AppState) -> String {
 
 pub fn render_blocks_count_badge_html(count: usize) -> String {
     if count > 0 {
-        format!(r#"<span class="text-[10px] font-bold text-zinc-400">{count} Blok</span>"#)
+        format!(r#"<span class="text-xs font-bold text-zinc-400">{count} Blok</span>"#)
     } else {
         String::new()
     }
@@ -270,7 +270,7 @@ pub fn render_step1_glossary_compliance_html(s: &AppState) -> String {
         format!(
             r#"<div class="hf-glossary-alert-card">
                 <div class="flex items-center justify-between gap-2 flex-wrap">
-                    <div class="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-900">
+                    <div class="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-amber-900">
                         {alrt_ico}
                         <span>MSI TDR &amp; NATO Terminoloji Uyarısı ({cnt})</span>
                     </div>
@@ -325,7 +325,7 @@ pub fn render_step1_glossary_drawer_list_html(s: &AppState) -> String {
         .collect();
 
     if filtered.is_empty() {
-        return r#"<div class="text-[10px] font-semibold text-zinc-400 py-3 text-center">Eşleşen terminoloji kuralı bulunamadı.</div>"#.to_string();
+        return r#"<div class="text-xs font-semibold text-zinc-400 py-3 text-center">Eşleşen terminoloji kuralı bulunamadı.</div>"#.to_string();
     }
 
     let mut rows = String::new();
@@ -347,7 +347,7 @@ pub fn render_step1_glossary_drawer_list_html(s: &AppState) -> String {
         };
         rows.push_str(&format!(
             r#"<div class="hf-glossary-drawer-row">
-                <div class="min-w-0 flex-1 flex items-center flex-wrap gap-1.5 text-[10.5px]">
+                <div class="min-w-0 flex-1 flex items-center flex-wrap gap-1.5 text-xs">
                     <span class="font-bold text-zinc-700">{tr_lbl}</span>
                     <span class="text-zinc-400 font-black">→</span>
                     <span class="font-extrabold text-emerald-700">{pref}</span>
@@ -437,11 +437,11 @@ fn render_step_1(s: &AppState) -> String {
         format!(
             r#"<div class="hf-glossary-drawer">
                 <div class="flex items-center justify-between gap-2 pb-2 border-b border-zinc-200/70">
-                    <div class="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-700">
+                    <div class="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-zinc-700">
                         {book_ico}
                         <span>MSI TDR &amp; NATO Resmi Terminoloji Rehberi ({cnt})</span>
                     </div>
-                    <button type="button" data-action="open-settings-glossary" class="text-[9px] font-black uppercase tracking-wider text-brand-600 hover:underline">Sözlüğü Yönet</button>
+                    <button type="button" data-action="open-settings-glossary" class="text-xs font-black uppercase tracking-wider text-brand-600 hover:underline">Sözlüğü Yönet</button>
                 </div>
                 <div class="relative">
                     {search_ico}
@@ -484,16 +484,16 @@ fn render_step_1(s: &AppState) -> String {
             r#"<div class="hf-author-meta-body">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div class="space-y-0.5">
-                        <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">Yazar / Söyleşi Konuğu</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">Yazar / Söyleşi Konuğu</label>
                         <input data-input="article-author-name" type="text" value="{aname}" placeholder="Örn: Dr. Kemal Aydın / TUSAŞ Gn. Md." class="hf-meta-input bg-white" />
                     </div>
                     <div class="space-y-0.5">
-                        <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">Ünvan / Görev</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">Ünvan / Görev</label>
                         <input data-input="article-author-title" type="text" value="{atitle}" placeholder="Örn: Savunma Sanayii Analisti" class="hf-meta-input bg-white" />
                     </div>
                 </div>
                 <div class="space-y-0.5">
-                    <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5 flex items-center gap-1">{vid_ico} Video / Röportaj URL (Opsiyonel)</label>
+                    <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5 flex items-center gap-1">{vid_ico} Video / Röportaj URL (Opsiyonel)</label>
                     <input data-input="article-video-url" type="url" value="{vurl}" placeholder="https://youtube.com/watch?v=..." class="hf-meta-input bg-white" />
                 </div>
             </div>"#,
@@ -533,11 +533,11 @@ fn render_step_1(s: &AppState) -> String {
         format!(
             r#"<div class="hf-live-quick-card">
                 <div class="flex items-center justify-between gap-2">
-                    <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-700">
+                    <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-red-700">
                         <span class="hf-live-dot"></span>
                         <span>Dakika Dakika Gelişme Ekle</span>
                     </div>
-                    <span class="text-[9px] font-bold text-red-500/80">En üste anında eklenir</span>
+                    <span class="text-xs font-bold text-red-500/80">En üste anında eklenir</span>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <input id="hf-live-quick-time" data-input="live-quick-time" type="text" value="{qt}" placeholder="14:30" class="hf-live-time-input" />
@@ -586,12 +586,12 @@ fn render_step_1(s: &AppState) -> String {
             <div id="hf-glossary-compliance-slot">{compliance_html}</div>
 
             <div class="space-y-0.5 relative group/title">
-                <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">{title_lbl}</label>
+                <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1">{title_lbl}</label>
                 <textarea id="editor-title-textarea" data-input="editor-title" rows="1" placeholder="{title_ph}" class="w-full text-xl lg:text-2xl font-bold text-zinc-900 focus:outline-none bg-transparent placeholder-zinc-200 resize-none overflow-hidden leading-tight transition-all duration-200">{title}</textarea>
             </div>
 
             <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">{spot_lbl}</label>
+                <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1">{spot_lbl}</label>
                 <textarea id="editor-spot-textarea" data-input="editor-spot" rows="2" placeholder="{spot_ph}" class="hf-spot-textarea">{spot}</textarea>
             </div>
 
@@ -599,7 +599,7 @@ fn render_step_1(s: &AppState) -> String {
                 <button type="button" data-action="toggle-author-meta-bar" class="hf-author-meta-toggle">
                     <div class="flex items-center gap-2 min-w-0">
                         {user_ico}
-                        <span class="text-[10px] font-black uppercase tracking-widest text-zinc-600">Yazar / Söyleşi Künyesi &amp; Video</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-zinc-600">Yazar / Söyleşi Künyesi &amp; Video</span>
                         {author_summary_pill}
                     </div>
                     {chev_ico}
@@ -612,12 +612,12 @@ fn render_step_1(s: &AppState) -> String {
             <div class="flex-1 flex flex-col space-y-2 mt-1">
                 <div class="flex items-center justify-between px-1 gap-2 flex-wrap">
                     <div class="flex items-center gap-2 flex-wrap">
-                        <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400">{body_lbl}</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400">{body_lbl}</label>
                         <button type="button" data-action="toggle-live-blog" class="{live_btn_cls}" title="Canlı Anlatım (Dakika Dakika) Modunu Aç/Kapat">
                             <span class="hf-live-dot"></span>
                             <span>CANLI ANLATIM</span>
                         </button>
-                        <span class="hidden sm:inline text-[9px] font-semibold text-zinc-300">• Metni seçerek biçimlendirme baloncuğunu açın</span>
+                        <span class="hidden sm:inline text-xs font-semibold text-zinc-300">• Metni seçerek biçimlendirme baloncuğunu açın</span>
                     </div>
                     <div id="blocks-count-badge">{count_badge}</div>
                 </div>"#,
@@ -727,7 +727,7 @@ pub fn render_related_search_results_html(s: &AppState, block_id: &str) -> Strin
         .collect();
 
     if matches.is_empty() {
-        return r#"<div class="text-[10px] font-semibold text-zinc-400 py-2 px-1">Eşleşen yayınlanmış haber bulunamadı.</div>"#.to_string();
+        return r#"<div class="text-xs font-semibold text-zinc-400 py-2 px-1">Eşleşen yayınlanmış haber bulunamadı.</div>"#.to_string();
     }
 
     let mut rows = String::new();
@@ -744,7 +744,7 @@ pub fn render_related_search_results_html(s: &AppState, block_id: &str) -> Strin
                 <div class="min-w-0 flex-1 text-left">
                     <div class="text-[11px] font-bold text-zinc-800 line-clamp-1">{title}</div>
                 </div>
-                <span class="text-[9px] font-black uppercase tracking-wider text-brand-600 shrink-0">Ekle</span>
+                <span class="text-xs font-black uppercase tracking-wider text-brand-600 shrink-0">Ekle</span>
             </button>"#,
             aid = escape_html(&art.id),
             title = escape_html(&art.title),
@@ -776,7 +776,7 @@ pub fn render_block_image_preview_inner(content: &str) -> String {
         format!(
             r#"<div class="text-zinc-300 flex flex-col items-center gap-2">
                 {}
-                <span class="text-[9px] font-black uppercase tracking-[0.2em]">Görsel Seçilmedi</span>
+                <span class="text-xs font-black uppercase tracking-widest">Görsel Seçilmedi</span>
             </div>"#,
             icons::plus("w-8 h-8 opacity-20")
         )
@@ -1317,11 +1317,11 @@ fn render_single_block(
                             {preview_inner}
                         </div>
                         <div class="absolute inset-0 bg-black/0 group-hover/img:bg-black/15 flex items-center justify-center gap-2 opacity-0 group-hover/img:opacity-100 transition-all">
-                            <label class="bg-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-800 cursor-pointer hover:bg-brand-50">
+                            <label class="bg-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest text-zinc-800 cursor-pointer hover:bg-brand-50">
                                 {plus_ico} Yükle
                                 <input type="file" data-file="block-image" data-block-id="{id_esc}" class="hidden" accept="image/*" />
                             </label>
-                            <button type="button" data-action="open-media-library" data-media-target="block:{id_esc}" class="bg-zinc-900 px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500 transition-all">
+                            <button type="button" data-action="open-media-library" data-media-target="block:{id_esc}" class="bg-zinc-900 px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white hover:bg-brand-500 transition-all">
                                 {arch_ico} Arşivden Seç
                             </button>
                         </div>
@@ -1419,13 +1419,13 @@ fn render_single_block(
                     r#"<div class="hf-editor-related">
                         <div class="flex items-center justify-between gap-2">
                             <input data-input="block-meta" data-block-id="{id_esc}" data-block-kind="related_article" type="text" value="{kicker}" placeholder="BUNU DA OKUYUN" class="hf-related-kicker-input" />
-                            <button type="button" data-action="change-related-article" data-block-id="{id_esc}" class="text-[9.5px] font-black uppercase tracking-wider text-brand-600 hover:underline shrink-0">Değiştir</button>
+                            <button type="button" data-action="change-related-article" data-block-id="{id_esc}" class="text-xs font-black uppercase tracking-wider text-brand-600 hover:underline shrink-0">Değiştir</button>
                         </div>
                         <div class="flex items-center gap-3">
                             {thumb_html}
                             <div class="min-w-0 flex-1">
                                 <div class="text-xs font-extrabold text-zinc-900 leading-snug">{rtitle}</div>
-                                <div class="text-[10px] font-mono text-zinc-400 truncate">/icerik/{rslug}</div>
+                                <div class="text-xs font-mono text-zinc-400 truncate">/icerik/{rslug}</div>
                             </div>
                         </div>
                     </div>"#,
@@ -1442,7 +1442,7 @@ fn render_single_block(
                 let results_html = render_related_search_results_html(s, &block.id);
                 format!(
                     r#"<div class="hf-editor-related">
-                        <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-600">
+                        <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-brand-600">
                             {news_ico}
                             <span>Site İçi İlgili Haber Kartı ("Bunu da Okuyun")</span>
                         </div>
@@ -1648,7 +1648,7 @@ fn render_step_2(s: &AppState) -> String {
                     {arch_ico}
                     <span>Medya Arşivinden Seç</span>
                 </button>
-                <label class="text-[10px] font-black uppercase tracking-widest text-brand-500 cursor-pointer hover:underline flex items-center gap-1">
+                <label class="text-xs font-black uppercase tracking-widest text-brand-500 cursor-pointer hover:underline flex items-center gap-1">
                     {ref_ico} Görseli Değiştir
                     <input type="file" data-file="step2-image" class="hidden" accept="image/*" />
                 </label>
@@ -1680,7 +1680,7 @@ fn render_step_2(s: &AppState) -> String {
                             {plus_ico}
                         </div>
                         <span class="text-[11px] font-black uppercase tracking-wider text-zinc-900">Bilgisayardan Yükle</span>
-                        <span class="text-[9.5px] font-semibold text-zinc-400">Otomatik WebP dönüşümü</span>
+                        <span class="text-xs font-semibold text-zinc-400">Otomatik WebP dönüşümü</span>
                         <input type="file" data-file="step2-image" class="hidden" accept="image/*" />
                     </label>
                     <button type="button" data-action="open-media-library" data-media-target="step2" class="hf-step2-upload-card group/arch">
@@ -1688,7 +1688,7 @@ fn render_step_2(s: &AppState) -> String {
                             {arch_ico}
                         </div>
                         <span class="text-[11px] font-black uppercase tracking-wider text-zinc-900">Medya Arşivinden Seç</span>
-                        <span class="text-[9.5px] font-semibold text-zinc-400">Hazır kapak görselleri</span>
+                        <span class="text-xs font-semibold text-zinc-400">Hazır kapak görselleri</span>
                     </button>
                 </div>
 
@@ -1698,7 +1698,7 @@ fn render_step_2(s: &AppState) -> String {
                             <input id="step2-remote-url-input" data-input="step2-remote-url" type="text" placeholder="Görsel URL'si yapıştırın..." value="{rem_val}" class="w-full h-10 bg-zinc-100 border border-transparent rounded-xl px-3.5 pr-10 text-xs font-bold focus:outline-none focus:bg-white focus:border-brand-500/20 transition-all" />
                             {globe_ico}
                         </div>
-                        <button type="button" data-action="fetch-step2-url" {up_dis} class="h-10 px-4 bg-brand-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-600 disabled:opacity-50 transition-all flex items-center gap-1.5">
+                        <button type="button" data-action="fetch-step2-url" {up_dis} class="h-10 px-4 bg-brand-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-brand-600 disabled:opacity-50 transition-all flex items-center gap-1.5">
                             {up_ico}
                             Çek
                         </button>
@@ -1725,7 +1725,7 @@ fn render_step_2(s: &AppState) -> String {
                     <p class="text-white/80 text-xs font-medium max-w-xs mb-6">
                         Dış kaynaklı bu görsel güvenlik politikaları nedeniyle doğrudan işlenemiyor. Sunucuya çekerek bu sorunu aşabilirsiniz.
                     </p>
-                    <button type="button" data-action="fetch-cors-image" {up_dis} class="px-6 py-3 bg-brand-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-600 transition-all flex items-center gap-2 shadow-xl">
+                    <button type="button" data-action="fetch-cors-image" {up_dis} class="px-6 py-3 bg-brand-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-brand-600 transition-all flex items-center gap-2 shadow-xl">
                         {up_ico}
                         Sunucuya Çek ve Düzenle
                     </button>
@@ -1743,7 +1743,7 @@ fn render_step_2(s: &AppState) -> String {
                 {cors_overlay}
                 <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full z-10">
                     <input id="crop-zoom-slider" data-input="crop-zoom" type="range" value="{zoom:.2}" min="1" max="3" step="0.05" aria-label="Zoom" class="w-32 accent-brand-500" />
-                    <button type="button" data-action="clear-step2-image" class="text-[10px] font-black uppercase text-white hover:text-red-400 transition-colors">Görseli Değiştir</button>
+                    <button type="button" data-action="clear-step2-image" class="text-xs font-black uppercase text-white hover:text-red-400 transition-colors">Görseli Değiştir</button>
                 </div>
             </div>"#,
             zoom = s.crop_zoom,
@@ -1792,7 +1792,7 @@ fn render_step_2(s: &AppState) -> String {
         r#"<div class="flex flex-col gap-4 py-4">
             <div class="space-y-2">
                 <div class="flex items-center justify-between px-1 gap-2 flex-wrap">
-                    <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400">Öne Çıkan Görsel Seçimi & Kırpma (1200x675)</label>
+                    <label class="text-xs font-black uppercase tracking-widest text-zinc-400">Öne Çıkan Görsel Seçimi & Kırpma (1200x675)</label>
                     {top_actions_html}
                 </div>
                 <div class="relative group aspect-[16/9] w-full bg-zinc-50 rounded-3xl overflow-hidden border border-zinc-100 flex items-center justify-center shadow-inner">
@@ -1808,7 +1808,7 @@ fn render_step_2(s: &AppState) -> String {
                     </div>
                     <div class="min-w-0">
                         <div class="text-xs font-extrabold text-zinc-800">Özel Haber / Logo Filigranı Bas</div>
-                        <div class="text-[10px] font-semibold text-zinc-400">Aktifken yüklenen ve çekilen görsellere otomatik MSI Dergisi filigranı işlenir</div>
+                        <div class="text-xs font-semibold text-zinc-400">Aktifken yüklenen ve çekilen görsellere otomatik MSI Dergisi filigranı işlenir</div>
                     </div>
                 </div>
                 <button type="button" data-action="toggle-upload-watermark" class="hf-wm-toggle-btn {wm_toggle_cls}">
@@ -1824,7 +1824,7 @@ fn render_step_2(s: &AppState) -> String {
 pub fn render_step3_tag_pills(s: &AppState) -> String {
     let tags = s.editing_article.tags.as_deref().unwrap_or(&[]);
     if tags.is_empty() {
-        return r#"<span class="text-[10px] font-semibold text-zinc-400 px-1">Henüz etiket eklenmedi.</span>"#.to_string();
+        return r#"<span class="text-xs font-semibold text-zinc-400 px-1">Henüz etiket eklenmedi.</span>"#.to_string();
     }
     let mut out = String::new();
     for tag in tags {
@@ -1874,7 +1874,7 @@ pub fn render_step3_tag_suggestions(s: &AppState) -> String {
     }
     format!(
         r#"<div class="flex items-center flex-wrap gap-1.5 pt-1">
-            <span class="text-[9px] font-black uppercase tracking-widest text-zinc-400">Önerilenler:</span>
+            <span class="text-xs font-black uppercase tracking-widest text-zinc-400">Önerilenler:</span>
             {chips}
         </div>"#
     )
@@ -1915,7 +1915,7 @@ pub fn render_step3_live_discover_and_serp(s: &AppState) -> String {
                 {ico}
                 <div class="min-w-0 flex-1">
                     <div class="text-[11px] font-extrabold text-zinc-900 leading-snug">{lbl}</div>
-                    <div class="text-[10px] font-semibold text-zinc-500 leading-snug">{det}</div>
+                    <div class="text-xs font-semibold text-zinc-500 leading-snug">{det}</div>
                 </div>
             </div>"#,
             lbl = escape_html(&item.label),
@@ -1964,11 +1964,11 @@ pub fn render_step3_live_discover_and_serp(s: &AppState) -> String {
                     <div class="flex items-center gap-3">
                         <div class="hf-score-meter {ring_cls}">
                             <span class="text-base font-black leading-none">{score}</span>
-                            <span class="text-[8px] font-black uppercase opacity-75">PUAN</span>
+                            <span class="text-[11.5px] font-black uppercase opacity-75">PUAN</span>
                         </div>
                         <div>
                             <div class="text-xs font-black uppercase tracking-tight text-zinc-900">Google Discover & News Kontrolü</div>
-                            <div class="text-[10px] font-bold text-zinc-500">{status_lbl}</div>
+                            <div class="text-xs font-bold text-zinc-500">{status_lbl}</div>
                         </div>
                     </div>
                 </div>
@@ -1979,18 +1979,18 @@ pub fn render_step3_live_discover_and_serp(s: &AppState) -> String {
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="hf-serp-preview-card">
-                    <div class="text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-2">Google Arama (SERP) Önizlemesi</div>
-                    <div class="text-[10px] font-semibold text-zinc-500 truncate">msidergisi.com › icerik › {slug}</div>
+                    <div class="text-xs font-black uppercase tracking-widest text-zinc-400 mb-2">Google Arama (SERP) Önizlemesi</div>
+                    <div class="text-xs font-semibold text-zinc-500 truncate">msidergisi.com › icerik › {slug}</div>
                     <div class="hf-serp-title">{title}</div>
                     <div class="hf-serp-desc">{desc}</div>
                 </div>
                 <div class="hf-discover-preview-card">
-                    <div class="text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-2">Google Discover Kartı</div>
+                    <div class="text-xs font-black uppercase tracking-widest text-zinc-400 mb-2">Google Discover Kartı</div>
                     <div class="aspect-[16/9] rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200/80 mb-2">
                         {disc_img}
                     </div>
                     <div class="text-xs font-extrabold text-zinc-900 line-clamp-2 leading-snug">{title}</div>
-                    <div class="text-[9.5px] font-bold text-zinc-400 mt-1">MSI Dergisi • Az önce</div>
+                    <div class="text-xs font-bold text-zinc-400 mt-1">MSI Dergisi • Az önce</div>
                 </div>
             </div>
         </div>"#,
@@ -2023,10 +2023,10 @@ fn render_step_3(s: &AppState) -> String {
                         </div>
                         <div class="flex flex-col">
                             <span class="text-sm font-black text-zinc-800 uppercase tracking-tight">SEO Ayarlar</span>
-                            <span class="text-[10px] font-bold text-zinc-400">Google Discover, News, Slug & #Etiket yönetimi.</span>
+                            <span class="text-xs font-bold text-zinc-400">Google Discover, News, Slug & #Etiket yönetimi.</span>
                         </div>
                     </div>
-                    <button type="button" data-action="auto-fill-seo" class="h-8 px-4 bg-brand-50 text-brand-600 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-brand-100 transition-all flex items-center gap-2">
+                    <button type="button" data-action="auto-fill-seo" class="h-8 px-4 bg-brand-50 text-brand-600 rounded-full text-xs font-black uppercase tracking-widest hover:bg-brand-100 transition-all flex items-center gap-2">
                         {auto_ico}
                         Otomatik Doldur
                     </button>
@@ -2034,9 +2034,9 @@ fn render_step_3(s: &AppState) -> String {
 
                 <div class="hf-slug-box">
                     <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <label class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Kalıcı Bağlantı (Slug) & 301 Koruması</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-500">Kalıcı Bağlantı (Slug) & 301 Koruması</label>
                         <div class="flex items-center gap-2">
-                            <button type="button" data-action="generate-slug-from-title" class="text-[9.5px] font-black uppercase tracking-wider text-brand-600 hover:underline">Başlıktan Üret</button>
+                            <button type="button" data-action="generate-slug-from-title" class="text-xs font-black uppercase tracking-wider text-brand-600 hover:underline">Başlıktan Üret</button>
                             <button type="button" data-action="open-redirects-modal" class="hf-redirects-open-btn">
                                 {redir_ico}
                                 <span>301 Yönlendirmeleri Gör</span>
@@ -2047,13 +2047,13 @@ fn render_step_3(s: &AppState) -> String {
                         <span class="hf-slug-prefix">/icerik/</span>
                         <input id="hf-editor-slug" data-input="editor-slug" type="text" value="{slug_v}" placeholder="{slug_p}" class="hf-slug-input" />
                     </div>
-                    <div class="text-[10px] font-semibold text-zinc-400 leading-snug">
+                    <div class="text-xs font-semibold text-zinc-400 leading-snug">
                         Yayınlanmış haberin URL'sini değiştirirseniz eski adresten yeni adrese otomatik 301 yönlendirmesi tanımlanır.
                     </div>
                 </div>
 
                 <div class="hf-tags-box">
-                    <label class="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <label class="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
                         {hash_ico}
                         <span>Konu Etiketleri (#Tag)</span>
                     </label>
@@ -2062,7 +2062,7 @@ fn render_step_3(s: &AppState) -> String {
                     </div>
                     <div class="flex items-center gap-2">
                         <input id="hf-tag-input" data-input="tag-query" type="text" value="{tq}" placeholder="Etiket yazıp Enter veya virgül (,) tuşuna basın..." class="w-full h-10 bg-white border border-zinc-200/80 rounded-xl px-3.5 text-xs font-bold focus:outline-none focus:border-brand-500 transition-all" />
-                        <button type="button" data-action="commit-tag-input" class="h-10 px-4 bg-zinc-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-500 transition-colors shrink-0">Ekle</button>
+                        <button type="button" data-action="commit-tag-input" class="h-10 px-4 bg-zinc-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-brand-500 transition-colors shrink-0">Ekle</button>
                     </div>
                     <div id="hf-tag-suggestions-slot">
                         {tag_sugs}
@@ -2071,17 +2071,17 @@ fn render_step_3(s: &AppState) -> String {
 
                 <div class="space-y-3.5">
                     <div class="space-y-1.5">
-                        <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">SEO Başlığı</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1">SEO Başlığı</label>
                         <input data-input="seo-title" type="text" value="{t}" class="w-full h-11 bg-zinc-100 rounded-2xl px-4 text-xs font-bold focus:bg-white focus:ring-2 focus:ring-brand-500/20 transition-all focus:outline-none" placeholder="Google'da görünecek başlık (35-70 karakter)" />
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Meta Açıklama</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1">Meta Açıklama</label>
                         <textarea data-input="seo-description" class="w-full h-20 bg-zinc-100 rounded-2xl px-4 py-3 text-xs font-bold focus:bg-white focus:ring-2 focus:ring-brand-500/20 transition-all resize-none focus:outline-none" placeholder="Arama sonuçlarında görünecek kısa özet (80-160 karakter)">{d}</textarea>
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Odak Anahtar Kelimeler</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1">Odak Anahtar Kelimeler</label>
                         <input data-input="seo-keywords" type="text" value="{k}" class="w-full h-11 bg-zinc-100 rounded-2xl px-4 text-xs font-bold focus:bg-white focus:ring-2 focus:ring-brand-500/20 transition-all focus:outline-none" placeholder="örn: teknoloji, ekonomi, gündem" />
                     </div>
                 </div>
@@ -2111,7 +2111,7 @@ fn render_step_3(s: &AppState) -> String {
 pub fn render_preview_blocks_html(blocks: &[ContentBlock]) -> String {
     if blocks.is_empty() {
         return r#"<div class="py-8 text-center bg-zinc-100/50 rounded-xl border border-dashed border-zinc-200">
-            <span class="text-[10px] font-black text-zinc-400 uppercase tracking-widest">İçerik Bulunmadı</span>
+            <span class="text-xs font-black text-zinc-400 uppercase tracking-widest">İçerik Bulunmadı</span>
         </div>"#
             .to_string();
     }
@@ -2388,7 +2388,7 @@ pub fn render_preview_blocks_html(blocks: &[ContentBlock]) -> String {
 
     if out.is_empty() {
         r#"<div class="py-8 text-center bg-zinc-100/50 rounded-xl border border-dashed border-zinc-200">
-            <span class="text-[10px] font-black text-zinc-400 uppercase tracking-widest">İçerik Bulunmadı</span>
+            <span class="text-xs font-black text-zinc-400 uppercase tracking-widest">İçerik Bulunmadı</span>
         </div>"#
             .to_string()
     } else {
@@ -2408,7 +2408,7 @@ fn render_step_4(s: &AppState) -> String {
 
     let kw_badge = if !kw.is_empty() {
         format!(
-            r#"<span class="px-2 py-1 bg-zinc-200 text-zinc-600 rounded text-[9px] font-black uppercase tracking-widest">{}</span>"#,
+            r#"<span class="px-2 py-1 bg-zinc-200 text-zinc-600 rounded text-xs font-black uppercase tracking-widest">{}</span>"#,
             escape_html(kw)
         )
     } else {
@@ -2457,7 +2457,7 @@ fn render_step_4(s: &AppState) -> String {
         let dt_val = iso_to_datetime_local(art.effective_scheduled_at());
         format!(
             r#"<div class="mt-2">
-                <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-1 mb-1 block">Yayın Tarihi &amp; Saati</label>
+                <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1 mb-1 block">Yayın Tarihi &amp; Saati</label>
                 <input data-input="scheduled-at" type="datetime-local" value="{dt_val}" class="w-full h-10 bg-white border border-zinc-200 rounded-lg px-3 text-xs font-bold text-zinc-700 focus:outline-none focus:border-brand-500 transition-colors" />
             </div>"#,
             dt_val = escape_html(&dt_val),
@@ -2479,7 +2479,7 @@ fn render_step_4(s: &AppState) -> String {
                     icons::send("w-4 h-4")
                 };
                 format!(
-                    r#"<button type="button" data-action="publish-now" {post_dis} class="w-full h-14 bg-brand-500 text-white rounded-2xl text-sm font-black uppercase tracking-[0.2em] shadow-xl shadow-brand-500/30 hover:bg-brand-600 hover:scale-[1.01] transition-all flex items-center justify-center gap-3 disabled:bg-zinc-400 disabled:shadow-none">
+                    r#"<button type="button" data-action="publish-now" {post_dis} class="w-full min-h-[42px] px-5 bg-brand-500 text-white rounded-[10px] text-[14px] font-semibold shadow-sm hover:bg-brand-600 transition-all flex items-center justify-center gap-2.5 disabled:bg-zinc-400 disabled:shadow-none">
                         {ico}
                         Hemen Yayınla
                     </button>"#
@@ -2493,9 +2493,9 @@ fn render_step_4(s: &AppState) -> String {
                 icons::shield_check("w-4 h-4")
             };
             format!(
-                r#"<button type="button" data-action="save-draft" {post_dis} class="w-full h-14 bg-amber-600 text-white rounded-2xl text-xs sm:text-sm font-black uppercase tracking-[0.16em] shadow-xl shadow-amber-600/25 hover:bg-amber-700 hover:scale-[1.01] transition-all flex items-center justify-center gap-3 disabled:bg-zinc-400 disabled:shadow-none">
+                r#"<button type="button" data-action="save-draft" {post_dis} class="w-full min-h-[42px] px-5 bg-amber-600 text-white rounded-[10px] text-[14px] font-semibold shadow-sm hover:bg-amber-700 transition-all flex items-center justify-center gap-2.5 disabled:bg-zinc-400 disabled:shadow-none">
                     {ico}
-                    BAŞEDİTÖR ONAYINA GÖNDER
+                    Başeditör Onayına Gönder
                 </button>"#
             )
         }
@@ -2514,7 +2514,7 @@ fn render_step_4(s: &AppState) -> String {
                     icons::clock("w-4 h-4")
                 };
                 format!(
-                    r#"<button id="btn-schedule-post" type="button" data-action="save-draft" {sched_dis} class="w-full h-14 bg-brand-500 text-white rounded-2xl text-sm font-black uppercase tracking-[0.2em] shadow-xl shadow-brand-500/30 hover:bg-brand-600 hover:scale-[1.01] transition-all flex items-center justify-center gap-3 disabled:bg-zinc-400 disabled:shadow-none">
+                    r#"<button id="btn-schedule-post" type="button" data-action="save-draft" {sched_dis} class="w-full min-h-[42px] px-5 bg-brand-500 text-white rounded-[10px] text-[14px] font-semibold shadow-sm hover:bg-brand-600 transition-all flex items-center justify-center gap-2.5 disabled:bg-zinc-400 disabled:shadow-none">
                         {ico}
                         Yayını Zamanla
                     </button>"#
@@ -2531,9 +2531,9 @@ fn render_step_4(s: &AppState) -> String {
                     icons::save("w-4 h-4")
                 };
                 format!(
-                    r#"<button type="button" data-action="save-draft" {post_dis} class="w-full h-14 bg-zinc-800 text-white rounded-2xl text-sm font-black uppercase tracking-[0.2em] shadow-lg hover:bg-zinc-900 transition-all flex items-center justify-center gap-3 disabled:bg-zinc-400">
+                    r#"<button type="button" data-action="save-draft" {post_dis} class="w-full min-h-[42px] px-5 bg-zinc-800 text-white rounded-[10px] text-[14px] font-semibold shadow-sm hover:bg-zinc-900 transition-all flex items-center justify-center gap-2.5 disabled:bg-zinc-400">
                         {ico}
-                        ARŞİVE KAYDET
+                        Arşive Kaydet
                     </button>"#
                 )
             }
@@ -2674,7 +2674,7 @@ fn render_step_4(s: &AppState) -> String {
     }
 
     let ssb_groups_html = if s.ssb_tags_catalog.is_empty() {
-        r#"<div class="text-[10px] font-semibold text-zinc-400 py-2">SSB teknoloji kataloğu yükleniyor...</div>"#.to_string()
+        r#"<div class="text-xs font-semibold text-zinc-400 py-2">SSB teknoloji kataloğu yükleniyor...</div>"#.to_string()
     } else {
         let mut g_out = String::new();
         for grp in &ordered_groups {
@@ -2700,7 +2700,7 @@ fn render_step_4(s: &AppState) -> String {
             if !chips.is_empty() {
                 g_out.push_str(&format!(
                     r#"<div class="space-y-1">
-                        <div class="text-[9px] font-black uppercase tracking-widest text-zinc-400">{grp_esc}</div>
+                        <div class="text-xs font-black uppercase tracking-widest text-zinc-400">{grp_esc}</div>
                         <div class="flex items-center flex-wrap gap-1.5">{chips}</div>
                     </div>"#,
                     grp_esc = escape_html(grp),
@@ -2727,7 +2727,7 @@ fn render_step_4(s: &AppState) -> String {
         };
         format!(
             r#"<div class="hf-paywall-price-box">
-                <label class="text-[9px] font-black uppercase tracking-widest text-zinc-500">Tekil Makale Satış Fiyatı (₺)</label>
+                <label class="text-xs font-black uppercase tracking-widest text-zinc-500">Tekil Makale Satış Fiyatı (₺)</label>
                 <div class="relative w-36">
                     <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-zinc-400">₺</span>
                     <input data-input="article-single-price" type="number" min="0" step="0.50" value="{price_val}" placeholder="45.00" class="w-full h-9 bg-white border border-zinc-200 rounded-xl pl-7 pr-3 text-xs font-extrabold text-zinc-800 focus:outline-none focus:border-brand-500" />
@@ -2752,11 +2752,11 @@ fn render_step_4(s: &AppState) -> String {
         format!(
             r#"<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-amber-200/60">
                 <div class="space-y-0.5">
-                    <label class="text-[9px] font-black uppercase tracking-widest text-amber-800 px-0.5">Sponsor Kuruluş Adı</label>
+                    <label class="text-xs font-black uppercase tracking-widest text-amber-800 px-0.5">Sponsor Kuruluş Adı</label>
                     <input data-input="article-sponsor-brand" type="text" value="{b}" placeholder="Örn: ASELSAN, ROKETSAN" class="w-full h-9 bg-white border border-amber-200 rounded-xl px-3 text-xs font-bold text-zinc-800 focus:outline-none focus:border-amber-500" />
                 </div>
                 <div class="space-y-0.5">
-                    <label class="text-[9px] font-black uppercase tracking-widest text-amber-800 px-0.5">Yasal Etiket</label>
+                    <label class="text-xs font-black uppercase tracking-widest text-amber-800 px-0.5">Yasal Etiket</label>
                     <input data-input="article-sponsor-label" type="text" value="{l}" placeholder="ADVERTORIAL / KURUMSAL İŞ BİRLİĞİ" class="w-full h-9 bg-white border border-amber-200 rounded-xl px-3 text-[11px] font-bold text-zinc-800 focus:outline-none focus:border-amber-500" />
                 </div>
             </div>"#,
@@ -2784,10 +2784,10 @@ fn render_step_4(s: &AppState) -> String {
     let en_sel_ap = if en_st == "approved" { "selected" } else { "" };
     let en_summary_hint = if has_en {
         format!(
-            r#"<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase">EN Başlık Mevcut</span>"#
+            r#"<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs font-black uppercase">EN Başlık Mevcut</span>"#
         )
     } else {
-        r#"<span class="px-2 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[9px] font-bold">1. Adımdan EN Eklenebilir</span>"#.to_string()
+        r#"<span class="px-2 py-0.5 rounded bg-zinc-100 text-zinc-500 text-xs font-bold">1. Adımdan EN Eklenebilir</span>"#.to_string()
     };
 
     let selected_cat_ids = art.categories.as_deref().unwrap_or(&[]);
@@ -2811,7 +2811,7 @@ fn render_step_4(s: &AppState) -> String {
         if let Some(item) = tree.iter().find(|t| t.category.id == leaf_id) {
             let color = item.category.color.as_deref().unwrap_or("#52c2ef");
             format!(
-                r#"<span style="background-color: {color};" class="px-2 py-1 text-white rounded text-[9px] font-black uppercase tracking-widest">{path}</span>"#,
+                r#"<span style="background-color: {color};" class="px-2 py-1 text-white rounded text-xs font-black uppercase tracking-widest">{path}</span>"#,
                 color = escape_html(color),
                 path = escape_html(&item.path_label),
             )
@@ -2822,12 +2822,12 @@ fn render_step_4(s: &AppState) -> String {
         String::new()
     };
 
-    let manage_cats_btn = r#"<button type="button" data-action="toggle-settings-popover" class="text-[9px] font-black uppercase tracking-widest text-brand-600 hover:underline">Kategorileri Yönet</button>"#;
+    let manage_cats_btn = r#"<button type="button" data-action="toggle-settings-popover" class="text-xs font-black uppercase tracking-widest text-brand-600 hover:underline">Kategorileri Yönet</button>"#;
 
     let categories_selector_html = if tree.is_empty() {
         format!(
             r#"<div class="p-4 bg-zinc-50 border border-dashed border-zinc-200 rounded-2xl flex items-center justify-between gap-3">
-                <div class="text-[10px] font-bold text-zinc-400">Henüz tanımlı kategori yok.</div>
+                <div class="text-xs font-bold text-zinc-400">Henüz tanımlı kategori yok.</div>
                 {manage_cats_btn}
             </div>"#
         )
@@ -2924,7 +2924,7 @@ fn render_step_4(s: &AppState) -> String {
         format!(
             r#"<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div class="space-y-1 min-w-0">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-1 block">Üst / Ana Kategori</span>
+                    <span class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1 block">Üst / Ana Kategori</span>
                     <div class="relative">
                         <select data-change="step4-parent-category" class="w-full h-12 bg-zinc-100 rounded-xl px-4 pr-10 text-xs font-bold text-zinc-800 focus:outline-none appearance-none">
                             {root_opts}
@@ -2933,7 +2933,7 @@ fn render_step_4(s: &AppState) -> String {
                     </div>
                 </div>
                 <div class="space-y-1 min-w-0">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-1 block">Alt Kategori</span>
+                    <span class="text-xs font-black uppercase tracking-widest text-zinc-400 px-1 block">Alt Kategori</span>
                     <div class="relative">
                         <select data-change="step4-sub-category" {sub_disabled} class="w-full h-12 bg-zinc-100 rounded-xl px-4 pr-10 text-xs font-bold text-zinc-800 focus:outline-none appearance-none disabled:opacity-50">
                             {sub_opts}
@@ -3037,20 +3037,20 @@ fn render_step_4(s: &AppState) -> String {
                         <div class="w-8 h-8 bg-zinc-900 text-white rounded-lg flex items-center justify-center">{chk_ico}</div>
                         <div class="flex flex-col">
                             <span class="text-sm font-black text-zinc-800">Son Kontrol & Yayınlama</span>
-                            <span class="text-[10px] font-bold text-zinc-400">MSI Dergisi / MSI TDR editoryal yayın, sayı, taksonomi ve erişim ayarları.</span>
+                            <span class="text-xs font-bold text-zinc-400">MSI Dergisi / MSI TDR editoryal yayın, sayı, taksonomi ve erişim ayarları.</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="hf-step4-summary-card">
-                    <div class="flex items-start gap-3.5">
+                    <div class="hf-step4-summary-top flex items-start gap-3.5">
                         <div class="hf-step4-summary-thumb">
                             {hero_img}
                         </div>
                         <div class="flex-1 min-w-0 space-y-1.5">
                             <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="px-2 py-0.5 bg-brand-100 text-brand-600 rounded text-[9px] font-black uppercase tracking-widest">{blk_cnt} Blok • {word_cnt} Kelime • {read_mins} dk</span>
-                                <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest {seo_badge_cls}">SEO {seo_score}/100</span>
+                                <span class="px-2 py-0.5 bg-brand-100 text-brand-600 rounded text-xs font-black uppercase tracking-widest">{blk_cnt} Blok • {word_cnt} Kelime • {read_mins} dk</span>
+                                <span class="px-2 py-0.5 rounded text-xs font-black uppercase tracking-widest {seo_badge_cls}">SEO {seo_score}/100</span>
                                 {preview_cat_badges}
                                 {preview_extra_badges}
                                 {kw_badge}
@@ -3073,15 +3073,15 @@ fn render_step_4(s: &AppState) -> String {
 
                 <div class="hf-msi-card">
                     <div class="flex items-center justify-between gap-2">
-                        <div class="text-[10px] font-black uppercase tracking-widest text-zinc-700 flex items-center gap-1.5">
+                        <div class="text-xs font-black uppercase tracking-widest text-zinc-700 flex items-center gap-1.5">
                             {book_ico}
                             <span>Yayın Kanalı, İçerik Formatı &amp; Dergi Sayısı</span>
                         </div>
-                        <button type="button" data-action="open-settings-issues" class="text-[9px] font-black uppercase tracking-wider text-brand-600 hover:underline">Sayıları Yönet</button>
+                        <button type="button" data-action="open-settings-issues" class="text-xs font-black uppercase tracking-wider text-brand-600 hover:underline">Sayıları Yönet</button>
                     </div>
 
                     <div class="space-y-1">
-                        <span class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">Yayın Kanalı</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">Yayın Kanalı</span>
                         <div class="hf-seg-group">
                             <button type="button" data-action="set-pub-channel" data-channel="news" class="{ch_news}">Savunma Haber</button>
                             <button type="button" data-action="set-pub-channel" data-channel="magazine" class="{ch_mag}">MSI Dergisi</button>
@@ -3091,7 +3091,7 @@ fn render_step_4(s: &AppState) -> String {
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div class="space-y-1 min-w-0">
-                            <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">İçerik Formatı</label>
+                            <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">İçerik Formatı</label>
                             <div class="relative">
                                 <select data-change="article-content-type" class="w-full h-10 bg-zinc-50 border border-zinc-200/80 rounded-xl px-3 pr-8 text-xs font-bold text-zinc-800 focus:outline-none focus:border-brand-500 appearance-none">
                                     {format_opts}
@@ -3100,13 +3100,13 @@ fn render_step_4(s: &AppState) -> String {
                             </div>
                         </div>
                         <div class="space-y-1 min-w-0">
-                            <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">Sayfa Aralığı (Dergi)</label>
+                            <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">Sayfa Aralığı (Dergi)</label>
                             <input data-input="article-issue-pages" type="text" value="{page_range}" placeholder="Sayfa aralığı (Örn: S. 22-30)" class="w-full h-10 bg-zinc-50 border border-zinc-200/80 rounded-xl px-3 text-xs font-bold text-zinc-800 focus:outline-none focus:border-brand-500" />
                         </div>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">Bağlı Dergi Sayısı (MSI Dergisi / MSI TDR)</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">Bağlı Dergi Sayısı (MSI Dergisi / MSI TDR)</label>
                         <div class="relative">
                             <select data-change="article-issue-number" class="w-full h-10 bg-zinc-50 border border-zinc-200/80 rounded-xl px-3 pr-8 text-xs font-bold text-zinc-800 focus:outline-none focus:border-brand-500 appearance-none">
                                 {issue_opts}
@@ -3120,7 +3120,7 @@ fn render_step_4(s: &AppState) -> String {
                             {star_ico}
                             <div class="min-w-0">
                                 <div class="text-xs font-extrabold text-zinc-800">Manşet / Vitrin Öne Çıkan İçerik</div>
-                                <div class="text-[10px] font-semibold text-zinc-400">Ana vitrinde / kapak dosyası sahnesinde öne çıkar</div>
+                                <div class="text-xs font-semibold text-zinc-400">Ana vitrinde / kapak dosyası sahnesinde öne çıkar</div>
                             </div>
                         </div>
                         <button type="button" data-action="toggle-is-featured" role="switch" aria-checked="{feat_aria}" class="hf-switch-btn {feat_cls}">
@@ -3131,7 +3131,7 @@ fn render_step_4(s: &AppState) -> String {
 
                 <div class="space-y-2">
                     <div class="flex items-center justify-between px-1">
-                        <label class="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                        <label class="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
                             {tag_ico} Haber Kategorisi
                         </label>
                         {manage_cats_btn}
@@ -3141,7 +3141,7 @@ fn render_step_4(s: &AppState) -> String {
 
                 <div class="hf-msi-card">
                     <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <div class="text-[10px] font-black uppercase tracking-widest text-zinc-700 flex items-center gap-1.5">
+                        <div class="text-xs font-black uppercase tracking-widest text-zinc-700 flex items-center gap-1.5">
                             {shield_ico}
                             <span>SSB Savunma Sanayii Teknoloji Taksonomisi</span>
                         </div>
@@ -3151,13 +3151,13 @@ fn render_step_4(s: &AppState) -> String {
                 </div>
 
                 <div class="hf-msi-card">
-                    <div class="text-[10px] font-black uppercase tracking-widest text-zinc-700 flex items-center gap-1.5">
+                    <div class="text-xs font-black uppercase tracking-widest text-zinc-700 flex items-center gap-1.5">
                         {lock_ico}
                         <span>Erişim Kademesi (Paywall) &amp; Kurumsal Sponsorluk</span>
                     </div>
 
                     <div class="space-y-1.5">
-                        <span class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">Erişim Seviyesi</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">Erişim Seviyesi</span>
                         <div class="hf-seg-group">
                             <button type="button" data-action="set-visibility-level" data-level="0" class="{vis_0}">Açık Erişim</button>
                             <button type="button" data-action="set-visibility-level" data-level="1" class="{vis_1}">Üye &amp; Kamu (.gov.tr/.tsk.tr)</button>
@@ -3171,7 +3171,7 @@ fn render_step_4(s: &AppState) -> String {
                         <div class="hf-control-row">
                             <div class="min-w-0">
                                 <div class="text-xs font-extrabold text-zinc-800">Sponsorlu İçerik / Advertorial</div>
-                                <div class="text-[10px] font-semibold text-zinc-400">Kurumsal iş birliği / Advertorial — abone duvarından muaftır</div>
+                                <div class="text-xs font-semibold text-zinc-400">Kurumsal iş birliği / Advertorial — abone duvarından muaftır</div>
                             </div>
                             <button type="button" data-action="toggle-is-sponsored" role="switch" aria-checked="{spon_aria}" class="hf-switch-btn {spon_cls}">
                                 <span class="hf-switch-knob"></span>
@@ -3182,10 +3182,10 @@ fn render_step_4(s: &AppState) -> String {
                 </div>
 
                 <div class="hf-msi-card">
-                    <div class="text-[10px] font-black uppercase tracking-widest text-zinc-700">Editoryal Onay &amp; Yayın Akışı</div>
+                    <div class="text-xs font-black uppercase tracking-widest text-zinc-700">Editoryal Onay &amp; Yayın Akışı</div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div class="space-y-1 min-w-0">
-                            <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-0.5">Türkçe Yayın / Onay Durumu</label>
+                            <label class="text-xs font-black uppercase tracking-widest text-zinc-400 px-0.5">Türkçe Yayın / Onay Durumu</label>
                             <div class="relative">
                                 <select data-change="article-status" class="w-full h-11 bg-zinc-100 rounded-xl px-3.5 pr-9 text-xs font-bold text-zinc-800 focus:outline-none appearance-none">
                                     <option value="draft" {sel_draft}>Taslak (Hazırlanıyor)</option>
@@ -3197,7 +3197,7 @@ fn render_step_4(s: &AppState) -> String {
                         </div>
                         <div class="space-y-1 min-w-0">
                             <div class="flex items-center justify-between gap-1 px-0.5">
-                                <label class="text-[9px] font-black uppercase tracking-widest text-zinc-400">İngilizce (MSI TDR) Durumu</label>
+                                <label class="text-xs font-black uppercase tracking-widest text-zinc-400">İngilizce (MSI TDR) Durumu</label>
                                 {en_summary_hint}
                             </div>
                             <div class="relative">
@@ -3215,7 +3215,7 @@ fn render_step_4(s: &AppState) -> String {
                 </div>
 
                 <div class="hf-article-controls-card">
-                    <div class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Hassas İçerik & Haber Kontrolleri</div>
+                    <div class="text-xs font-black uppercase tracking-widest text-zinc-500">Hassas İçerik & Haber Kontrolleri</div>
                     <div class="hf-control-row">
                         <div class="flex items-center gap-2.5 min-w-0">
                             <div class="w-8 h-8 rounded-xl bg-zinc-100 text-zinc-600 flex items-center justify-center shrink-0">
@@ -3223,7 +3223,7 @@ fn render_step_4(s: &AppState) -> String {
                             </div>
                             <div class="min-w-0">
                                 <div class="text-xs font-extrabold text-zinc-800">Yorumlara Kapat</div>
-                                <div class="text-[10px] font-semibold text-zinc-400">Bu haberde okuyucu yorum alanını devre dışı bırak</div>
+                                <div class="text-xs font-semibold text-zinc-400">Bu haberde okuyucu yorum alanını devre dışı bırak</div>
                             </div>
                         </div>
                         <button type="button" data-action="toggle-comments-locked" role="switch" aria-checked="{c_aria}" class="hf-switch-btn {c_lock_cls}">
@@ -3237,7 +3237,7 @@ fn render_step_4(s: &AppState) -> String {
                             </div>
                             <div class="min-w-0">
                                 <div class="text-xs font-extrabold text-zinc-800">Bu Haberde Reklam Gösterme</div>
-                                <div class="text-[10px] font-semibold text-zinc-400">Adli veya hassas haberlerde reklam yerleşimlerini kapat</div>
+                                <div class="text-xs font-semibold text-zinc-400">Adli veya hassas haberlerde reklam yerleşimlerini kapat</div>
                             </div>
                         </div>
                         <button type="button" data-action="toggle-ads-disabled" role="switch" aria-checked="{a_aria}" class="hf-switch-btn {ads_off_cls}">
@@ -3248,7 +3248,7 @@ fn render_step_4(s: &AppState) -> String {
 
                 {primary_action_btn}
 
-                <button type="button" data-action="{secondary_draft_action}" {post_dis} class="w-full h-12 bg-white text-zinc-600 border-2 border-zinc-200 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-zinc-50 hover:border-zinc-300 transition-all flex items-center justify-center gap-2 mt-1">
+                <button type="button" data-action="{secondary_draft_action}" {post_dis} class="w-full min-h-[38px] px-4 bg-white text-zinc-700 border border-zinc-200 rounded-[10px] text-[13px] font-semibold hover:bg-zinc-50 hover:border-zinc-300 transition-all flex items-center justify-center gap-2 mt-1">
                     {save_ico}
                     {draft_btn_lbl}
                 </button>

@@ -979,6 +979,59 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                 },
                 |f| {
                     append_antispam_fields(f);
+                    let progress_aria = if ctx.lang.eq_ignore_ascii_case("en") {
+                        "Registration steps"
+                    } else {
+                        "Kayıt adımları"
+                    };
+                    let step_shorts = if ctx.lang.eq_ignore_ascii_case("en") {
+                        [
+                            ("1", "01", "Identity"),
+                            ("2", "02", "Organisation"),
+                            ("3", "03", "Interests"),
+                            ("4", "04", "Consents"),
+                        ]
+                    } else {
+                        [
+                            ("1", "01", "Kimlik"),
+                            ("2", "02", "Kurum"),
+                            ("3", "03", "Alanlar"),
+                            ("4", "04", "Onaylar"),
+                        ]
+                    };
+                    f.el(
+                        "nav",
+                        &[
+                            ("class", "auth-reg-progress"),
+                            ("data-reg-progress", ""),
+                            ("aria-label", progress_aria),
+                        ],
+                        |nav| {
+                            for (step_idx, num, label) in step_shorts {
+                                let cls = if step_idx == "1" {
+                                    "auth-reg-step-pill is-active"
+                                } else {
+                                    "auth-reg-step-pill"
+                                };
+                                nav.el(
+                                    "button",
+                                    &[
+                                        ("type", "button"),
+                                        ("class", cls),
+                                        ("data-reg-jump", step_idx),
+                                    ],
+                                    |btn| {
+                                        btn.el("span", &[("class", "auth-reg-pill-num")], |s| {
+                                            s.text(num);
+                                        });
+                                        btn.el("span", &[("class", "auth-reg-pill-label")], |s| {
+                                            s.text(label);
+                                        });
+                                    },
+                                );
+                            }
+                        },
+                    );
                     // Step 1: Identity & Credentials
                     f.el("section", &[("class", "auth-reg-section"), ("data-reg-step", "1")], |sec| {
                         sec.el("div", &[("class", "auth-reg-section-head")], |hd| {

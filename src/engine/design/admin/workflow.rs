@@ -2,8 +2,9 @@
 //! `#tab-12` Bulk Operations & Version History, `#tab-6` Targeted B2B Newsletters & Email Groups.
 
 use super::ui::{
-    action_btn, admin_card, admin_drawer, check_pill, form_group, icon, input_ctrl, lang_tabs,
-    ops_table, select_ctrl, subtab_bar, subtab_pane, tab_pane, textarea_ctrl,
+    action_btn, admin_card, admin_drawer, check_pill, form_group, form_panel_header, icon,
+    input_ctrl, lang_tabs, ops_table, select_ctrl, subtab_bar, subtab_pane, tab_pane,
+    textarea_ctrl,
 };
 use super::{institution_tags, ssb_tags, tr_admin};
 use crate::engine::design::html_dsl::HtmlBuf;
@@ -54,7 +55,7 @@ fn render_tab_approvals(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         (&col_type, ""),
                         (&col_submitted, ""),
                         (&col_status, ""),
-                        (&col_decision, ""),
+                        (&col_decision, "col-action"),
                     ],
                     "tbody-pending-approvals",
                     Some(&loading),
@@ -70,13 +71,18 @@ fn render_tab_approvals(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                 ("class", "modal-overlay hidden"),
                 ("role", "dialog"),
                 ("aria-modal", "true"),
+                ("aria-hidden", "true"),
                 ("aria-labelledby", "approval-modal-title"),
             ],
             |ov| {
                 ov.el("div", &[("class", "modal-content admin-card")], |mc| {
                     mc.el("div", &[("class", "panel-header")], |hdr| {
                         hdr.el("div", &[("class", "panel-title"), ("id", "approval-modal-title")], |t| {
-                            t.text(&modal_title);
+                            icon(t, "fa-check-square-o");
+                            t.raw(" ");
+                            t.el("span", &[("id", "approval-modal-title-text")], |tx| {
+                                tx.text(&modal_title);
+                            });
                         });
                         hdr.el(
                             "button",
@@ -269,6 +275,7 @@ fn render_tab_newsletters(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) 
     let nl_loading = tr_admin(tr, lang, "admin.workflow.nl_loading", "Gönderilen bülten kampanyaları yükleniyor...", "Loading sent newsletter campaigns...");
 
     let drawer_title = tr_admin(tr, lang, "admin.workflow.nl_drawer_title", "Hedefli Kurumsal E-Bülten Gönderimi", "Targeted Corporate Newsletter Dispatch");
+    let nl_clear_btn = tr_admin(tr, lang, "admin.form.clear", "Temizle", "Clear");
     let close_lbl = tr_admin(tr, lang, "admin.form.close", "Kapat", "Close");
     let tab_tr = tr_admin(tr, lang, "admin.workflow.nl_tab_tr", "Türkçe Konu", "Turkish Subject");
     let tab_en = tr_admin(tr, lang, "admin.workflow.nl_tab_en", "English Subject", "English Subject");
@@ -348,7 +355,7 @@ fn render_tab_newsletters(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) 
                             (&col_audience, ""),
                             (&col_sponsor, ""),
                             (&col_delivery, ""),
-                            (&col_action, ""),
+                            (&col_action, "col-action"),
                         ],
                         "tbody-newsletters",
                         Some(&nl_loading),
@@ -363,7 +370,7 @@ fn render_tab_newsletters(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) 
                 "newsletter-drawer-heading",
                 &drawer_title,
                 &close_lbl,
-                |_| {},
+                |act| action_btn(act, "btn-cmd btn-cmd-sm", "reset-newsletter-form", None, Some("fa-eraser"), &nl_clear_btn),
                 |body| {
                     body.el_with("form", |a| { a.attr("id", "form-newsletter").bool_attr("novalidate", true); }, |f| {
                         lang_tabs(
@@ -442,6 +449,7 @@ fn render_tab_newsletters(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) 
                 },
                 |card| {
                     card.el("div", &[("id", "email-group-form-container"), ("class", "hidden form-container-elevated")], |fc| {
+                        form_panel_header(fc, "email-group-form-title", "fa-users", &eg_new_btn, "hide-email-group-form", &close_lbl);
                         fc.el_with("form", |a| { a.attr("id", "form-email-group").bool_attr("novalidate", true); }, |f| {
                             f.void_el("input", &[("type", "hidden"), ("id", "eg-id"), ("value", "0")]);
                             f.el("div", &[("class", "form-row-3")], |r| {
@@ -488,7 +496,7 @@ fn render_tab_newsletters(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) 
                             (&eg_col_name, ""),
                             (&eg_col_filter, ""),
                             (&eg_col_status, ""),
-                            (&col_action, ""),
+                            (&col_action, "col-action"),
                         ],
                         "tbody-email-groups",
                         Some(&eg_loading),

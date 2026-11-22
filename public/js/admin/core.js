@@ -162,6 +162,7 @@
     "arrow-down": '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
     "arrow-up": '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     "arrow-right": '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    "chevron-down": '<path d="m6 9 6 6 6-6"/>',
     lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     unlock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     minus: '<path d="M5 12h14"/>',
@@ -433,7 +434,7 @@
     const toast = document.createElement("div");
     toast.className = `ops-toast toast-${variant}`;
     toast.setAttribute("role", variant === "error" ? "alert" : "status");
-    toast.innerHTML = `<span class="ops-toast-icon" aria-hidden="true">${svgIcon(icon, semClass)}</span><span class="ops-toast-body"></span><button type="button" class="ops-toast-close" aria-label="${t("admin.toast.dismiss", "Kapat", "Dismiss")}">${svgIcon("times", "")}</button>`;
+    toast.innerHTML = `<span class="ops-toast-icon" aria-hidden="true">${svgIcon(icon, semClass)}</span><span class="ops-toast-body"></span><button type="button" class="ops-toast-close" aria-label="${esc(t("admin.toast.dismiss", "Kapat", "Dismiss"))}">${svgIcon("times", "")}</button>`;
     toast.querySelector(".ops-toast-body").textContent = String(msg ?? "");
     toast.querySelector(".ops-toast-close").addEventListener("click", () => dismissToast(toast));
     region.appendChild(toast);
@@ -443,12 +444,21 @@
     }
   }
 
+  function syncBodyScrollLock() {
+    if (!document.body) return;
+    const anyOpen = Boolean(
+      document.querySelector(".modal-overlay:not(.hidden), .admin-drawer-backdrop:not(.hidden), .drawer.open, .admin-drawer.open"),
+    );
+    document.body.classList.toggle("adm-scroll-locked", anyOpen);
+  }
+
   function openModal(modalOrId, focusEl) {
     const modal = typeof modalOrId === "string" ? byId(modalOrId) : modalOrId;
     if (!modal) return;
     modal._prevFocus = document.activeElement;
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
+    syncBodyScrollLock();
     if (window.gsap && !prefersReducedMotion()) {
       const card = modal.querySelector(".modal-content");
       window.gsap.killTweensOf([modal, card].filter(Boolean));
@@ -470,6 +480,7 @@
     if (window.gsap) window.gsap.killTweensOf([modal, card].filter(Boolean));
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
+    syncBodyScrollLock();
     const prev = modal._prevFocus;
     modal._prevFocus = null;
     if (prev && typeof prev.focus === "function") {
@@ -486,6 +497,7 @@
     if (window.gsap) window.gsap.killTweensOf([modal, card].filter(Boolean));
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
+    syncBodyScrollLock();
     const resolve = _confirmResolver;
     _confirmResolver = null;
     const prev = _confirmPrevFocus;
@@ -515,6 +527,7 @@
     }
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
+    syncBodyScrollLock();
     if (window.gsap && !prefersReducedMotion()) {
       const card = modal.querySelector(".modal-content");
       window.gsap.killTweensOf([modal, card].filter(Boolean));
@@ -821,6 +834,7 @@
     d.classList.remove("hidden");
     d.classList.add("open");
     d.setAttribute("aria-hidden", "false");
+    syncBodyScrollLock();
     if (window.gsap && !prefersReducedMotion()) {
       const panel = d.querySelector(".admin-drawer") || d;
       window.gsap.killTweensOf([d, panel]);
@@ -853,6 +867,7 @@
       }
     });
     if (closedAny) {
+      syncBodyScrollLock();
       const prev = _drawerPrevFocus;
       _drawerPrevFocus = null;
       if (prev && typeof prev.focus === "function") {
@@ -965,17 +980,51 @@
     const heroStrip = byId("hero-quick-actions");
     if (heroStrip) {
       const preferred = ROLE_HERO_PRIORITIES[me.role] || null;
-      let shown = 0;
-      heroStrip.querySelectorAll("button, a").forEach((el) => {
-        if (el.getAttribute("data-rbac-hidden") === "1") return;
+      const overflowWrap = byId("hero-overflow-wrap");
+      const overflowMenu = byId("hero-overflow-menu");
+      const overflowCount = byId("hero-overflow-count");
+      const overflowToggle = byId("hero-overflow-toggle");
+      const shortcutItems = Array.from(heroStrip.querySelectorAll('[data-hero-shortcut="1"]'))
+        .sort((a, b) => Number(a.dataset.heroOrder || 0) - Number(b.dataset.heroOrder || 0));
+      shortcutItems.forEach((el) => {
+        el.classList.remove("hero-overflow-item");
+        el.removeAttribute("role");
+        el.removeAttribute("tabindex");
+        if (overflowWrap && overflowWrap.parentNode === heroStrip) heroStrip.insertBefore(el, overflowWrap);
+        else heroStrip.appendChild(el);
+      });
+      const keyOf = (el) => {
         const href = el.getAttribute("href") || "";
-        const key = el.getAttribute("data-admin-action") ||
+        return el.getAttribute("data-admin-action") ||
           el.getAttribute("data-tab") ||
           (href.endsWith("/editor") ? "editorial_studio" : (href.endsWith("/tasarim") ? "studio" : ""));
-        const keep = preferred ? (preferred.includes(key) && shown < 4) : (shown < 4);
-        el.classList.toggle("hidden", !keep);
-        if (keep) shown++;
+      };
+      const permitted = shortcutItems.filter((el) => el.getAttribute("data-rbac-hidden") !== "1");
+      const ranked = preferred
+        ? [
+            ...preferred.map((k) => permitted.find((el) => keyOf(el) === k)).filter(Boolean),
+            ...permitted.filter((el) => !preferred.includes(keyOf(el))),
+          ]
+        : permitted;
+      const primary = ranked.slice(0, 4);
+      const overflow = ranked.slice(4);
+      primary.forEach((el) => {
+        el.classList.remove("hidden");
+        if (overflowWrap && overflowWrap.parentNode === heroStrip) heroStrip.insertBefore(el, overflowWrap);
       });
+      if (overflowMenu) {
+        overflow.forEach((el) => {
+          el.classList.remove("hidden");
+          el.classList.add("hero-overflow-item");
+          el.setAttribute("role", "menuitem");
+          el.setAttribute("tabindex", "-1");
+          overflowMenu.appendChild(el);
+        });
+        overflowMenu.classList.add("hidden");
+      }
+      if (overflowCount) overflowCount.textContent = String(overflow.length);
+      if (overflowToggle) overflowToggle.setAttribute("aria-expanded", "false");
+      if (overflowWrap) overflowWrap.classList.toggle("hidden", overflow.length === 0);
     }
     const active = document.querySelector(".sidebar-link.active[data-tab], .tab-btn.active[data-tab]");
     const pref = (ROLE_LANDING_TABS[me.role] || []).map((tid) => document.querySelector(`.sidebar-link[data-tab="${tid}"]:not([data-rbac-hidden="1"])`)).find(Boolean);
@@ -1169,7 +1218,7 @@
       const q = (ev.target.value || "").trim().toLowerCase();
       document.querySelectorAll(".sidebar-group").forEach((grp) => {
         let anyVisible = false;
-        grp.querySelectorAll(".sidebar-link[data-tab]").forEach((btn) => {
+        grp.querySelectorAll(".sidebar-link").forEach((btn) => {
           if (btn.getAttribute("data-rbac-hidden") === "1") return;
           const match = !q || btn.textContent.toLowerCase().includes(q) || (grp.getAttribute("data-group-name") || "").toLowerCase().includes(q);
           btn.classList.toggle("hidden", !match);
@@ -1177,6 +1226,104 @@
         });
         grp.classList.toggle("hidden", !anyVisible);
       });
+    });
+
+    const positionHeroOverflowMenu = () => {
+      const menu = byId("hero-overflow-menu");
+      const wrap = byId("hero-overflow-wrap");
+      const toggle = byId("hero-overflow-toggle");
+      if (!menu || !toggle || menu.classList.contains("hidden")) return;
+      menu.classList.remove("align-left", "align-right");
+      menu.style.left = "";
+      menu.style.right = "";
+      const vw = document.documentElement.clientWidth || window.innerWidth || 0;
+      const pad = 12;
+      const anchorRect = (wrap || toggle).getBoundingClientRect();
+      const menuWidth = menu.getBoundingClientRect().width || menu.offsetWidth || 232;
+      const fitsLeft = anchorRect.left >= pad && anchorRect.left + menuWidth <= vw - pad;
+      const fitsRight = anchorRect.right <= vw - pad && anchorRect.right - menuWidth >= pad;
+      if (fitsLeft) {
+        menu.classList.add("align-left");
+      } else if (fitsRight) {
+        menu.classList.add("align-right");
+      } else {
+        const maxLeft = Math.max(0, vw - menuWidth - pad);
+        const clampedLeft = Math.max(Math.min(pad, maxLeft), Math.min(anchorRect.left, maxLeft));
+        menu.classList.add("align-left");
+        menu.style.left = `${Math.round(clampedLeft - anchorRect.left)}px`;
+        menu.style.right = "auto";
+      }
+    };
+    const closeHeroOverflow = (restoreFocus = false) => {
+      const menu = byId("hero-overflow-menu");
+      const toggle = byId("hero-overflow-toggle");
+      const wasOpen = Boolean(menu && !menu.classList.contains("hidden"));
+      if (menu) {
+        menu.classList.add("hidden");
+        menu.classList.remove("align-left", "align-right");
+        menu.style.left = "";
+        menu.style.right = "";
+      }
+      toggle?.setAttribute("aria-expanded", "false");
+      if (wasOpen && restoreFocus && toggle) {
+        try { toggle.focus({ preventScroll: true }); } catch (_) {}
+      }
+    };
+    const openHeroOverflow = (focusIndex = 0) => {
+      const menu = byId("hero-overflow-menu");
+      const toggle = byId("hero-overflow-toggle");
+      if (!menu || !toggle) return;
+      const items = Array.from(menu.querySelectorAll('.hero-overflow-item[role="menuitem"]'));
+      if (!items.length) return;
+      menu.classList.remove("hidden");
+      positionHeroOverflowMenu();
+      toggle.setAttribute("aria-expanded", "true");
+      const targetIdx = focusIndex < 0 ? items.length - 1 : Math.min(focusIndex, items.length - 1);
+      requestAnimationFrame(() => { try { items[targetIdx]?.focus({ preventScroll: true }); } catch (_) {} });
+    };
+    window.addEventListener("resize", () => {
+      const menu = byId("hero-overflow-menu");
+      if (menu && !menu.classList.contains("hidden")) {
+        positionHeroOverflowMenu();
+      }
+    });
+    byId("hero-overflow-toggle")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const menu = byId("hero-overflow-menu");
+      if (!menu) return;
+      if (menu.classList.contains("hidden")) openHeroOverflow(0);
+      else closeHeroOverflow(false);
+    });
+    byId("hero-overflow-wrap")?.addEventListener("keydown", (ev) => {
+      const menu = byId("hero-overflow-menu");
+      const toggle = byId("hero-overflow-toggle");
+      if (!menu || !toggle) return;
+      const items = Array.from(menu.querySelectorAll('.hero-overflow-item[role="menuitem"]'));
+      const isOpen = !menu.classList.contains("hidden");
+      if (ev.target === toggle && (ev.key === "ArrowDown" || ev.key === "ArrowUp")) {
+        ev.preventDefault();
+        openHeroOverflow(ev.key === "ArrowUp" ? -1 : 0);
+        return;
+      }
+      if (!isOpen || !items.length) return;
+      if (ev.key === "Tab") {
+        closeHeroOverflow(false);
+        return;
+      }
+      const curIdx = items.indexOf(document.activeElement);
+      if (ev.key === "ArrowDown") {
+        ev.preventDefault();
+        items[(curIdx + 1) % items.length]?.focus({ preventScroll: true });
+      } else if (ev.key === "ArrowUp") {
+        ev.preventDefault();
+        items[(curIdx - 1 + items.length) % items.length]?.focus({ preventScroll: true });
+      } else if (ev.key === "Home") {
+        ev.preventDefault();
+        items[0]?.focus({ preventScroll: true });
+      } else if (ev.key === "End") {
+        ev.preventDefault();
+        items[items.length - 1]?.focus({ preventScroll: true });
+      }
     });
 
     bindGlow();
@@ -1219,16 +1366,20 @@
           closeConfirmModal(false);
           return;
         }
-        const openModalEl = ["totp-security-modal", "approval-modal", "ad-conflict-modal"]
-          .map((id) => byId(id))
-          .find((el) => el && !el.classList.contains("hidden"));
-        if (openModalEl) {
-          closeModal(openModalEl);
+        const openModals = Array.from(document.querySelectorAll(".modal-overlay:not(.hidden)"))
+          .filter((el) => el.id !== "ops-confirm-modal");
+        if (openModals.length) {
+          closeModal(openModals[openModals.length - 1]);
           return;
         }
         const openDrawerEl = document.querySelector(".admin-drawer-backdrop:not(.hidden), .drawer.open, .admin-drawer.open");
         if (openDrawerEl) {
           closeDrawer();
+          return;
+        }
+        const overflowMenu = byId("hero-overflow-menu");
+        if (overflowMenu && !overflowMenu.classList.contains("hidden")) {
+          closeHeroOverflow(true);
           return;
         }
         if (byId("admin-sidebar")?.classList.contains("open")) {
@@ -1237,8 +1388,11 @@
       }
     });
 
-    document.addEventListener("click", (ev) => {
+    document.addEventListener("click", async (ev) => {
       const targetEl = ev.target;
+      if (!targetEl.closest?.("#hero-overflow-wrap") || targetEl.closest?.("#hero-overflow-menu .hero-overflow-item")) {
+        closeHeroOverflow(false);
+      }
       if (targetEl.classList?.contains("admin-drawer-backdrop")) { closeDrawer(targetEl.id); return; }
       if (targetEl.id === "ops-confirm-modal") { closeConfirmModal(false); return; }
       if (targetEl.classList?.contains("modal-overlay")) { closeModal(targetEl); return; }
@@ -1258,8 +1412,14 @@
       if (act === "close-drawer") {
         closeDrawer(el.getAttribute("data-drawer-target") || el.closest(".admin-drawer-backdrop, .admin-drawer, .drawer")?.id);
       } else if (act === "toggle-theme") toggleTheme();
-      else if (act === "refresh-all") { refreshAllData(); showToast(t("admin.toast.all_refreshed", "Tüm modül verileri güncellendi.", "All module data refreshed.")); }
-      else if (act === "logout-operator") logoutOperator();
+      else if (act === "refresh-all") {
+        try {
+          await refreshAllData();
+          showToast(t("admin.toast.all_refreshed", "Tüm modül verileri güncellendi.", "All module data refreshed."));
+        } catch (err) {
+          showToast(err?.message || t("admin.state.error", "Veri yüklenemedi.", "Failed to load data."), true);
+        }
+      } else if (act === "logout-operator") logoutOperator();
       else if (act === "paginate") {
         const cid = el.getAttribute("data-container"), p = parseInt(el.getAttribute("data-page") || "1", 10);
         if (cid && typeof paginationHandlers[cid] === "function" && p >= 1) paginationHandlers[cid](p);

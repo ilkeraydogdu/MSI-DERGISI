@@ -14,7 +14,11 @@ use crate::engine::security_engine::escape_html as esc;
 
 pub async fn render_design_tokens_css(State(state): State<AppState>) -> Response {
     let settings = state.db.get_setting_map("tr");
-    let css = crate::engine::design::config::load(&settings).css();
+    let static_path = std::path::Path::new(&state.config.static_dir).join("css/design-tokens.css");
+    let base_tokens = std::fs::read_to_string(&static_path)
+        .unwrap_or_else(|_| include_str!("../../../public/css/design-tokens.css").to_string());
+    let dynamic_css = crate::engine::design::config::load(&settings).css();
+    let css = format!("{base_tokens}\n{dynamic_css}");
     (
         StatusCode::OK,
         [

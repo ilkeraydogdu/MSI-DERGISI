@@ -25,7 +25,7 @@
     box.id = "iss-converter-box";
     box.className = "form-group mt-2";
     box.innerHTML = `
-      <div class="flex flex-wrap items-center justify-between gap-2 p-3 border rounded">
+      <div class="flex flex-wrap items-center justify-between gap-2 p-3 border rounded-md">
         <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer">
           <input type="checkbox" id="iss-auto-convert" checked>
           <span>${esc(t("admin.issues.auto_convert", "PDF yüklenince / kaydedilince otomatik Web E-Dergi'ye dönüştür", "Auto-convert to Web E-Dergi on save"))}</span>
@@ -120,7 +120,7 @@
         <td>
           <div class="flex gap-2">
             ${editBtns}
-            <a href="/e-dergi?issue=${esc(iss.issue_number)}&publication_type=${encodeURIComponent(pubType)}" target="_blank" class="btn-cmd btn-cmd-sm" title="Dijital Kiosk'ta Aç">${svgIcon("external-link")}</a>
+            <a href="/e-dergi?issue=${esc(iss.issue_number)}&publication_type=${encodeURIComponent(pubType)}" target="_blank" class="btn-cmd btn-cmd-sm" title="${esc(t("admin.issues.open_kiosk", "Dijital Kiosk'ta Aç", "Open in Digital Kiosk"))}">${svgIcon("external-link")}</a>
           </div>
         </td>
       </tr>`;

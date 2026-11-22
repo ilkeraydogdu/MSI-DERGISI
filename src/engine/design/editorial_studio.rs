@@ -47,8 +47,9 @@ pub fn render_editorial_studio_shell(nonce: Option<&str>, admin_path: &str) -> S
                 ],
             );
             head.script_inline(EDITORIAL_THEME_PREHYDRATE_JS, clean_nonce, None);
-            head.link_css("/css/admin/tokens.css?v=35");
-            head.link_css("/css/admin/editorial-studio.css?v=35");
+            head.link_css("/css/design-tokens.css?v=36");
+            head.link_css("/css/admin/tokens.css?v=36");
+            head.link_css("/css/admin/editorial-studio.css?v=36");
         });
         h.el(
             "body",
@@ -79,7 +80,7 @@ pub fn render_editorial_studio_shell(nonce: Option<&str>, admin_path: &str) -> S
                     });
                 });
                 let boot_js = format!(
-                    "import init from '{admin}/editor/studio.js?v=35'; init({{ module_or_path: '{admin}/editor/studio.wasm?v=35' }}).catch(function(e){{ var r=document.getElementById('root'); if(r){{ r.innerHTML='<div class=\"msi-studio-boot\"><div class=\"msi-studio-boot-card\"><h1>Editör Stüdyosu Başlatılamadı</h1><p>Lütfen sayfayı yenileyin veya Komuta Merkezi üzerinden tekrar açın.</p><div class=\"msi-studio-boot-actions\"><a href=\"{admin}\" class=\"msi-studio-btn-primary\">Komuta Merkezine Dön</a></div></div></div>'; }} console.error('WASM init error:', e); }});",
+                    "import init from '{admin}/editor/studio.js?v=36'; init({{ module_or_path: '{admin}/editor/studio.wasm?v=36' }}).catch(function(e){{ var r=document.getElementById('root'); if(r){{ r.innerHTML='<div class=\"msi-studio-boot\"><div class=\"msi-studio-boot-card\"><h1>Editör Stüdyosu Başlatılamadı</h1><p>Lütfen sayfayı yenileyin veya Komuta Merkezi üzerinden tekrar açın.</p><div class=\"msi-studio-boot-actions\"><a href=\"{admin}\" class=\"msi-studio-btn-primary\">Komuta Merkezine Dön</a></div></div></div>'; }} console.error('WASM init error:', e); }});",
                     admin = escape_html(clean_admin)
                 );
                 b.script_inline(&boot_js, clean_nonce, Some("module"));
@@ -122,8 +123,9 @@ pub fn render_editorial_studio_forbidden(
                 t.text("403 · Editör Stüdyosu Erişim Yetkisi Gerekli");
             });
             head.script_inline(EDITORIAL_THEME_PREHYDRATE_JS, clean_nonce, None);
-            head.link_css("/css/admin/tokens.css?v=35");
-            head.link_css("/css/admin/editorial-studio.css?v=35");
+            head.link_css("/css/design-tokens.css?v=36");
+            head.link_css("/css/admin/tokens.css?v=36");
+            head.link_css("/css/admin/editorial-studio.css?v=36");
         });
         h.el("body", &[("class", "msi-editorial-host")], |b| {
             b.el("main", &[("class", "msi-studio-boot")], |m| {
@@ -158,4 +160,57 @@ pub fn render_editorial_studio_forbidden(
         });
     });
     d.into_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editorial_studio_shell_links_design_tokens_first_and_bumps_v36() {
+        let html = render_editorial_studio_shell(Some("test-nonce"), "/podmin");
+        let pos_design = html
+            .find("/css/design-tokens.css?v=36")
+            .expect("design-tokens.css?v=36 must be linked");
+        let pos_tokens = html
+            .find("/css/admin/tokens.css?v=36")
+            .expect("tokens.css?v=36 must be linked");
+        let pos_studio = html
+            .find("/css/admin/editorial-studio.css?v=36")
+            .expect("editorial-studio.css?v=36 must be linked");
+        assert!(pos_design < pos_tokens);
+        assert!(pos_tokens < pos_studio);
+
+        let pos_prehydrate = html
+            .find("msi_admin_theme")
+            .expect("theme prehydrate JS must run before CSS");
+        assert!(pos_prehydrate < pos_design);
+
+        assert!(html.contains("/podmin/editor/studio.js?v=36"));
+        assert!(html.contains("/podmin/editor/studio.wasm?v=36"));
+        assert!(!html.contains("?v=35"));
+        assert!(!html.contains("fonts.googleapis"));
+    }
+
+    #[test]
+    fn editorial_studio_forbidden_links_design_tokens_first_with_v36() {
+        let html = render_editorial_studio_forbidden(
+            Some("nonce-403"),
+            "/podmin",
+            "yazar@msidergisi.com",
+            "author",
+        );
+        let pos_design = html
+            .find("/css/design-tokens.css?v=36")
+            .expect("design-tokens.css?v=36 must be linked on 403 page");
+        let pos_tokens = html
+            .find("/css/admin/tokens.css?v=36")
+            .expect("tokens.css?v=36 must be linked on 403 page");
+        let pos_studio = html
+            .find("/css/admin/editorial-studio.css?v=36")
+            .expect("editorial-studio.css?v=36 must be linked on 403 page");
+        assert!(pos_design < pos_tokens);
+        assert!(pos_tokens < pos_studio);
+        assert!(!html.contains("?v=35"));
+    }
 }

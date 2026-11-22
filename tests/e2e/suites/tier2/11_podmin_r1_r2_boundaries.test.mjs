@@ -192,7 +192,7 @@ export function registerTests(suite) {
         c.assert.assertStatus(res, 200);
         c.assert.assertNotIncludes(res.text, "--adm-bg: #000000");
         c.assert.assertNotIncludes(res.text, "--adm-bg: #000;");
-        c.assert.assertMatch(res.text, /--adm-bg:\s*#[0-9a-f]{6}/i);
+        c.assert.assertMatch(res.text, /--adm-bg:\s*(?:var\(--[a-z0-9-]+,\s*)?#[0-9a-f]{6}/i);
       }
     );
 

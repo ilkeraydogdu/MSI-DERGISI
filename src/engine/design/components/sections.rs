@@ -439,34 +439,69 @@ pub fn render_section(
                 .collect::<String>()
         ),
         SectionKind::Products => {
-            let contact_href = if d.lang == "en" {
-                "/kurumsal/iletisim?lang=en"
-            } else {
-                "/kurumsal/iletisim"
-            };
+            let contact_href = lang_href("/kurumsal/iletisim", d.lang);
             let prod_cta = if d.lang == "en" {
-                "View publication"
+                "Quick order"
             } else {
-                "Yayını incele"
+                "Hızlı sipariş"
             };
+            let add_to_cart_lbl = if d.lang == "en" {
+                "Add to Cart"
+            } else {
+                "Sepete Ekle"
+            };
+            let open_cart_lbl = if d.lang == "en" {
+                "Open Cart"
+            } else {
+                "Sepeti Aç"
+            };
+            let localize_ptype = |raw: &str| -> &'static str {
+                let norm = raw.trim().to_ascii_lowercase();
+                if d.lang == "en" {
+                    match norm.as_str() {
+                        "book" | "print_book" | "kitap" => "PRINT BOOK",
+                        "almanac" | "almanak" => "ALMANAC",
+                        "digital_dossier" | "dossier" | "digital" => "DIGITAL DOSSIER",
+                        "photo_license" | "photo" => "PHOTO LICENCE",
+                        "magazine" | "issue" => "SPECIAL EDITION",
+                        _ => "PUBLICATION",
+                    }
+                } else {
+                    match norm.as_str() {
+                        "book" | "print_book" | "kitap" => "BASILI KİTAP",
+                        "almanac" | "almanak" => "ALMANAK",
+                        "digital_dossier" | "dossier" | "digital" => "DİJİTAL DOSYA",
+                        "photo_license" | "photo" => "FOTOĞRAF LİSANSI",
+                        "magazine" | "issue" => "ÖZEL YAYIN",
+                        _ => "YAYIN",
+                    }
+                }
+            };
+            let cards: String = d
+                .products
+                .iter()
+                .filter(|p| p.is_available)
+                .take(s.limit)
+                .map(|p| {
+                    let title = localized(d.lang, &p.title_tr, &p.title_en);
+                    let desc = localized(d.lang, &p.description_tr, &p.description_en);
+                    let ptype = localize_ptype(&p.product_type);
+                    format!(
+                        r#"<article class="plan-card"><div class="eyebrow">{ptype}</div><img class="product-cover" src="{cover}" alt="{title}" loading="lazy"><h3>{title}</h3><p>{desc}</p><div class="plan-price">₺{price:.0}</div><div class="plan-card-actions"><button type="button" class="button primary" data-add-to-cart data-item-type="product" data-item-code="{sku}" data-item-title="{title}" data-item-price="{price:.2}">{add_btn}</button><a class="button secondary" href="{contact_href}" data-select-product="{sku}">{prod_cta}</a></div></article>"#,
+                        ptype = ptype,
+                        cover = asset(&p.cover_image),
+                        title = esc(title),
+                        desc = esc(desc),
+                        price = p.price_try,
+                        sku = esc(&p.sku),
+                        add_btn = add_to_cart_lbl,
+                        contact_href = contact_href,
+                        prod_cta = prod_cta,
+                    )
+                })
+                .collect();
             format!(
-                "<div class=\"plan-grid\">{}</div>",
-                d.products
-                    .iter()
-                    .filter(|p| p.is_available)
-                    .take(s.limit)
-                    .map(|p| format!(
-                        "<article class=\"plan-card\"><img class=\"product-cover\" src=\"{}\" alt=\"{}\" loading=\"lazy\"><h3>{}</h3><p>{}</p><div class=\"plan-price\">₺{:.0}</div><a class=\"button secondary\" href=\"{}\" data-select-product=\"{}\">{}</a></article>",
-                        asset(&p.cover_image),
-                        esc(localized(d.lang, &p.title_tr, &p.title_en)),
-                        esc(localized(d.lang, &p.title_tr, &p.title_en)),
-                        esc(localized(d.lang, &p.description_tr, &p.description_en)),
-                        p.price_try,
-                        contact_href,
-                        esc(&p.sku),
-                        prod_cta
-                    ))
-                    .collect::<String>()
+                r#"<div class="store-products-toolbar"><button type="button" class="button secondary" data-cart-toggle>{open_cart_lbl} <span class="cart-pill-count" data-cart-count hidden>0</span></button></div><div class="plan-grid">{cards}</div>"#
             )
         }
     };

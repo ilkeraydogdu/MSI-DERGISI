@@ -100,7 +100,10 @@ export async function measureOverflow(page) {
 }
 
 export async function captureScreenshot(page, outPath, opts = {}) {
-  const targetPath = path.resolve(String(outPath));
+  const raw = String(outPath);
+  const targetPath = path.isAbsolute(raw)
+    ? path.resolve(raw)
+    : path.resolve("/tmp/msi_e2e_screenshots", raw);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   await page.screenshot({
     path: targetPath,
@@ -329,9 +332,18 @@ export function createBrowserManager({ baseUrl, repoRoot, screenshotDir = null }
     const activeHost = options.host ?? contextHosts.get(context) ?? null;
     const page = await context.newPage();
 
-    if (options.autoAcceptDialogs !== false) {
-      page.on("dialog", (d) => d.accept().catch(() => {}));
-    }
+    const nativeDialogs = [];
+    page.on("dialog", (d) => {
+      nativeDialogs.push({
+        type: d.type(),
+        message: d.message(),
+      });
+      if (options.autoAcceptDialogs === false) {
+        d.dismiss().catch(() => {});
+      } else {
+        d.accept().catch(() => {});
+      }
+    });
 
     const consoleErrors = [];
     const pageErrors = [];
@@ -382,11 +394,14 @@ export function createBrowserManager({ baseUrl, repoRoot, screenshotDir = null }
 
     const overflow = await measureOverflow(page);
 
+    const baseScreenshotDir = screenshotDir || "/tmp/msi_e2e_screenshots";
+
     return {
       context,
       page,
       url: page.url(),
       status: navResponse ? navResponse.status() : null,
+      nativeDialogs,
       consoleErrors,
       pageErrors,
       serverErrors,
@@ -395,10 +410,9 @@ export function createBrowserManager({ baseUrl, repoRoot, screenshotDir = null }
       overflow,
       measureOverflow: () => measureOverflow(page),
       captureScreenshot: (nameOrPath, shotOpts = {}) => {
-        const resolved =
-          screenshotDir && !path.isAbsolute(String(nameOrPath))
-            ? path.join(screenshotDir, String(nameOrPath))
-            : String(nameOrPath);
+        const resolved = !path.isAbsolute(String(nameOrPath))
+          ? path.join(baseScreenshotDir, String(nameOrPath))
+          : String(nameOrPath);
         return captureScreenshot(page, resolved, shotOpts);
       },
       setTheme: (theme) => setTheme(page, theme),
@@ -430,10 +444,10 @@ export function createBrowserManager({ baseUrl, repoRoot, screenshotDir = null }
     openPage,
     measureOverflow,
     captureScreenshot: (page, nameOrPath, shotOpts = {}) => {
-      const resolved =
-        screenshotDir && !path.isAbsolute(String(nameOrPath))
-          ? path.join(screenshotDir, String(nameOrPath))
-          : String(nameOrPath);
+      const baseScreenshotDir = screenshotDir || "/tmp/msi_e2e_screenshots";
+      const resolved = !path.isAbsolute(String(nameOrPath))
+        ? path.join(baseScreenshotDir, String(nameOrPath))
+        : String(nameOrPath);
       return captureScreenshot(page, resolved, shotOpts);
     },
     setTheme,

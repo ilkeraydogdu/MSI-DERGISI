@@ -243,21 +243,9 @@ impl Database {
             ],
         )?;
 
-        if let Some(ref slug) = ev.content_slug {
-            if matches!(
-                ev.event_type.as_str(),
-                "reading_depth" | "article_view" | "article_read"
-            ) {
-                self.increment_content_view(slug, ev.is_true_read);
-            }
-        }
-        if let Some(ad_id) = ev.ad_id {
-            if ev.event_type == "ad_click" {
-                self.increment_ad_metric(ad_id, true);
-            } else if ev.event_type == "ad_impression" {
-                self.increment_ad_metric(ad_id, false);
-            }
-        }
+        // Analytics metrics are now computed exclusively from analytics_events table.
+        // Removed increment_content_view and increment_ad_metric calls to prevent
+        // seed/harvested counters in contents and ad_campaigns tables from inflating.
 
         Ok(conn.last_insert_rowid())
     }

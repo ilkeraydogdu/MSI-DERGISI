@@ -190,6 +190,19 @@ pub async fn admin_update_user(
     if let Err(resp) = require_perm(&operator, "users:manage") {
         return resp;
     }
+    // Self-demotion protection: prevent admins from modifying their own account
+    if user_id == operator.user_id {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "status": "error",
+                "error_code": "FORBIDDEN",
+                "message": "Kendi hesabınızı güncelleyemezsiniz. Başka bir yönetici tarafından düzenlenmelidir.",
+                "data": null
+            })),
+        )
+            .into_response();
+    }
     if payload.full_name.trim().is_empty() {
         return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
     }
@@ -270,6 +283,19 @@ pub async fn admin_delete_user(
 ) -> Response {
     if let Err(resp) = require_perm(&operator, "users:manage") {
         return resp;
+    }
+    // Self-demotion protection: prevent admins from deleting their own account
+    if user_id == operator.user_id {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "status": "error",
+                "error_code": "FORBIDDEN",
+                "message": "Kendi hesabınızı silemezsiniz. Başka bir yönetici tarafından silinmelidir.",
+                "data": null
+            })),
+        )
+            .into_response();
     }
     let Some(target) = state.db.get_all_users().into_iter().find(|u| u.id == user_id) else {
         return not_found_error();
@@ -559,6 +585,19 @@ pub async fn admin_assign_role_to_user(
 ) -> Response {
     if let Err(resp) = require_perm(&operator, "roles:manage") {
         return resp;
+    }
+    // Self-demotion protection: prevent admins from reassigning their own role
+    if user_id == operator.user_id {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "status": "error",
+                "error_code": "FORBIDDEN",
+                "message": "Kendi rolünüzü değiştiremezsiniz. Başka bir yönetici tarafından atanmalıdır.",
+                "data": null
+            })),
+        )
+            .into_response();
     }
     let role_code = body
         .get("role_code")

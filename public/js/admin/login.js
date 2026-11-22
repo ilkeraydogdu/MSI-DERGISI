@@ -62,127 +62,42 @@
     );
   }
 
-  function bindJetCinemaMotion() {
-    if (prefersReducedMotion()) return;
-
-    const frame = byId("jet-cinema-frame");
-    const track = byId("jet-media-track");
-    const img = byId("jet-visual-img");
-    const veil = byId("jet-reveal-veil");
-
-    if (window.gsap) {
-      if (veil) {
-        window.gsap.fromTo(
-          veil,
-          { opacity: 0.72 },
-          { opacity: 0, duration: 0.95, ease: "power2.out" }
-        );
-      }
-
-      if (img) {
-        window.gsap.killTweensOf(img);
-        window.gsap.fromTo(
-          img,
-          { scale: 1.1, y: 12 },
-          {
-            scale: 1.03,
-            y: 0,
-            duration: 1.25,
-            ease: "power3.out",
-            onComplete: () => {
-              window.gsap.to(img, {
-                scale: 1.075,
-                x: 6,
-                y: -10,
-                duration: 18,
-                ease: "sine.inOut",
-                repeat: -1,
-                yoyo: true,
-              });
-            },
-          }
-        );
-      }
-
-      const card = byId("login-card");
-      if (card) {
-        window.gsap.killTweensOf(card);
-        window.gsap.fromTo(
-          card,
-          { y: 10, opacity: 0.2 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.34,
-            ease: "power3.out",
-            clearProps: "transform,opacity",
-          }
-        );
-      }
-
-      const formItems = document.querySelectorAll(".login-brand > *, #login-form .form-group, #login-form .login-submit");
-      if (formItems.length) {
-        window.gsap.killTweensOf(formItems);
-        window.gsap.fromTo(
-          formItems,
-          { y: 8, opacity: 0.2 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.34,
-            stagger: 0.03,
-            delay: 0,
-            ease: "power3.out",
-            clearProps: "transform,opacity",
-          }
-        );
-      }
+  function animateLoginEntry() {
+    if (prefersReducedMotion() || !window.gsap) return;
+    const card = byId("login-card");
+    if (card) {
+      window.gsap.killTweensOf(card);
+      window.gsap.fromTo(
+        card,
+        { y: 14, opacity: 0.25 },
+        {
+          y: 0,
+          opacity: 1,
+          duration: 0.5,
+          ease: "power3.out",
+          clearProps: "transform,opacity",
+        }
+      );
     }
 
-    // Smooth 60fps interpolated pointer parallax + optical glass glare
-    if (frame && track && window.matchMedia?.("(pointer: fine)")?.matches) {
-      let targetX = 0;
-      let targetY = 0;
-      let curX = 0;
-      let curY = 0;
-      let rafId = 0;
-
-      function tick() {
-        curX += (targetX - curX) * 0.07;
-        curY += (targetY - curY) * 0.07;
-        track.style.transform = `translate3d(${curX.toFixed(2)}px, ${curY.toFixed(2)}px, 0)`;
-        if (Math.abs(targetX - curX) > 0.06 || Math.abs(targetY - curY) > 0.06) {
-          rafId = window.requestAnimationFrame(tick);
-        } else {
-          rafId = 0;
+    const formItems = document.querySelectorAll(
+      ".login-brand > *, #login-form .form-group, #login-form .login-submit"
+    );
+    if (formItems.length) {
+      window.gsap.killTweensOf(formItems);
+      window.gsap.fromTo(
+        formItems,
+        { y: 8, opacity: 0.25 },
+        {
+          y: 0,
+          opacity: 1,
+          duration: 0.36,
+          stagger: 0.035,
+          delay: 0.08,
+          ease: "power3.out",
+          clearProps: "transform,opacity",
         }
-      }
-
-      function scheduleTick() {
-        if (!rafId) rafId = window.requestAnimationFrame(tick);
-      }
-
-      document.addEventListener("pointermove", (ev) => {
-        const w = window.innerWidth || 1;
-        const h = window.innerHeight || 1;
-        targetX = (ev.clientX / w - 0.5) * -22;
-        targetY = (ev.clientY / h - 0.5) * -16;
-        scheduleTick();
-
-        const rect = frame.getBoundingClientRect();
-        if (rect.width > 10 && rect.height > 10) {
-          const gx = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
-          const gy = Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100));
-          frame.style.setProperty("--glare-x", `${gx.toFixed(1)}%`);
-          frame.style.setProperty("--glare-y", `${gy.toFixed(1)}%`);
-        }
-      });
-
-      document.addEventListener("pointerleave", () => {
-        targetX = 0;
-        targetY = 0;
-        scheduleTick();
-      });
+      );
     }
   }
 
@@ -192,7 +107,7 @@
 
     T?.initAutoTheme ? T.initAutoTheme() : T?.initTheme?.();
     T?.bindGlow?.();
-    bindJetCinemaMotion();
+    animateLoginEntry();
 
     const totpForm = byId("totp-login-form");
     const forgotForm = byId("forgot-password-form");

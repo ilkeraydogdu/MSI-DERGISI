@@ -71,6 +71,14 @@ pub(super) fn extract_raw_session_cookie(headers: &HeaderMap) -> Option<&str> {
 }
 
 pub(super) fn cookie_secure_flag(headers: &HeaderMap, public_url: &str) -> &'static str {
+    // SECURITY FIX: Allow forcing Secure flag via env var regardless of proxy headers.
+    // Prevents cookie downgrade attacks when reverse proxy misconfiguration omits X-Forwarded-Proto.
+    if std::env::var("FORCE_SECURE_COOKIES")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+    {
+        return "; Secure";
+    }
     let forwarded_https = headers
         .get("x-forwarded-proto")
         .and_then(|v| v.to_str().ok())
@@ -121,9 +129,18 @@ pub(super) fn is_token_expired(expires_at: &str) -> bool {
     true
 }
 
+pub(super) fn resolve_transactional_lang(lang_opt: Option<&str>, headers: &HeaderMap) -> String {
+    let mut map = HashMap::new();
+    if let Some(l) = lang_opt.map(str::trim).filter(|s| !s.is_empty()) {
+        map.insert("lang".to_string(), l.to_string());
+    }
+    web_controller::detect_language(&map, headers)
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_shelled_transactional(
     state: &AppState,
-    headers: &HeaderMap,
+    lang: &str,
     nonce: Option<&str>,
     status: StatusCode,
     page_title: &str,
@@ -131,13 +148,12 @@ pub(super) fn render_shelled_transactional(
     card_class: &str,
     inner_html: &str,
 ) -> Response {
-    let lang = web_controller::detect_language(&HashMap::new(), headers);
     let body_html = format!(
         r#"<section class="container section-space"><div class="transactional-card {card_class}">{inner_html}</div></section>"#
     );
     let full_html = web_controller::render_shared_shell(
         state,
-        &lang,
+        lang,
         page_title,
         &body_html,
         Some(canonical_path),

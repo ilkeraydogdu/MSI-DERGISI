@@ -2,7 +2,7 @@
 //! `#command-hero-strip`, `#global-kpi-strip`, tab containers, `#totp-security-modal`,
 //! `.ops-toast-region`, `#msi-i18n`, and scripts.
 
-use super::ui::{action_btn, form_group, icon, input_ctrl, kpi_card_toned};
+use super::ui::{action_btn, action_btn_extra, form_group, icon, input_ctrl, kpi_card_toned};
 use super::{analytics, clean_segment, commercial, editorial, system, tr_admin, workflow};
 use crate::engine::design::html_dsl::HtmlBuf;
 use crate::engine::translation_engine::TranslationCache;
@@ -93,14 +93,14 @@ const SIDEBAR_ITEM_FALLBACKS: &[(&str, &str, &str)] = &[
 const ADMIN_SCRIPTS: &[&str] = &[
     "/js/vendor/gsap.min.js",
     "/js/vendor/chart.umd.min.js",
-    "/js/admin/core.js?v=35",
-    "/js/admin/editorial.js?v=35",
-    "/js/admin/taxonomy-media.js?v=35",
-    "/js/admin/issues.js?v=35",
-    "/js/admin/commercial.js?v=35",
-    "/js/admin/analytics.js?v=35",
-    "/js/admin/system-rbac.js?v=35",
-    "/js/admin/monitoring.js?v=35",
+    "/js/admin/core.js?v=36",
+    "/js/admin/editorial.js?v=36",
+    "/js/admin/taxonomy-media.js?v=36",
+    "/js/admin/issues.js?v=36",
+    "/js/admin/commercial.js?v=36",
+    "/js/admin/analytics.js?v=36",
+    "/js/admin/system-rbac.js?v=36",
+    "/js/admin/monitoring.js?v=36",
 ];
 
 pub fn render_dashboard(
@@ -131,9 +131,10 @@ pub fn render_dashboard(
             head.void_el("link", &[("rel", "icon"), ("href", "/favicon.ico"), ("sizes", "any")]);
             head.void_el("link", &[("rel", "icon"), ("type", "image/svg+xml"), ("href", "/favicon.svg")]);
             head.void_el("link", &[("rel", "icon"), ("type", "image/png"), ("sizes", "32x32"), ("href", "/images/favicon-32x32.png")]);
-            head.link_css("/css/admin/tokens.css?v=35")
-                .link_css("/css/admin/layout.css?v=35")
-                .link_css("/css/admin/components.css?v=35");
+            head.link_css("/css/design-tokens.css")
+                .link_css("/css/admin/tokens.css?v=36")
+                .link_css("/css/admin/layout.css?v=36")
+                .link_css("/css/admin/components.css?v=36");
             head.script_inline(THEME_PREHYDRATE_JS, clean_nonce, None);
         });
 
@@ -469,6 +470,7 @@ fn render_hero_strip(
     let cta_analytics = tr_admin(tr, lang, "admin.hero.cta_analytics", "B2B Analitik", "B2B Analytics");
     let cta_health = tr_admin(tr, lang, "admin.hero.cta_health", "Sistem Sağlığı", "System Health");
     let cta_studio = tr_admin(tr, lang, "admin.hero.cta_studio", "Tasarım Stüdyosu ↗", "Design Studio ↗");
+    let cta_all_actions = tr_admin(tr, lang, "admin.hero.all_actions", "Tüm İşlemler", "All Actions");
     let status_title = tr_admin(tr, lang, "admin.hero.status_title", "Oturum & Yetki Durumu", "Session & Access Status");
     let status_ok = tr_admin(tr, lang, "admin.hero.status_active", "Aktif Oturum · RBAC Korumalı", "Active Session · RBAC Protected");
     let modules_lbl = tr_admin(tr, lang, "admin.hero.modules_label", "Erişilebilir Modül", "Accessible Modules");
@@ -500,17 +502,19 @@ fn render_hero_strip(
                 cp.el("p", &[("id", "hero-role-subtitle"), ("class", "hero-subtitle")], |p| { p.text(&subtitle); });
             });
             wc.el("div", &[("class", "hero-actions"), ("id", "hero-quick-actions")], |act| {
-                action_btn(act, "btn-hero btn-hero-primary", "hero-open-content-drawer", Some("contents:write"), Some("fa-plus"), &cta_new_content);
+                action_btn_extra(act, "btn-hero btn-hero-primary", "hero-open-content-drawer", Some("contents:write"), Some("fa-plus"), &cta_new_content, &[("data-hero-shortcut", "1"), ("data-hero-order", "0")]);
                 act.el(
                     "a",
                     &[
                         ("href", &editor_href),
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-required-perm", "contents:write"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "1"),
                     ],
                     |a| { icon(a, "fa-pencil-square-o"); a.raw(" "); a.text(&cta_editor); },
                 );
-                action_btn(act, "btn-hero btn-hero-primary", "open-ad-drawer", Some("ads:write"), Some("fa-bullhorn"), &cta_new_ad);
+                action_btn_extra(act, "btn-hero btn-hero-primary", "open-ad-drawer", Some("ads:write"), Some("fa-bullhorn"), &cta_new_ad, &[("data-hero-shortcut", "1"), ("data-hero-order", "2")]);
                 act.el(
                     "button",
                     &[
@@ -518,6 +522,8 @@ fn render_hero_strip(
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-tab", "tab-16"),
                         ("data-required-perm", "approvals:read|approvals:manage|approvals:approve|contents:publish"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "3"),
                     ],
                     |b| { icon(b, "fa-check-square-o"); b.raw(" "); b.text(&cta_approvals); },
                 );
@@ -528,6 +534,8 @@ fn render_hero_strip(
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-tab", "tab-18"),
                         ("data-required-perm", "issues:read|issues:delete|contents:read"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "4"),
                     ],
                     |b| { icon(b, "fa-book"); b.raw(" "); b.text(&cta_issues); },
                 );
@@ -538,6 +546,8 @@ fn render_hero_strip(
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-tab", "tab-14"),
                         ("data-required-perm", "revenue:read|commerce:read|invoices:read"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "5"),
                     ],
                     |b| { icon(b, "fa-try"); b.raw(" "); b.text(&cta_revenue); },
                 );
@@ -548,6 +558,8 @@ fn render_hero_strip(
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-tab", "tab-4"),
                         ("data-required-perm", "corporate_requests:read"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "6"),
                     ],
                     |b| { icon(b, "fa-building-o"); b.raw(" "); b.text(&cta_corporate); },
                 );
@@ -558,6 +570,8 @@ fn render_hero_strip(
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-tab", "tab-11"),
                         ("data-required-perm", "users:read|roles:manage"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "7"),
                     ],
                     |b| { icon(b, "fa-users"); b.raw(" "); b.text(&cta_users); },
                 );
@@ -568,6 +582,8 @@ fn render_hero_strip(
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-tab", "tab-3"),
                         ("data-required-perm", "analytics:read"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "8"),
                     ],
                     |b| { icon(b, "fa-pie-chart"); b.raw(" "); b.text(&cta_analytics); },
                 );
@@ -578,6 +594,8 @@ fn render_hero_strip(
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-tab", "tab-9"),
                         ("data-required-perm", "analytics:read|settings:read|system:read"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "9"),
                     ],
                     |b| { icon(b, "fa-heartbeat"); b.raw(" "); b.text(&cta_health); },
                 );
@@ -587,9 +605,43 @@ fn render_hero_strip(
                         ("href", &studio_href),
                         ("class", "btn-hero btn-hero-ghost"),
                         ("data-required-perm", "settings:read"),
+                        ("data-hero-shortcut", "1"),
+                        ("data-hero-order", "10"),
                     ],
                     |a| { icon(a, "fa-paint-brush"); a.raw(" "); a.text(&cta_studio); },
                 );
+                act.el("div", &[("id", "hero-overflow-wrap"), ("class", "hero-overflow-wrap hidden")], |ov| {
+                    ov.el(
+                        "button",
+                        &[
+                            ("type", "button"),
+                            ("id", "hero-overflow-toggle"),
+                            ("class", "btn-hero btn-hero-ghost hero-overflow-btn"),
+                            ("aria-haspopup", "menu"),
+                            ("aria-expanded", "false"),
+                            ("aria-controls", "hero-overflow-menu"),
+                        ],
+                        |b| {
+                            b.text(&cta_all_actions);
+                            b.raw(" ");
+                            b.el("span", &[("id", "hero-overflow-count"), ("class", "hero-overflow-badge")], |c| {
+                                c.text("0");
+                            });
+                            b.raw(" ");
+                            icon(b, "chevron-down");
+                        },
+                    );
+                    ov.el(
+                        "div",
+                        &[
+                            ("id", "hero-overflow-menu"),
+                            ("class", "hero-overflow-menu hidden"),
+                            ("role", "menu"),
+                            ("aria-labelledby", "hero-overflow-toggle"),
+                        ],
+                        |_| {},
+                    );
+                });
             });
         });
 
@@ -667,6 +719,7 @@ fn render_totp_modal(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
             ("class", "modal-overlay hidden"),
             ("role", "dialog"),
             ("aria-modal", "true"),
+            ("aria-hidden", "true"),
             ("aria-labelledby", "totp-modal-title"),
         ],
         |ov| {
@@ -727,7 +780,7 @@ fn render_totp_modal(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                     dis.el("div", &[("class", "text-xs font-semibold text-muted mb-2")], |d| {
                         d.text(&disable_title);
                     });
-                    dis.el_with("form", |a| { a.attr("id", "form-totp-disable").attr("class", "flex gap-2").bool_attr("novalidate", true); }, |f| {
+                    dis.el_with("form", |a| { a.attr("id", "form-totp-disable").attr("class", "flex gap-2 flex-wrap").bool_attr("novalidate", true); }, |f| {
                         input_ctrl(f, "password", "totp-disable-password", "", "", &disable_ph, &[("autocomplete", "current-password")]);
                         f.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-danger")], |b| {
                             b.text(&disable_btn);
@@ -752,6 +805,7 @@ fn render_confirm_modal(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
             ("class", "modal-overlay hidden"),
             ("role", "dialog"),
             ("aria-modal", "true"),
+            ("aria-hidden", "true"),
             ("aria-labelledby", "ops-confirm-title"),
             ("aria-describedby", "ops-confirm-message"),
         ],

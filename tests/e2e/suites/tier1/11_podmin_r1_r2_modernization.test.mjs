@@ -411,21 +411,34 @@ export function registerTests(suite) {
     );
 
     suite.test(
-      "/podmin login gateway loads GSAP, login.js, fighter hero & SVG logos cleanly (200) without FontAwesome icons.css",
+      "/podmin login gateway loads GSAP, login-stage.js, login.js, stage gallery & SVG logos cleanly (200) without FontAwesome icons.css",
       { req: "F3", readOnly: true },
       async (c) => {
         const client = c.http.createClient();
         const res = await client.get("/podmin");
         c.assert.assertStatus(res, 200);
         c.assert.assertIncludes(res.text, "gsap.min.js");
+        c.assert.assertIncludes(res.text, "/js/admin/login-stage.js");
         c.assert.assertIncludes(res.text, "/js/admin/login.js");
-        c.assert.assertIncludes(res.text, "/images/admin/podmin-fighter-vertical.webp");
+        c.assert.assertIncludes(res.text, "/images/admin/stage/01-f4e.webp");
+        c.assert.assertIncludes(res.text, "/images/admin/pofuduk-logo.svg");
+        c.assert.assertIncludes(res.text, "/images/admin/pofuduk-logo-dark.svg");
         c.assert.assertIncludes(res.text, "/images/logo.svg");
         c.assert.assertIncludes(res.text, "/images/logo-white.svg");
         c.assert.assertNotIncludes(res.text, "icons.css");
         for (const assetPath of [
           "/js/vendor/gsap.min.js",
-          "/images/admin/podmin-fighter-vertical.webp",
+          "/js/admin/login-stage.js",
+          "/js/admin/login.js",
+          "/images/admin/stage/01-f4e.webp",
+          "/images/admin/stage/01-f4e-1280.webp",
+          "/images/admin/stage/02-kizilelma.webp",
+          "/images/admin/stage/03-istif.webp",
+          "/images/admin/stage/04-tb2t-ai.webp",
+          "/images/admin/stage/05-mavi-vatan.webp",
+          "/images/admin/stage/06-fnss.webp",
+          "/images/admin/pofuduk-logo.svg",
+          "/images/admin/pofuduk-logo-dark.svg",
           "/images/logo.svg",
           "/images/logo-white.svg",
         ]) {

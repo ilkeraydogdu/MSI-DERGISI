@@ -61,7 +61,8 @@ pub async fn render_article_detail(
             )
         };
     }
-    state.db.increment_content_view(&item.slug, !locked);
+    // View tracking is now handled exclusively via analytics_events table.
+    // Removed increment_content_view to prevent seed/harvested counters from inflating.
     let contents = state.db.get_all_contents();
     let mut toc_html = String::new();
     if !item.is_sponsored

@@ -38,17 +38,10 @@ pub fn compute_content_report_with_options(
         .filter(|e| (e.duration_sec >= crate::db::constants::TRUE_READ_MIN_DURATION_SEC && e.scroll_depth_pct >= crate::db::constants::TRUE_READ_MIN_SCROLL_PCT) || e.is_true_read)
         .count() as i64;
 
-    let total_views = if event_count > 0 {
-        event_count.max(content.view_count)
-    } else {
-        content.view_count
-    };
-
-    let true_reads = if event_count > 0 {
-        computed_true_reads.max(content.true_read_count)
-    } else {
-        content.true_read_count
-    };
+    // Only use real analytics events — never fall back to seed/harvested counters
+    // which represent traffic from the original site, not this deployment.
+    let total_views = event_count;
+    let true_reads = computed_true_reads;
 
     let (avg_duration_sec, avg_scroll_pct) = if !matching_events.is_empty() {
         let sum_dur: i64 = matching_events.iter().map(|e| e.duration_sec as i64).sum();
@@ -111,17 +104,10 @@ pub fn compute_ad_report_with_options(
         .filter(|e| matches!(e.event_type.as_str(), "ad_click" | "click"))
         .collect();
 
-    let impressions = if !impression_events.is_empty() {
-        (impression_events.len() as i64).max(ad.impressions_count)
-    } else {
-        ad.impressions_count
-    };
-
-    let clicks = if !click_events.is_empty() {
-        (click_events.len() as i64).max(ad.clicks_count)
-    } else {
-        ad.clicks_count
-    };
+    // Only use real analytics events — never fall back to seed/harvested counters
+    // which represent traffic from the original site, not this deployment.
+    let impressions = impression_events.len() as i64;
+    let clicks = click_events.len() as i64;
 
     let ctr_pct = if impressions > 0 {
         ((clicks as f64 / impressions as f64) * crate::db::constants::CTR_MULTIPLIER).round() / 100.0

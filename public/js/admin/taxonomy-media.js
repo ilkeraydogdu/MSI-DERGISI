@@ -146,7 +146,7 @@
         ${canEdit ? `<button type="button" class="btn-cmd btn-cmd-sm" data-admin-action="edit-media" data-id="${esc(m.id)}" title="${esc(t("admin.action.edit_alt_tags", "Alt Metin & Etiket"))}">${svgIcon("pencil")}</button>` : ""}
         ${canDel ? `<button type="button" class="btn-cmd btn-cmd-sm btn-cmd-danger" data-admin-action="delete-media" data-id="${esc(m.id)}" title="${esc(t("admin.action.delete", "Sil"))}">${svgIcon("trash")}</button>` : ""}
       </div>` : "";
-      return `<div class="media-card" data-admin-action="copy-media-url" data-url="${esc(path)}" title="${esc(displayName)} — Adresi kopyalamak için tıklayın">
+      return `<div class="media-card" data-admin-action="copy-media-url" data-url="${esc(path)}" title="${esc(displayName)} — ${esc(t("admin.media.click_to_copy", "Adresi kopyalamak için tıklayın", "Click to copy URL"))}">
         ${thumb}
         <div class="media-meta">
           <span class="media-filename">${esc(displayName)}</span>
@@ -303,8 +303,22 @@
         .replace("${name}", r.rule_name || "");
       modeBadge.classList.remove("hidden");
     }
+    det?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
     byId("rec-rule-name")?.focus();
     showToast(t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", r.rule_name));
+  }
+
+  function resetCategoryForm() {
+    byId("form-new-category")?.reset();
+    setVal("cat-edit-id", "0");
+    setVal("cat-group-type", "icerikler");
+    setVal("cat-sort-order", "25");
+  }
+
+  function resetSsbForm() {
+    byId("form-new-ssb")?.reset();
+    setVal("ssb-edit-old-code", "");
+    setVal("ssb-sort", "15");
   }
 
   ctx.loadMediaLibrary = loadMediaLibrary;
@@ -312,6 +326,7 @@
   ctx.loadRecommendationRules = loadRecommendationRules;
 
   ctx.registerActions({
+    "reset-category-form": resetCategoryForm,
     "edit-category": (el) => {
       const cat = state.categories.find((x) => Number(x.id) === Number(el.getAttribute("data-id")));
       if (!cat) return;
@@ -320,8 +335,9 @@
       setVal("cat-edit-id", cat.id); setVal("cat-name-tr", cat.name_tr); setVal("cat-name-en", cat.name_en);
       setVal("cat-slug", cat.slug); setVal("cat-group-type", cat.group_type || "icerikler");
       setVal("cat-sort-order", cat.sort_order ?? 25); setVal("cat-desc-tr", cat.description_tr || "");
+      det?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       byId("cat-name-tr")?.focus();
-      showToast(t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.").replace("${name}", cat.name_tr));
+      showToast(t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", cat.name_tr));
     },
     "delete-category": async (el) => {
       const id = el.getAttribute("data-id");
@@ -329,6 +345,7 @@
       const r = await apiRequest(`/api/v1/admin/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
       if (r.ok) { showToast(t("admin.toast.category_deleted", "Kategori silindi.")); await loadTaxonomy(); } else showToast(r.errorMessage, true);
     },
+    "reset-ssb-form": resetSsbForm,
     "edit-ssb": (el) => {
       const tag = state.ssbTags.find((x) => x.code === el.getAttribute("data-code"));
       if (!tag) return;
@@ -337,8 +354,9 @@
       setVal("ssb-edit-old-code", tag.code); setVal("ssb-code", tag.code);
       setVal("ssb-name-tr", tag.name_tr); setVal("ssb-name-en", tag.name_en);
       setVal("ssb-group", tag.category_group || ""); setVal("ssb-sort", tag.sort_order ?? 15);
+      det?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       byId("ssb-name-tr")?.focus();
-      showToast(t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.").replace("${name}", tag.name_tr));
+      showToast(t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", tag.name_tr));
     },
     "delete-ssb": async (el) => {
       const code = el.getAttribute("data-code");
@@ -356,7 +374,15 @@
     },
     "copy-media-url": (el) => {
       const url = el.getAttribute("data-url") || "";
-      if (navigator.clipboard && url) navigator.clipboard.writeText(url).then(() => showToast(t("admin.toast.media_url_copied", "Medya adresi kopyalandı: ") + url));
+      if (!url) return;
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        navigator.clipboard.writeText(url).then(
+          () => showToast(t("admin.toast.media_url_copied", "Medya adresi kopyalandı: ", "Media URL copied: ") + url),
+          () => showToast(t("admin.toast.copy_failed", "Pano erişimi reddedildi; adres: ", "Clipboard access denied; URL: ") + url, true),
+        );
+      } else {
+        showToast(t("admin.toast.clipboard_unavailable", "Bu tarayıcıda pano kopyalama desteklenmiyor: ", "Clipboard copy is unavailable in this browser: ") + url, "warning");
+      }
     },
     "edit-media": (el, ev) => {
       ev?.stopPropagation();
@@ -364,7 +390,13 @@
       if (!m) return;
       setVal("media-edit-id", m.id); setVal("media-edit-alt-tr", m.alt_text_tr || "");
       setVal("media-edit-alt-en", m.alt_text_en || ""); setVal("media-edit-tags", m.tags || "");
-      byId("media-edit-panel")?.classList.remove("hidden");
+      const panel = byId("media-edit-panel");
+      const titleEl = byId("media-edit-panel-title");
+      const name = m.original_name || (m.path || "").split("/").pop() || `#${m.id}`;
+      if (titleEl) titleEl.textContent = `${t("admin.editorial.media_edit_title", "Medya SEO & Alt Metin Düzenle", "Edit Media SEO & Alt Text")} (${name})`;
+      panel?.classList.remove("hidden");
+      panel?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+      byId("media-edit-alt-tr")?.focus();
     },
     "save-media-meta": async () => {
       const id = val("media-edit-id");

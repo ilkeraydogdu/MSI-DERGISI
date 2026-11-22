@@ -51,11 +51,11 @@ pub(crate) fn render_editor_html_full(
     let seg = crate::config::normalize_admin_path_secret(admin_path_secret);
     let admin_base = format!("/{}", escape_html(&seg));
     let mut extra_nav = String::from(
-        "<a href=\"/hesabim\" id=\"editor-account-link\" class=\"editor-breadcrumb-link\" title=\"Hesap Portalı\"><span>Hesap Portalı</span></a>",
+        "<a href=\"/hesabim\" id=\"editor-account-link\" class=\"studio-menu-item\" role=\"menuitem\" title=\"Hesap Portalı\"><span>Hesap Portalı</span></a>",
     );
     if can_editorial {
         extra_nav.push_str(&format!(
-            "<a href=\"{}/editor\" id=\"editor-studio-link\" class=\"editor-breadcrumb-link\" title=\"Editör Stüdyosu\"><span>Editör Stüdyosu</span></a>",
+            "<a href=\"{}/editor\" id=\"editor-studio-link\" class=\"studio-menu-item\" role=\"menuitem\" title=\"Editör Stüdyosu\"><span>Editör Stüdyosu</span></a>",
             admin_base
         ));
     }
@@ -294,9 +294,13 @@ mod tests {
         assert!(html.contains(r#"data-admin-path="/podmin""#));
         assert!(html.contains(r#"href="/podmin""#));
         assert!(html.contains(r#"src="/images/logo.svg""#));
+        assert!(html.contains(r#"/css/design-tokens.css?v=35"#));
         assert!(html.contains(r#"/css/admin/tokens.css?v=35"#));
         assert!(html.contains(r#"/css/msi-design-editor.css?v=35"#));
         assert!(html.contains(r#"id="studio-theme-toggle""#));
+        assert!(html.contains(r#"id="studio-toast-region""#));
+        assert!(html.contains(r#"id="studio-tools-menu""#));
+        assert!(html.contains(r#"id="studio-workspace-menu""#));
         assert!(!html.contains(r#"<span class="editor-emblem">MSI</span>"#));
         assert!(!html.contains(r#"msi-design-system.css"#));
         assert!(html.contains(r#"<script nonce="nonce-123">"#));

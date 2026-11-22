@@ -206,13 +206,13 @@ async fn t02_m2_design_tokens_css_zero_inline_style_and_editor_v27() {
     let (state, db_path) = build_test_state("m6_m2_tokens");
     let app = build_test_router(&state);
 
-    // Verify no static public/css/design-tokens.css exists on disk
+    // Verify shared public/css/design-tokens.css exists on disk
     assert!(
-        !Path::new("public/css/design-tokens.css").exists(),
-        "public/css/design-tokens.css must NOT exist as a static file"
+        Path::new("public/css/design-tokens.css").exists(),
+        "public/css/design-tokens.css must exist as shared token foundation"
     );
 
-    // GET /css/design-tokens.css served dynamically
+    // GET /css/design-tokens.css served with shared tokens + dynamic config
     let (st, hdrs, css) = get_text(&app, "/css/design-tokens.css", None).await;
     assert_eq!(st, StatusCode::OK);
     let ct = hdrs
@@ -223,8 +223,8 @@ async fn t02_m2_design_tokens_css_zero_inline_style_and_editor_v27() {
         .to_ascii_lowercase();
     assert!(ct.contains("text/css"), "Expected text/css, got {}", ct);
     assert!(
-        css.contains("--accent") || css.contains(":root"),
-        "Dynamic design tokens CSS missing CSS variables"
+        css.contains("--ui-brand-accent") && css.contains(":root"),
+        "Design tokens CSS missing --ui-brand-accent or :root"
     );
 
     // Zero <style tags in public HTML pages

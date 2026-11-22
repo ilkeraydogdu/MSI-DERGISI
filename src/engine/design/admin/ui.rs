@@ -51,6 +51,10 @@ fn svg_inner(name: &str) -> &'static str {
         "exclamation-triangle" => r#"<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>"#,
         "arrow-left" => r#"<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>"#,
         "arrow-right" => r#"<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>"#,
+        "chevron-left" => r#"<path d="m15 18-6-6 6-6"/>"#,
+        "chevron-right" => r#"<path d="m9 18 6-6-6-6"/>"#,
+        "chevron-down" => r#"<path d="m6 9 6 6 6-6"/>"#,
+        "pause" => r#"<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>"#,
         "lock" => r#"<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>"#,
         "unlock-alt" => r#"<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>"#,
         "eraser" => r#"<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>"#,
@@ -617,6 +621,37 @@ pub fn kpi_card_toned(
     );
 }
 
+pub fn form_panel_header(
+    buf: &mut HtmlBuf,
+    title_id: &str,
+    icon_name: &str,
+    title: &str,
+    close_action: &str,
+    close_label: &str,
+) {
+    buf.el("div", &[("class", "form-panel-header")], |hdr| {
+        hdr.el("div", &[("class", "form-panel-title")], |t| {
+            if !icon_name.is_empty() {
+                icon(t, icon_name);
+            }
+            t.el("span", &[("id", title_id)], |s| {
+                s.text(title);
+            });
+        });
+        hdr.el(
+            "button",
+            &[
+                ("type", "button"),
+                ("class", "btn-icon"),
+                ("data-admin-action", close_action),
+                ("aria-label", close_label),
+                ("title", close_label),
+            ],
+            |b| icon(b, "fa-times"),
+        );
+    });
+}
+
 pub fn ops_table(
     buf: &mut HtmlBuf,
     wrap_cls: &str,
@@ -627,11 +662,19 @@ pub fn ops_table(
     pagination_id: Option<&str>,
 ) {
     let wcls = join_cls("table-responsive", wrap_cls);
+    let has_sticky_actions = cols
+        .iter()
+        .any(|(_, cls)| cls.split_whitespace().any(|c| c == "col-action"));
+    let tbl_cls = if has_sticky_actions {
+        "ops-table ops-table-sticky-actions"
+    } else {
+        "ops-table"
+    };
     buf.el("div", &[("class", &wcls)], |wrap| {
         wrap.el_with(
             "table",
             |a| {
-                a.attr("class", "ops-table");
+                a.attr("class", tbl_cls);
                 if let Some(tid) = table_id {
                     a.attr("id", tid);
                 }

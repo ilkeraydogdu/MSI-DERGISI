@@ -119,8 +119,8 @@
     revision = 0,
     requestId = 0,
     previewDark = false;
-  const clone = (o) => JSON.parse(JSON.stringify(o)),
-    page = () => config.pages[pageIndex],
+  const clone = (o) => (o === undefined ? undefined : JSON.parse(JSON.stringify(o))),
+    page = () => config?.pages?.[pageIndex],
     prefersReducedMotion = () => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
   const FOCUSABLE_SEL = 'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
   function applySavePermissionUi() {
@@ -142,6 +142,22 @@
   applySavePermissionUi();
   let studioConfirmResolve = null;
   let studioConfirmPrevFocus = null;
+  function resolveStudioFocusTarget(el) {
+    if (!el || !el.isConnected) return null;
+    const target =
+      el.closest(".studio-menu-panel") || el.closest("[hidden]")
+        ? el.closest(".studio-dropdown")?.querySelector(".studio-dropdown-trigger")
+        : el;
+    if (
+      target &&
+      target.isConnected &&
+      !target.closest("[hidden]") &&
+      typeof target.focus === "function"
+    ) {
+      return target;
+    }
+    return null;
+  }
   function closeStudioConfirm(accepted) {
     const modal = $("#studio-confirm-modal");
     const card = modal?.querySelector(".studio-modal-card");
@@ -149,22 +165,43 @@
     if (modal) modal.hidden = true;
     const prev = studioConfirmPrevFocus;
     studioConfirmPrevFocus = null;
-    if (prev && typeof prev.focus === "function") prev.focus();
+    const focusTarget = resolveStudioFocusTarget(prev);
+    if (focusTarget) focusTarget.focus();
     const res = studioConfirmResolve;
     studioConfirmResolve = null;
     if (typeof res === "function") res(!!accepted);
   }
-  function studioConfirm(message, title = "İşlem Onayı") {
+  function studioConfirm(message, titleOrOpts = "İşlem Onayı", extraOpts = {}) {
+    const opts =
+      typeof titleOrOpts === "object" && titleOrOpts !== null
+        ? { ...titleOrOpts, ...extraOpts }
+        : { title: titleOrOpts || "İşlem Onayı", ...extraOpts };
+    const title = opts.title || "İşlem Onayı";
+    const confirmLabel = opts.confirmLabel || "Onayla";
+    const cancelLabel = opts.cancelLabel || "Vazgeç";
+    const tone =
+      opts.tone === "danger" || opts.tone === "warning" ? opts.tone : "primary";
+
     const modal = $("#studio-confirm-modal");
+    const card = modal?.querySelector(".studio-modal-card");
     const msgEl = $("#studio-confirm-message");
     const titleEl = $("#studio-confirm-title");
+    const acceptBtn = $("#studio-confirm-accept");
+    const cancelBtn = $("#studio-confirm-cancel");
     if (!modal || !msgEl) return Promise.resolve(false);
     if (studioConfirmResolve) closeStudioConfirm(false);
-    studioConfirmPrevFocus = document.activeElement;
+    studioConfirmPrevFocus = resolveStudioFocusTarget(
+      opts.returnFocusTo || document.activeElement,
+    );
+    if (card) card.dataset.tone = tone;
     if (titleEl) titleEl.textContent = title;
     msgEl.textContent = String(message || "");
+    if (cancelBtn) cancelBtn.textContent = cancelLabel;
+    if (acceptBtn) {
+      acceptBtn.textContent = confirmLabel;
+      acceptBtn.className = tone === "danger" ? "button danger-solid" : "button primary";
+    }
     modal.hidden = false;
-    const card = modal.querySelector(".studio-modal-card");
     if (card && window.gsap && !prefersReducedMotion()) {
       window.gsap.killTweensOf(card);
       window.gsap.fromTo(
@@ -173,7 +210,9 @@
         { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: "power2.out", clearProps: "transform,opacity" },
       );
     }
-    $("#studio-confirm-accept")?.focus();
+    const initialFocus =
+      tone === "danger" || tone === "warning" ? cancelBtn || acceptBtn : acceptBtn || cancelBtn;
+    initialFocus?.focus();
     return new Promise((resolve) => {
       studioConfirmResolve = resolve;
     });
@@ -221,12 +260,198 @@
       }
     }
   });
-  function feedback(message, error = false) {
-    const el = $("#editor-feedback");
-    el.textContent = message;
-    el.setAttribute("role", error ? "alert" : "status");
-    el.dataset.state = !message ? "" : error ? "error" : "success";
+
+  function ensureToastRegion() {
+    let region = $("#studio-toast-region");
+    if (!region) {
+      region = document.createElement("div");
+      region.id = "studio-toast-region";
+      region.className = "ops-toast-region";
+      region.setAttribute("aria-live", "polite");
+      region.setAttribute("aria-relevant", "additions");
+      document.body.appendChild(region);
+    }
+    return region;
   }
+  function createToastIconSvg(variant) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("class", "adm-icon");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    const addPath = (d) => {
+      const p = document.createElementNS(ns, "path");
+      p.setAttribute("d", d);
+      svg.appendChild(p);
+    };
+    const addCircle = (cx, cy, r) => {
+      const c = document.createElementNS(ns, "circle");
+      c.setAttribute("cx", String(cx));
+      c.setAttribute("cy", String(cy));
+      c.setAttribute("r", String(r));
+      svg.appendChild(c);
+    };
+    if (variant === "success") {
+      addCircle(12, 12, 10);
+      addPath("m9 12 2 2 4-4");
+    } else if (variant === "error") {
+      addCircle(12, 12, 10);
+      addPath("m15 9-6 6");
+      addPath("m9 9 6 6");
+    } else if (variant === "warning") {
+      addPath("m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z");
+      addPath("M12 9v4");
+      addPath("M12 17h.01");
+    } else {
+      addCircle(12, 12, 10);
+      addPath("M12 16v-4");
+      addPath("M12 8h.01");
+    }
+    return svg;
+  }
+  function showStudioToast(message, variant = "info", duration = 4200) {
+    const text = String(message ?? "").trim();
+    if (!text) return null;
+    const safeVariant = ["success", "error", "warning", "info"].includes(variant) ? variant : "info";
+    const region = ensureToastRegion();
+    const toast = document.createElement("div");
+    toast.className = `ops-toast toast-${safeVariant}`;
+    toast.setAttribute("role", safeVariant === "error" ? "alert" : "status");
+
+    const iconWrap = document.createElement("span");
+    iconWrap.className = "ops-toast-icon";
+    iconWrap.setAttribute("aria-hidden", "true");
+    iconWrap.appendChild(createToastIconSvg(safeVariant));
+
+    const body = document.createElement("div");
+    body.className = "ops-toast-body";
+    body.textContent = text;
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "ops-toast-close";
+    closeBtn.setAttribute("aria-label", "Kapat");
+    closeBtn.textContent = "×";
+
+    let timerId = null;
+    let dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
+      if (timerId) window.clearTimeout(timerId);
+      if (prefersReducedMotion()) {
+        toast.remove();
+        return;
+      }
+      toast.classList.add("is-leaving");
+      window.setTimeout(() => toast.remove(), 180);
+    }
+    closeBtn.addEventListener("click", dismiss);
+
+    toast.append(iconWrap, body, closeBtn);
+    region.appendChild(toast);
+    if (duration > 0) {
+      timerId = window.setTimeout(dismiss, duration);
+    }
+    return toast;
+  }
+  function feedback(message, error = false, variantOverride) {
+    const el = $("#editor-feedback");
+    const text = String(message ?? "").trim();
+    if (el) {
+      el.textContent = text;
+      el.dataset.state = !text ? "" : error ? "error" : "success";
+    }
+    if (!text) return;
+    showStudioToast(text, variantOverride || (error ? "error" : "success"));
+  }
+
+  const studioMenus = [];
+  function closeAllStudioMenus(restoreFocus = false) {
+    studioMenus.forEach(({ trigger, menu, setOpen }) => {
+      if (!menu.hidden) {
+        setOpen(false);
+        if (restoreFocus) trigger.focus();
+      }
+    });
+  }
+  function bindStudioMenu(triggerId, menuId) {
+    const trigger = $(triggerId);
+    const menu = $(menuId);
+    if (!trigger || !menu) return;
+    const items = () =>
+      Array.from(menu.querySelectorAll('[role="menuitem"]:not([disabled])')).filter(
+        (el) => !el.hidden && !el.closest("[hidden]"),
+      );
+    function setOpen(open) {
+      menu.hidden = !open;
+      trigger.setAttribute("aria-expanded", String(open));
+    }
+    studioMenus.push({ trigger, menu, setOpen });
+
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = menu.hidden;
+      closeAllStudioMenus(false);
+      setOpen(willOpen);
+    });
+    trigger.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        closeAllStudioMenus(false);
+        setOpen(true);
+        items()[0]?.focus();
+      } else if (e.key === "Escape" && !menu.hidden) {
+        e.preventDefault();
+        setOpen(false);
+        trigger.focus();
+      }
+    });
+    menu.addEventListener("keydown", (e) => {
+      const list = items();
+      if (!list.length) return;
+      const idx = list.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        list[(idx + 1) % list.length]?.focus();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        list[(idx - 1 + list.length) % list.length]?.focus();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        list[0]?.focus();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        list[list.length - 1]?.focus();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+        trigger.focus();
+      } else if (e.key === "Tab") {
+        setOpen(false);
+      }
+    });
+    menu.addEventListener("click", (e) => {
+      if (e.target.closest('[role="menuitem"]')) {
+        setOpen(false);
+      }
+    });
+  }
+  bindStudioMenu("#studio-workspace-btn", "#studio-workspace-menu");
+  bindStudioMenu("#studio-tools-btn", "#studio-tools-menu");
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".studio-dropdown")) {
+      closeAllStudioMenus(false);
+    }
+  });
+  window.addEventListener("blur", () => closeAllStudioMenus(false));
   function setSaveState(text, isDirty) {
     const pill = $("#save-state");
     if (!pill) return;
@@ -369,10 +594,24 @@
         }),
         button(
           "Sil",
-          () => {
+          async () => {
+            if (page().sections.length <= 1) {
+              showStudioToast("Bir sayfada en az bir bölüm kalmalıdır.", "error");
+              return;
+            }
+            const secName = s.title || kinds[s.kind] || "Bu bölüm";
+            if (
+              !(await studioConfirm(
+                `"${secName}" bölümünü bu sayfadan silmek istediğinize emin misiniz?`,
+                { title: "Bölümü Sil", confirmLabel: "Bölümü Sil", tone: "danger" },
+              ))
+            ) {
+              return;
+            }
             page().sections.splice(index, 1);
             renderSections();
             mark();
+            showStudioToast("Bölüm sayfadan kaldırıldı.", "info");
           },
           "remove",
         ),
@@ -499,12 +738,22 @@
         up,
         button(
           "Kaldır",
-          () => {
+          async () => {
+            const navName = n.label || n.href || "Bu bağlantı";
+            if (
+              !(await studioConfirm(
+                `"${navName}" bağlantısını üst menüden kaldırmak istediğinize emin misiniz?`,
+                { title: "Menü Bağlantısını Kaldır", confirmLabel: "Kaldır", tone: "danger" },
+              ))
+            ) {
+              return;
+            }
             config.navigation.splice(i, 1);
             renderNavigation();
             mark();
+            showStudioToast("Menü bağlantısı kaldırıldı.", "info");
           },
-          "button secondary",
+          "button danger",
         ),
       );
       box.append(row);
@@ -568,11 +817,15 @@
   });
   async function save() {
     if (!canSave) return;
+    if (!config) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     const b = $("#save-button");
     b.disabled = true;
     const atRevision = revision;
     const submitted = clone(config);
-    feedback("Kaydediliyor…");
+    setSaveState("Kaydediliyor…", dirty);
     try {
       const response = await fetch("/api/v1/admin/design", {
         method: "POST",
@@ -592,14 +845,25 @@
       }
       feedback("Tasarım kaydedildi. Sayfalar yeni ayarlarla üretiliyor.");
     } catch (error) {
+      setSaveState(
+        dirty ? "Kaydedilmemiş değişiklikler" : "Kayıtlı tasarım",
+        dirty,
+      );
       feedback(error.message, true);
     } finally {
       b.disabled = !canSave;
     }
   }
   $("#save-button").addEventListener("click", save);
-  $("#preview-button").addEventListener("click", preview);
+  $("#preview-button").addEventListener("click", () => {
+    if (!config) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
+    preview();
+  });
   $("#page-select").addEventListener("change", (e) => {
+    if (!config) return;
     pageIndex = Number(e.target.value);
     pageFields();
     renderSections();
@@ -609,6 +873,7 @@
     $("#page-" + key).addEventListener(
       key === "mode" ? "change" : "input",
       (e) => {
+        if (!config || !page()) return;
         page()[key] = e.target.value;
         $("#page-url").textContent = pathFor(page());
         $("#open-page").href = pathFor(page());
@@ -624,6 +889,7 @@
     "font-size": "font_size",
   }).forEach(([id, key]) =>
     $("#theme-" + id).addEventListener("input", (e) => {
+      if (!config?.theme) return;
       config.theme[key] =
         key === "default_mode" ? e.target.value : Number(e.target.value);
       mark();
@@ -635,6 +901,10 @@
     return prefix + "-" + i;
   }
   $("#add-page").addEventListener("click", () => {
+    if (!config) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     config.pages.push({
       slug: uniqueSlug("yeni-sayfa"),
       title: "Yeni sayfa",
@@ -647,6 +917,10 @@
     mark();
   });
   $("#duplicate-page").addEventListener("click", () => {
+    if (!config || !page()) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     const copy = clone(page());
     copy.slug = uniqueSlug(page().slug);
     copy.title += " · Kopya";
@@ -656,6 +930,10 @@
     mark();
   });
   $("#delete-page").addEventListener("click", async () => {
+    if (!config || !page()) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     if (config.pages.length <= 1) {
       feedback("En az bir sayfa kalmalıdır.", true);
       return;
@@ -663,7 +941,7 @@
     if (
       !(await studioConfirm(
         `"${page().title || page().slug}" sayfasını silmek istediğinize emin misiniz?`,
-        "Sayfayı Sil",
+        { title: "Sayfayı Sil", confirmLabel: "Sayfayı Sil", tone: "danger" },
       ))
     ) {
       return;
@@ -672,6 +950,7 @@
     pageIndex = 0;
     render();
     mark();
+    showStudioToast("Sayfa taslaktan silindi.", "info");
   });
   function newSection(kind) {
     return {
@@ -693,12 +972,20 @@
     $("#new-section-kind").add(new Option(label, key)),
   );
   $("#add-section").addEventListener("click", () => {
+    if (!config || !page()) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     page().sections.push(newSection($("#new-section-kind").value));
     renderSections();
     $("#section-list").lastElementChild.open = true;
     mark();
   });
   $("#add-navigation").addEventListener("click", () => {
+    if (!config) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     config.navigation.push({ label: "Yeni bağlantı", href: "/" });
     renderNavigation();
     mark();
@@ -776,7 +1063,11 @@
       doc.documentElement.dataset.theme = previewDark ? "dark" : "light";
     }
   });
-  $("#export-design").addEventListener("click", () => {
+  $("#export-design")?.addEventListener("click", () => {
+    if (!config) {
+      showStudioToast("Dışa aktarılacak tasarım ayarları henüz yüklenemedi.", "error");
+      return;
+    }
     const a = document.createElement("a"),
       url = URL.createObjectURL(
         new Blob([JSON.stringify(config, null, 2)], {
@@ -787,11 +1078,44 @@
     a.download = "msi-design.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 500);
+    showStudioToast("Tasarım JSON dosyası indirildi.", "info");
   });
-  $("#import-design").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
+  $("#import-design-btn")?.addEventListener("click", () => {
+    if (!config) {
+      showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
+    $("#import-design")?.click();
+  });
+  $("#import-design")?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     try {
+      if (!config) {
+        showStudioToast("Tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+        return;
+      }
+      const importReturnFocus =
+        !document.activeElement ||
+        document.activeElement === document.body ||
+        document.activeElement.closest(".studio-menu-panel") ||
+        document.activeElement.closest("[hidden]")
+          ? $("#studio-tools-btn")
+          : document.activeElement;
+      if (
+        dirty &&
+        !(await studioConfirm(
+          "Kaydedilmemiş taslak değişiklikler içe aktarılan JSON ile değiştirilecek. Devam edilsin mi?",
+          {
+            title: "Tasarımı İçe Aktar",
+            confirmLabel: "İçe Aktar",
+            tone: "warning",
+            returnFocusTo: importReturnFocus,
+          },
+        ))
+      ) {
+        return;
+      }
       if (file.size > 500000) throw Error("Dosya en fazla 500 KB olabilir.");
       const imported = JSON.parse(await file.text());
       const response = await fetch(`${adminBase}/tasarim/onizleme`, {
@@ -814,14 +1138,19 @@
       feedback("Dosya taslağa alındı. Uygulamak için kaydedin.");
     } catch (error) {
       feedback(error.message, true);
+    } finally {
+      e.target.value = "";
     }
-    e.target.value = "";
   });
-  $("#restore-defaults").addEventListener("click", async () => {
+  $("#restore-defaults")?.addEventListener("click", async () => {
+    if (!defaults) {
+      showStudioToast("Varsayılan tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     if (
       !(await studioConfirm(
         "Tüm tasarım ayarları varsayılan fabrika düzenine sıfırlanacaktır (taslağa alınır). Devam edilsin mi?",
-        "Fabrika Varsayılanlarına Sıfırla",
+        { title: "Fabrika Varsayılanlarına Sıfırla", confirmLabel: "Varsayılanlara Sıfırla", tone: "danger" },
       ))
     ) {
       return;
@@ -832,18 +1161,25 @@
     mark();
     feedback(
       "Varsayılan tasarım taslağa alındı. Kayıtlı tasarım henüz değiştirilmedi.",
+      false,
+      "info",
     );
   });
-  $("#discard-draft").addEventListener("click", async () => {
+  $("#discard-draft")?.addEventListener("click", async () => {
+    if (!saved) {
+      showStudioToast("Kayıtlı tasarım ayarları henüz yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
     if (
       dirty &&
       !(await studioConfirm(
         "Kaydedilmemiş taslak değişiklikler tamamen silinecek. Emin misiniz?",
-        "Taslağı Geri Al",
+        { title: "Taslağı Geri Al", confirmLabel: "Taslağı Bırak", tone: "danger" },
       ))
     ) {
       return;
     }
+    const wasDirty = dirty;
     config = clone(saved);
     pageIndex = 0;
     dirty = false;
@@ -852,7 +1188,8 @@
     } catch {}
     render();
     preview();
-    setSaveState("Kayıtlı tasarım", false);
+    setSaveState(canSave ? "Kayıtlı tasarım" : "Salt okunur mod", false);
+    if (wasDirty) showStudioToast("Taslak değişiklikler geri alındı.", "info");
   });
   window.addEventListener("beforeunload", (e) => {
     if (dirty) {

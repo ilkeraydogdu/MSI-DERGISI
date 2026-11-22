@@ -11,6 +11,7 @@ use crate::{
     extractors::operator_user::is_non_staff_role_name,
     models::*,
 };
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Timelike};
 use serde_json::{Map, Value};
 
 const THEME_PREHYDRATE_JS: &str =
@@ -54,7 +55,7 @@ fn localize_subscription_tier(raw: &str, is_en: bool) -> String {
             if is_en { "Free Reader" } else { "Ücretsiz Okuyucu" }.to_string()
         }
         "dijital" | "digital" | "dijital abone" | "dijital e-dergi abonesi"
-        | "digital subscriber" | "digital e-magazine subscriber" => {
+        | "digital subscriber" | "digital e-magazine subscriber" | "subscriber_digital" => {
             if is_en {
                 "Digital E-Magazine Subscriber"
             } else {
@@ -64,7 +65,7 @@ fn localize_subscription_tier(raw: &str, is_en: bool) -> String {
         }
         "basili-dijital" | "basılı + dijital" | "basılı + dijital abone" | "basili + dijital"
         | "print_digital" | "print-digital" | "print & digital"
-        | "print & digital subscriber" => {
+        | "print & digital subscriber" | "subscriber_print_digital" => {
             if is_en {
                 "Print & Digital Subscriber"
             } else {
@@ -72,7 +73,8 @@ fn localize_subscription_tier(raw: &str, is_en: bool) -> String {
             }
             .to_string()
         }
-        "kurumsal" | "kurumsal abone" | "corporate" | "corporate subscriber" => {
+        "kurumsal" | "kurumsal abone" | "corporate" | "corporate subscriber"
+        | "subscriber_corporate" => {
             if is_en {
                 "Corporate Subscriber"
             } else {
@@ -80,7 +82,8 @@ fn localize_subscription_tier(raw: &str, is_en: bool) -> String {
             }
             .to_string()
         }
-        "kamu" | "kamu e-dergi abonesi" | "public" | "public sector subscriber" => {
+        "kamu" | "kamu e-dergi abonesi" | "public" | "public sector subscriber"
+        | "subscriber_public" => {
             if is_en {
                 "Public Sector Subscriber"
             } else {
@@ -90,6 +93,110 @@ fn localize_subscription_tier(raw: &str, is_en: bool) -> String {
         }
         _ => trimmed.to_string(),
     }
+}
+
+fn localize_payment_status(raw: &str, is_en: bool) -> (&'static str, &'static str) {
+    let norm = raw.trim().to_ascii_lowercase();
+    if norm.is_empty() {
+        return ("is-muted", if is_en { "Unknown" } else { "Bilinmiyor" });
+    }
+    if norm.contains("refund") {
+        return ("is-muted", if is_en { "Refunded" } else { "İade Edildi" });
+    }
+    if norm.contains("failed") {
+        return ("is-danger", if is_en { "Failed" } else { "Başarısız" });
+    }
+    if norm.contains("cancel") {
+        return ("is-muted", if is_en { "Cancelled" } else { "İptal Edildi" });
+    }
+    if norm == "paid" || norm.starts_with("paid_") {
+        return ("is-verified", if is_en { "Paid" } else { "Ödendi" });
+    }
+    match norm.as_str() {
+        "pending" | "pending_payment" => {
+            ("is-pending", if is_en { "Pending" } else { "Beklemede" })
+        }
+        "pending_bank_transfer" => (
+            "is-pending",
+            if is_en {
+                "Awaiting Bank Transfer"
+            } else {
+                "Havale Bekleniyor"
+            },
+        ),
+        _ => ("is-muted", if is_en { "Processing" } else { "İşlemde" }),
+    }
+}
+
+fn localize_consent_type(raw: &str, is_en: bool) -> String {
+    let trimmed = raw.trim();
+    match trimmed.to_ascii_lowercase().as_str() {
+        "kvkk" | "" => if is_en {
+            "KVKK Privacy Notice"
+        } else {
+            "KVKK Aydınlatma Metni"
+        }
+        .to_string(),
+        "tos" => if is_en {
+            "Terms of Service"
+        } else {
+            "Kullanım Koşulları"
+        }
+        .to_string(),
+        "etk" => if is_en {
+            "Commercial Message Consent (ETK)"
+        } else {
+            "Ticari İleti İzni (ETK)"
+        }
+        .to_string(),
+        _ => trimmed.to_string(),
+    }
+}
+
+fn format_portal_date(raw: &str, is_en: bool) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "—".to_string();
+    }
+    let format_dt = |ndt: NaiveDateTime, has_time: bool| -> String {
+        let include_time = has_time && (ndt.hour() != 0 || ndt.minute() != 0);
+        if is_en {
+            if include_time {
+                ndt.format("%d %b %Y %H:%M").to_string()
+            } else {
+                ndt.format("%d %b %Y").to_string()
+            }
+        } else if include_time {
+            ndt.format("%d.%m.%Y %H:%M").to_string()
+        } else {
+            ndt.format("%d.%m.%Y").to_string()
+        }
+    };
+    if let Ok(dt) = DateTime::parse_from_rfc3339(trimmed) {
+        return format_dt(dt.naive_local(), true);
+    }
+    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"] {
+        if let Ok(ndt) = NaiveDateTime::parse_from_str(trimmed, fmt) {
+            return format_dt(ndt, true);
+        }
+    }
+    if let Ok(d) = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
+        return if is_en {
+            d.format("%d %b %Y").to_string()
+        } else {
+            d.format("%d.%m.%Y").to_string()
+        };
+    }
+    if let Some(prefix) = trimmed.get(..10) {
+        if let Ok(d) = NaiveDate::parse_from_str(prefix, "%Y-%m-%d") {
+            return if is_en {
+                d.format("%d %b %Y").to_string()
+            } else {
+                d.format("%d.%m.%Y").to_string()
+            };
+        }
+    }
+    trimmed.to_string()
 }
 
 fn resolve_org_category_label(raw: &str, choices: &[InstitutionChoice], is_en: bool) -> String {
@@ -272,6 +379,12 @@ pub fn render_with_context(
     )
 }
 
+fn compute_portal_edergi_permissions(user: &UserAccount) -> (bool, bool) {
+    let has_sub = crate::services::content_service::user_has_subscriber_access(user);
+    let can_dl = has_sub && (user.email_verified || !is_non_staff_role_name(&user.role));
+    (has_sub, can_dl)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn render_with_full_context(
     lang: &str,
@@ -286,12 +399,10 @@ pub fn render_with_full_context(
     kvkk_logs: &[KvkkConsentLog],
     contents: &[ContentItem],
 ) -> String {
-    let has_sub = crate::services::content_service::user_has_subscriber_access(user);
-    let can_dl =
-        has_sub && (user.email_verified || user.role == "site_operator" || user.role == "super_admin");
+    let (has_sub, can_dl) = compute_portal_edergi_permissions(user);
     let can_studio = admin_path_opt.is_some()
         && matches!(
-            user.role.trim(),
+            user.role.trim().to_ascii_lowercase().as_str(),
             "super_admin" | "admin" | "site_operator" | "editor_in_chief" | "managing_editor"
         );
     let ctx = AccountPortalContext {
@@ -325,7 +436,8 @@ struct RoleProfile<'a> {
 }
 
 fn resolve_role_profile(user: &UserAccount, is_en: bool) -> RoleProfile<'static> {
-    match user.role.trim() {
+    let norm_role = user.role.trim().to_ascii_lowercase();
+    match norm_role.as_str() {
         "subscriber_public" => RoleProfile {
             label: if is_en { "Public Sector Subscriber" } else { "Kamu E-Dergi Abonesi" },
             summary: if is_en {
@@ -525,11 +637,35 @@ fn portal_i18n_json(is_en: bool) -> Value {
         ("portal.theme_dark", "Koyu", "Dark"),
         ("portal.theme_to_light", "Açık temaya geç", "Switch to light theme"),
         ("portal.theme_to_dark", "Koyu temaya geç", "Switch to dark theme"),
+        ("portal.close", "Kapat", "Close"),
         ("portal.sending", "Gönderiliyor…", "Sending…"),
         ("portal.saving", "Kaydediliyor…", "Saving…"),
         ("portal.verifying", "Doğrulanıyor…", "Verifying…"),
         ("portal.processing", "İşleniyor…", "Processing…"),
         ("portal.deleting", "Hesabınız kalıcı olarak siliniyor…", "Permanently deleting your account…"),
+        ("portal.conn_err", "Bağlantı hatası.", "Connection error."),
+        ("portal.verify_err", "Doğrulama e-postası gönderilemedi.", "Verification email could not be sent."),
+        ("portal.verify_ok", "Doğrulama e-postası adresinize tekrar gönderildi.", "Verification email has been resent."),
+        ("portal.profile_err", "Profil güncellenemedi.", "Profile could not be updated."),
+        ("portal.profile_ok", "Profiliniz ve SSB ilgi alanlarınız güncellendi.", "Your profile and SSB interests have been updated."),
+        ("portal.totp_gen", "Güvenli 2FA anahtarı üretiliyor…", "Generating secure 2FA secret…"),
+        ("portal.totp_setup_err", "2FA kurulumu başlatılamadı.", "2FA setup could not be started."),
+        ("portal.totp_code_err", "Doğrulama kodu hatalı. Lütfen tekrar deneyin.", "Invalid verification code. Please try again."),
+        ("portal.totp_ok", "İki aşamalı doğrulama (2FA) etkinleştirildi.", "Two-factor authentication (2FA) is now enabled."),
+        ("portal.codes_copied", "Kurtarma kodları kopyalandı.", "Recovery codes copied."),
+        ("portal.copy_manual", "Kodları manuel olarak kopyalayın.", "Please copy the codes manually."),
+        ("portal.totp_dis_err", "2FA devre dışı bırakılamadı.", "2FA could not be disabled."),
+        ("portal.totp_dis_ok", "İki aşamalı doğrulama devre dışı bırakıldı.", "Two-factor authentication has been disabled."),
+        ("portal.delete_err", "Hesap silme işlemi tamamlanamadı. Şifrenizi kontrol edin.", "Account deletion failed. Please check your password."),
+        ("portal.delete_ok", "Hesabınız KVKK kapsamında kalıcı olarak silindi.", "Your account has been permanently deleted."),
+        ("portal.confirm_erasure_err", "Kalıcı hesap silme işlemini onaylamanız gerekmektedir.", "Please confirm permanent account erasure."),
+        ("portal.pw_required", "Lütfen mevcut şifrenizi girin.", "Please enter your current password."),
+        ("portal.notif_read", "Bildirim okundu olarak işaretlendi.", "Notification marked as read."),
+        ("portal.notif_all_read", "Tüm bildirimler okundu işaretlendi.", "All notifications marked as read."),
+        ("portal.notif_partial", "Bazı bildirimler güncellenemedi. Lütfen tekrar deneyin.", "Some notifications could not be updated. Please try again."),
+        ("portal.notif_err", "Bildirimler güncellenemedi.", "Could not update notifications."),
+        ("portal.notif_status_read", "Okundu", "Read"),
+        ("portal.logout_err", "Çıkış yapılamadı. Tekrar deneyin.", "Sign-out failed. Please try again."),
     ];
     for (k, tr_v, en_v) in pairs {
         map.insert((*k).to_string(), Value::String(if is_en { *en_v } else { *tr_v }.to_string()));
@@ -551,28 +687,29 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
         "Okuyucu & Abone Kontrol Merkezi — MSI Dergisi",
         "Reader & Subscriber Control Center — MSI Review",
     );
-    let skip_lbl = if is_en { "Skip to workspace" } else { "Çalışma alanına geç" };
-    let brand_title = if is_en { "MSI REVIEW" } else { "MSI DERGİSİ" };
-    let brand_sub = if is_en { "Reader Portal" } else { "Okuyucu Portalı" };
+    let skip_lbl = tr_text(ctx.tr, norm_lang, "account.skip_to_workspace", "Çalışma alanına geç", "Skip to workspace");
+    let brand_title = tr_text(ctx.tr, norm_lang, "account.brand_title", "MSI DERGİSİ", "MSI REVIEW");
+    let brand_sub = tr_text(ctx.tr, norm_lang, "account.brand_sub", "Okuyucu Portalı", "Reader Portal");
     let home_href = lang_href("/", norm_lang);
-    let back_site_lbl = if is_en { "Back to Site" } else { "Siteye Dön" };
+    let back_site_lbl = tr_text(ctx.tr, norm_lang, "account.back_to_site", "Siteye Dön", "Back to Site");
     let other_lang = if is_en { "tr" } else { "en" };
     let switch_label = if is_en { "TR" } else { "EN" };
-    let switch_aria = if is_en { "Türkçe arayüze geç" } else { "Switch to English" };
-    let logout_short = if is_en { "Sign out" } else { "Çıkış" };
-    let nav_aria = if is_en { "Account portal navigation" } else { "Hesap portalı menüsü" };
-    let nav_group_lbl = if is_en { "Workspace" } else { "Çalışma Alanı" };
-    let close_menu_lbl = if is_en { "Close navigation" } else { "Menüyü kapat" };
-    let open_menu_lbl = if is_en { "Open navigation" } else { "Menüyü aç" };
+    let switch_aria = tr_text(ctx.tr, norm_lang, "account.switch_lang_aria", "Switch to English", "Türkçe arayüze geç");
+    let logout_short = tr_text(ctx.tr, norm_lang, "account.logout_short", "Çıkış", "Sign out");
+    let nav_aria = tr_text(ctx.tr, norm_lang, "account.nav_aria", "Hesap portalı menüsü", "Account portal navigation");
+    let nav_group_lbl = tr_text(ctx.tr, norm_lang, "account.nav_group", "Çalışma Alanı", "Workspace");
+    let close_menu_lbl = tr_text(ctx.tr, norm_lang, "account.close_menu", "Menüyü kapat", "Close navigation");
+    let open_menu_lbl = tr_text(ctx.tr, norm_lang, "account.open_menu", "Menüyü aç", "Open navigation");
+    let theme_dark_lbl = tr_text(ctx.tr, norm_lang, "portal.theme_dark", "Koyu", "Dark");
 
     let initial_tab = normalize_portal_tab(ctx.hints.active_tab, ctx.hints.payment_success);
 
-    let nav_items: &[(&str, &str, &str, &str)] = &[
-        ("overview", "overview", "Genel Bakış & Akış", "Overview & Feed"),
-        ("edergi", "edergi", "E-Dergi & Abonelik", "E-Magazine & Subscription"),
-        ("profile", "profile", "Profil & SSB İlgi", "Profile & SSB Interests"),
-        ("security", "security", "Güvenlik & KVKK", "Security & KVKK"),
-        ("notifications", "notifications", "Bildirimler", "Notifications"),
+    let nav_items: &[(&str, &str, &str, &str, &str)] = &[
+        ("overview", "overview", "account.nav_overview", "Genel Bakış & Akış", "Overview & Feed"),
+        ("edergi", "edergi", "account.nav_edergi", "E-Dergi & Abonelik", "E-Magazine & Subscription"),
+        ("profile", "profile", "account.nav_profile", "Profil & SSB İlgi", "Profile & SSB Interests"),
+        ("security", "security", "account.nav_security", "Güvenlik & KVKK", "Security & KVKK"),
+        ("notifications", "notifications", "account.nav_notifications", "Bildirimler", "Notifications"),
     ];
 
     let clean_admin = ctx
@@ -585,10 +722,15 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
     let inner_html = render_portal_inner(ctx);
     let edergi_href = lang_href("/e-dergi", norm_lang);
     let sub_href = lang_href("/abonelik-ve-satis", norm_lang);
+    let footer_edergi_lbl = tr_text(ctx.tr, norm_lang, "account.footer_edergi", "E-Dergi Arşivi", "E-Magazine Kiosk");
+    let footer_sub_lbl = tr_text(ctx.tr, norm_lang, "account.footer_sub", "Abonelik & Mağaza", "Subscriptions & Store");
+    let footer_cmd_lbl = tr_text(ctx.tr, norm_lang, "account.footer_cmd", "Komuta Merkezi", "Command Center");
+    let footer_studio_lbl = tr_text(ctx.tr, norm_lang, "account.footer_studio", "Tasarım Stüdyosu", "Design Studio");
+    let footer_editor_lbl = tr_text(ctx.tr, norm_lang, "account.footer_editor", "Editör Stüdyosu", "Editorial Studio");
 
     let mut buf = HtmlBuf::with_capacity(65536);
     buf.raw("<!DOCTYPE html>");
-    buf.el("html", &[("lang", norm_lang), ("data-theme", "light")], |html| {
+    buf.el("html", &[("lang", norm_lang)], |html| {
         html.el("head", &[], |head| {
             head.void_el("meta", &[("charset", "UTF-8")]);
             head.void_el("meta", &[("name", "viewport"), ("content", "width=device-width, initial-scale=1.0")]);
@@ -619,8 +761,9 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                     ("crossorigin", "anonymous"),
                 ],
             );
-            head.link_css("/css/account-portal.css?v=35");
             head.script_inline(THEME_PREHYDRATE_JS, clean_nonce, None);
+            head.link_css("/css/design-tokens.css?v=35");
+            head.link_css("/css/account-portal.css?v=35");
         });
 
         html.el(
@@ -628,7 +771,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
             &[("class", "ap-body"), ("data-initial-tab", initial_tab)],
             |body| {
                 body.el("a", &[("class", "ap-skip-link"), ("href", "#main-content")], |a| {
-                    a.text(skip_lbl);
+                    a.text(&skip_lbl);
                 });
                 body.el("div", &[("class", "ap-ambient-stage"), ("aria-hidden", "true")], |_| {});
 
@@ -643,7 +786,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                 ("id", "ap-sidebar-toggle"),
                                 ("aria-controls", "ap-sidebar"),
                                 ("aria-expanded", "false"),
-                                ("aria-label", open_menu_lbl),
+                                ("aria-label", &open_menu_lbl),
                             ],
                             |b| {
                                 b.raw(portal_svg("menu"));
@@ -662,17 +805,17 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                             );
                             a.el("span", &[("class", "ap-brand-text")], |bt| {
                                 bt.el("span", &[("class", "ap-brand-title")], |t| {
-                                    t.text(brand_title);
+                                    t.text(&brand_title);
                                 });
                                 bt.el("span", &[("class", "ap-brand-sub")], |t| {
-                                    t.text(brand_sub);
+                                    t.text(&brand_sub);
                                 });
                             });
                         });
                         left.el("a", &[("class", "ap-back-link"), ("href", &home_href)], |a| {
                             a.text("← ");
                             a.el("span", &[("class", "ap-back-text")], |s| {
-                                s.text(back_site_lbl);
+                                s.text(&back_site_lbl);
                             });
                         });
                     });
@@ -688,7 +831,8 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                             &[
                                 ("href", &switch_href),
                                 ("class", "ap-util-btn"),
-                                ("aria-label", switch_aria),
+                                ("data-ap-lang-switch", ""),
+                                ("aria-label", &switch_aria),
                             ],
                             |a| {
                                 a.text(switch_label);
@@ -705,7 +849,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                             |b| {
                                 b.raw(portal_svg("sun"));
                                 b.el("span", &[("data-theme-label", "")], |s| {
-                                    s.text(if is_en { "Dark" } else { "Koyu" });
+                                    s.text(&theme_dark_lbl);
                                 });
                             },
                         );
@@ -717,7 +861,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                 ("data-logout", ""),
                             ],
                             |b| {
-                                b.text(logout_short);
+                                b.text(&logout_short);
                             },
                         );
                     });
@@ -740,12 +884,12 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                         &[
                             ("class", "ap-sidebar"),
                             ("id", "ap-sidebar"),
-                            ("aria-label", nav_aria),
+                            ("aria-label", &nav_aria),
                         ],
                         |sb| {
                             sb.el("div", &[("class", "ap-sidebar-close-row")], |cr| {
                                 cr.el("span", &[("class", "ap-nav-group-label")], |gl| {
-                                    gl.text(brand_sub);
+                                    gl.text(&brand_sub);
                                 });
                                 cr.el(
                                     "button",
@@ -753,7 +897,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                         ("type", "button"),
                                         ("class", "ap-menu-btn"),
                                         ("id", "ap-sidebar-close"),
-                                        ("aria-label", close_menu_lbl),
+                                        ("aria-label", &close_menu_lbl),
                                     ],
                                     |b| {
                                         b.raw(portal_svg("close"));
@@ -780,9 +924,9 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                 });
                             });
 
-                            sb.el("div", &[], |grp| {
+                            sb.el("div", &[("class", "ap-sidebar-tabs-group")], |grp| {
                                 grp.el("div", &[("class", "ap-nav-group-label")], |gl| {
-                                    gl.text(nav_group_lbl);
+                                    gl.text(&nav_group_lbl);
                                 });
                                 grp.el(
                                     "div",
@@ -792,10 +936,11 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                         ("aria-orientation", "vertical"),
                                     ],
                                     |list| {
-                                        for (key, ico, lbl_tr, lbl_en) in nav_items {
+                                        for (key, ico, tr_key, lbl_tr, lbl_en) in nav_items {
                                             let is_active = *key == initial_tab;
                                             let btn_id = format!("ap-tab-{}", key);
                                             let panel_id = format!("ap-panel-{}", key);
+                                            let lbl_txt = tr_text(ctx.tr, norm_lang, tr_key, lbl_tr, lbl_en);
                                             let cls = if is_active {
                                                 "ap-nav-btn is-active"
                                             } else {
@@ -815,7 +960,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                                 |btn| {
                                                     btn.raw(portal_svg(ico));
                                                     btn.el("span", &[("class", "ap-nav-label")], |sp| {
-                                                        sp.text(if is_en { lbl_en } else { lbl_tr });
+                                                        sp.text(&lbl_txt);
                                                     });
                                                     if *key == "notifications" {
                                                         let cnt_str = unread_count.to_string();
@@ -824,6 +969,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                                             |ba| {
                                                                 ba.attr("class", "ap-nav-badge")
                                                                     .attr("id", "ap-notif-badge")
+                                                                    .attr("data-notif-badge", "")
                                                                     .attr("data-unread-count", &cnt_str)
                                                                     .bool_attr("hidden", unread_count == 0);
                                                             },
@@ -841,11 +987,11 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
 
                             sb.el("div", &[("class", "ap-sidebar-footer")], |ft| {
                                 ft.el("a", &[("class", "ap-sidebar-link"), ("href", &edergi_href)], |a| {
-                                    a.text(if is_en { "E-Magazine Kiosk" } else { "E-Dergi Arşivi" });
+                                    a.text(&footer_edergi_lbl);
                                     a.text(" ↗");
                                 });
                                 ft.el("a", &[("class", "ap-sidebar-link"), ("href", &sub_href)], |a| {
-                                    a.text(if is_en { "Subscriptions & Store" } else { "Abonelik & Mağaza" });
+                                    a.text(&footer_sub_lbl);
                                     a.text(" ↗");
                                 });
                                 if let Some(adm) = clean_admin {
@@ -856,7 +1002,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                         "a",
                                         &[("class", "ap-sidebar-link is-staff"), ("href", &adm_href)],
                                         |a| {
-                                            a.text(if is_en { "Command Center" } else { "Komuta Merkezi" });
+                                            a.text(&footer_cmd_lbl);
                                             a.text(" →");
                                         },
                                     );
@@ -865,7 +1011,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                             "a",
                                             &[("class", "ap-sidebar-link is-staff"), ("href", &studio_href)],
                                             |a| {
-                                                a.text(if is_en { "Design Studio" } else { "Tasarım Stüdyosu" });
+                                                a.text(&footer_studio_lbl);
                                                 a.text(" →");
                                             },
                                         );
@@ -875,7 +1021,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                                             "a",
                                             &[("class", "ap-sidebar-link is-staff"), ("href", &editor_href)],
                                             |a| {
-                                                a.text(if is_en { "Editorial Studio" } else { "Editör Stüdyosu" });
+                                                a.text(&footer_editor_lbl);
                                                 a.text(" →");
                                             },
                                         );
@@ -903,7 +1049,7 @@ pub fn render_portal_document(ctx: &AccountPortalContext<'_>) -> String {
                     &[
                         ("class", "ap-toast-region"),
                         ("aria-live", "polite"),
-                        ("aria-atomic", "true"),
+                        ("aria-atomic", "false"),
                     ],
                     |_| {},
                 );
@@ -1226,7 +1372,7 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
             "Disable 2FA Protection",
         );
         format!(
-            r#"<article class="account-panel account-security-panel" id="account-totp-card"><div class="panel-header-row"><div><div class="eyebrow">{totp_eyebrow}</div><h2>{totp_title}</h2></div><span class="status-badge is-verified">{status_lbl}</span></div><p>{active_desc}</p><form id="account-totp-disable-form" class="ui-form account-totp-form"><div class="form-grid-2"><label>{cur_pw_lbl}<input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label><label>{code_lbl}<input name="code" type="text" class="totp-code-input" autocomplete="one-time-code" minlength="6" maxlength="20" placeholder="000000" required></label></div><p class="form-feedback" role="status"></p><button type="submit" class="button secondary danger-outline">{disable_btn}</button></form></article>"#,
+            r#"<article class="account-panel account-security-panel" id="account-totp-card"><div class="panel-header-row"><div><div class="eyebrow">{totp_eyebrow}</div><h2>{totp_title}</h2></div><span class="status-badge is-verified">{status_lbl}</span></div><p>{active_desc}</p><form id="account-totp-disable-form" class="ui-form account-totp-form"><div class="form-grid-2"><label>{cur_pw_lbl}<input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label><label>{code_lbl}<input name="code" type="text" class="totp-code-input" autocomplete="one-time-code" minlength="6" maxlength="20" placeholder="000000" required></label></div><p class="form-feedback" role="status"></p><button type="submit" class="button danger-outline">{disable_btn}</button></form></article>"#,
             totp_eyebrow = esc(&totp_eyebrow),
             totp_title = esc(&totp_title),
             status_lbl = esc(&status_lbl),
@@ -1312,20 +1458,23 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
     let invoice_rows: String = invoices
         .iter()
         .map(|i| {
+            let (st_cls, st_lbl) = localize_payment_status(&i.payment_status, is_en);
+            let inv_date = format_portal_date(&i.created_at, is_en);
             format!(
-                "<tr><td><code>{}</code></td><td>{}</td><td>₺{:.0}</td><td>{}</td><td>{}</td></tr>",
+                r#"<tr><td><code>{}</code></td><td>{}</td><td>₺{:.0}</td><td><span class="status-badge {}">{}</span></td><td>{}</td></tr>"#,
                 esc(&i.invoice_no),
                 esc(&i.item_title),
                 i.amount_try,
-                esc(&i.payment_status),
-                esc(&i.created_at)
+                st_cls,
+                esc(st_lbl),
+                esc(&inv_date)
             )
         })
         .collect();
 
     let notices_html: String = notifications
         .iter()
-        .map(|n| render_portal_notification_card(n, lang))
+        .map(|n| render_portal_notification_card(n, lang, tr))
         .collect();
 
     let reminder_text = reminders
@@ -1516,12 +1665,15 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         "Onaylanan Kullanım Koşulları Sürümü",
         "Accepted Terms Version",
     );
+    let kvkk_accepted_lbl = tr_text(tr, lang, "account.kvkk_accepted", "Onaylandı", "Accepted");
+    let kvkk_withdrawn_lbl = tr_text(tr, lang, "account.kvkk_withdrawn", "Geri Çekildi", "Withdrawn");
     let kvkk_rows: String = if kvkk_logs.is_empty() {
         format!(
-            "<tr><td>kvkk</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            esc(&localize_consent_type("kvkk", is_en)),
             esc(if user.tos_version.is_empty() { "2026-01" } else { &user.tos_version }),
-            if is_en { "Accepted" } else { "Onaylandı" },
-            esc(&user.kvkk_consent_at)
+            esc(&kvkk_accepted_lbl),
+            esc(&format_portal_date(&user.kvkk_consent_at, is_en))
         )
     } else {
         kvkk_logs
@@ -1529,18 +1681,16 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
             .take(15)
             .map(|l| {
                 let status_txt = if l.accepted {
-                    if is_en { "Accepted" } else { "Onaylandı" }
-                } else if is_en {
-                    "Withdrawn"
+                    kvkk_accepted_lbl.as_str()
                 } else {
-                    "Geri Çekildi"
+                    kvkk_withdrawn_lbl.as_str()
                 };
                 format!(
                     "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                    esc(&l.consent_type),
+                    esc(&localize_consent_type(&l.consent_type, is_en)),
                     esc(&l.consent_version),
                     esc(status_txt),
-                    esc(&l.created_at)
+                    esc(&format_portal_date(&l.created_at, is_en))
                 )
             })
             .collect()
@@ -1624,6 +1774,7 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
 
     // Hint alerts (payment=success, verify_email=1, next=...)
     let mut hint_banners = String::new();
+    let dismiss_lbl = tr_text(tr, lang, "account.dismiss", "Kapat", "Dismiss");
     if ctx.hints.payment_success {
         let oid_part = ctx
             .hints
@@ -1636,57 +1787,80 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         } else {
             format!("Ödemeniz başarıyla alındı{oid_part}. Abonelik ve fatura kayıtlarınız güncellendi.")
         };
-        let dismiss_lbl = if is_en { "Dismiss" } else { "Kapat" };
         hint_banners.push_str(&format!(
-            r#"<div class="ap-alert-banner is-success" role="status"><div>{msg}</div><button type="button" class="button secondary btn-sm" data-dismiss-alert>{dismiss_lbl}</button></div>"#
+            r#"<div class="ap-alert-banner is-success" role="status"><div>{msg}</div><button type="button" class="button secondary btn-sm" data-dismiss-alert>{dismiss_lbl}</button></div>"#,
+            msg = msg,
+            dismiss_lbl = esc(&dismiss_lbl),
         ));
     }
     if ctx.hints.verify_email_prompt && !user.email_verified {
-        let msg = if is_en {
-            "Please verify your email address to unlock full watermarked E-Magazine PDF downloads."
-        } else {
-            "E-Dergi filigranlı PDF indirmelerini açmak için lütfen e-posta adresinizi doğrulayın."
-        };
-        let dismiss_lbl = if is_en { "Dismiss" } else { "Kapat" };
+        let msg = tr_text(
+            tr,
+            lang,
+            "account.verify_email_hint",
+            "E-Dergi filigranlı PDF indirmelerini açmak için lütfen e-posta adresinizi doğrulayın.",
+            "Please verify your email address to unlock full watermarked E-Magazine PDF downloads.",
+        );
         hint_banners.push_str(&format!(
-            r#"<div class="ap-alert-banner is-warning" role="status"><div>{msg}</div><button type="button" class="button secondary btn-sm" data-dismiss-alert>{dismiss_lbl}</button></div>"#
+            r#"<div class="ap-alert-banner is-warning" role="status"><div>{msg}</div><button type="button" class="button secondary btn-sm" data-dismiss-alert>{dismiss_lbl}</button></div>"#,
+            msg = esc(&msg),
+            dismiss_lbl = esc(&dismiss_lbl),
         ));
     }
     if let Some(next_raw) = ctx.hints.next_url.filter(|u| safe_url(u) && u.starts_with('/')) {
-        let lbl = if is_en { "Continue to requested page →" } else { "İstenen sayfaya devam et →" };
+        let lbl = tr_text(
+            tr,
+            lang,
+            "account.continue_next",
+            "İstenen sayfaya devam et →",
+            "Continue to requested page →",
+        );
         hint_banners.push_str(&format!(
             r#"<div class="ap-alert-banner is-success" role="status"><a href="{href}" class="text-link">{lbl}</a></div>"#,
             href = esc(next_raw),
-            lbl = esc(lbl)
+            lbl = esc(&lbl)
         ));
     }
 
-    // Mobile quick tab rail
+    // Mobile quick tab rail (unified ARIA tablist + preserved [data-ap-jump] E2E selector)
     let mobile_tabs_html = {
-        let items: &[(&str, &str, &str)] = &[
-            ("overview", "Genel Bakış", "Overview"),
-            ("edergi", "E-Dergi & Abonelik", "E-Magazine"),
-            ("profile", "Profil & SSB", "Profile & SSB"),
-            ("security", "Güvenlik & KVKK", "Security"),
-            ("notifications", "Bildirimler", "Notifications"),
+        let items: &[(&str, &str, &str, &str)] = &[
+            ("overview", "account.mtab_overview", "Genel Bakış", "Overview"),
+            ("edergi", "account.mtab_edergi", "E-Dergi & Abonelik", "E-Magazine"),
+            ("profile", "account.mtab_profile", "Profil & SSB", "Profile & SSB"),
+            ("security", "account.mtab_security", "Güvenlik & KVKK", "Security"),
+            ("notifications", "account.mtab_notifications", "Bildirimler", "Notifications"),
         ];
         let btns: String = items
             .iter()
-            .map(|(key, l_tr, l_en)| {
+            .map(|(key, tr_key, l_tr, l_en)| {
                 let active = *key == initial_tab;
                 let cls = if active { "ap-mobile-tab is-active" } else { "ap-mobile-tab" };
+                let lbl = tr_text(tr, lang, tr_key, l_tr, l_en);
+                let badge_html = if *key == "notifications" {
+                    let hidden_attr = if unread_count == 0 { " hidden" } else { "" };
+                    format!(
+                        r#"<span class="ap-nav-badge" data-notif-badge data-unread-count="{cnt}"{hidden_attr}>{cnt}</span>"#,
+                        cnt = unread_count,
+                        hidden_attr = hidden_attr
+                    )
+                } else {
+                    String::new()
+                };
                 format!(
-                    r#"<button type="button" class="{cls}" data-ap-jump="{key}" aria-pressed="{pressed}">{lbl}</button>"#,
+                    r#"<button type="button" role="tab" id="ap-mtab-{key}" class="{cls}" data-ap-tab="{key}" data-ap-jump="{key}" aria-controls="ap-panel-{key}" aria-selected="{selected}"><span>{lbl}</span>{badge_html}</button>"#,
                     cls = cls,
                     key = key,
-                    pressed = if active { "true" } else { "false" },
-                    lbl = esc(if is_en { l_en } else { l_tr })
+                    selected = if active { "true" } else { "false" },
+                    lbl = esc(&lbl),
+                    badge_html = badge_html
                 )
             })
             .collect();
+        let tabs_aria = tr_text(tr, lang, "account.section_tabs_aria", "Bölüm sekmeleri", "Section tabs");
         format!(
-            r#"<div class="ap-mobile-tabs" aria-label="{aria}">{btns}</div>"#,
-            aria = esc(if is_en { "Section tabs" } else { "Bölüm sekmeleri" }),
+            r#"<div class="ap-mobile-tabs" role="tablist" aria-label="{aria}">{btns}</div>"#,
+            aria = esc(&tabs_aria),
             btns = btns
         )
     };
@@ -1697,33 +1871,35 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
     let job_sep = if has_org_cat && has_job_title { " · " } else { "" };
 
     // KPI tiles
-    let kpi_tier_lbl = if is_en { "Access & Plan" } else { "Erişim & Plan" };
+    let kpi_tier_lbl = tr_text(tr, lang, "account.kpi_tier_lbl", "Erişim & Plan", "Access & Plan");
     let kpi_tier_val = if !user.subscription_tier.trim().is_empty() {
         localize_subscription_tier(&user.subscription_tier, is_en)
     } else {
         role_prof.label.to_string()
     };
-    let kpi_expires = user
+    let formatted_expires = user
         .subscription_expires_at
         .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or(&no_sub_lbl);
-    let kpi_sec_lbl = if is_en { "Security Posture" } else { "Güvenlik Durumu" };
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format_portal_date(s, is_en))
+        .unwrap_or_else(|| no_sub_lbl.clone());
+    let kpi_sec_lbl = tr_text(tr, lang, "account.kpi_sec_lbl", "Güvenlik Durumu", "Security Posture");
     let kpi_sec_val = if user.totp_enabled && user.email_verified {
-        if is_en { "2FA + Email Verified" } else { "2FA + E-posta Doğrulu" }
+        tr_text(tr, lang, "account.kpi_sec_both", "2FA + E-posta Doğrulu", "2FA + Email Verified")
     } else if user.totp_enabled {
-        if is_en { "2FA Active" } else { "2FA Etkin" }
+        tr_text(tr, lang, "account.kpi_sec_totp", "2FA Etkin", "2FA Active")
     } else if user.email_verified {
-        if is_en { "Email Verified · 2FA Off" } else { "E-posta Doğrulu · 2FA Kapalı" }
+        tr_text(tr, lang, "account.kpi_sec_email", "E-posta Doğrulu · 2FA Kapalı", "Email Verified · 2FA Off")
     } else {
-        if is_en { "Action Needed" } else { "Doğrulama Bekliyor" }
+        tr_text(tr, lang, "account.kpi_sec_needed", "Doğrulama Bekliyor", "Action Needed")
     };
     let kpi_sec_sub = if user.totp_enabled {
-        if is_en { "Authenticator protection enabled" } else { "Authenticator koruması aktif" }
+        tr_text(tr, lang, "account.kpi_sec_sub_on", "Authenticator koruması aktif", "Authenticator protection enabled")
     } else {
-        if is_en { "Enable 2FA in Security & KVKK" } else { "Güvenlik sekmesinden 2FA açın" }
+        tr_text(tr, lang, "account.kpi_sec_sub_off", "Güvenlik sekmesinden 2FA açın", "Enable 2FA in Security & KVKK")
     };
-    let kpi_feed_lbl = if is_en { "SSB Feed & Alerts" } else { "SSB Akışı & Bildirim" };
+    let kpi_feed_lbl = tr_text(tr, lang, "account.kpi_feed_lbl", "SSB Akışı & Bildirim", "SSB Feed & Alerts");
 
     // Quick Action Cards (Overview)
     let quick_actions_html = format!(
@@ -1753,14 +1929,14 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         ico_prof = portal_svg("profile"),
         ico_sec = portal_svg("security"),
         ico_not = portal_svg("notifications"),
-        qa_ed_t = esc(if is_en { "E-Magazine Shelf" } else { "E-Dergi Rafı" }),
-        qa_ed_d = esc(if is_en { "Browse issues, PDFs & invoices" } else { "Sayılar, filigranlı PDF ve faturalar" }),
-        qa_pr_t = esc(if is_en { "SSB Interest Tags" } else { "SSB İlgi Alanları" }),
-        qa_pr_d = esc(if is_en { "Personalise your defence feed" } else { "Savunma akışınızı özelleştirin" }),
-        qa_sc_t = esc(if is_en { "2FA & KVKK Privacy" } else { "2FA & KVKK Gizlilik" }),
-        qa_sc_d = esc(if is_en { "Authenticator, consent & export" } else { "İki aşamalı doğrulama ve veri dışa aktarım" }),
-        qa_nt_t = esc(if is_en { "Notifications" } else { "Bildirimler" }),
-        qa_nt_d = esc(if is_en { "Review account & editorial alerts" } else { "Hesap ve yayın bildirimlerini yönetin" }),
+        qa_ed_t = esc(&tr_text(tr, lang, "account.qa_ed_t", "E-Dergi Rafı", "E-Magazine Shelf")),
+        qa_ed_d = esc(&tr_text(tr, lang, "account.qa_ed_d", "Sayılar, filigranlı PDF ve faturalar", "Browse issues, PDFs & invoices")),
+        qa_pr_t = esc(&tr_text(tr, lang, "account.qa_pr_t", "SSB İlgi Alanları", "SSB Interest Tags")),
+        qa_pr_d = esc(&tr_text(tr, lang, "account.qa_pr_d", "Savunma akışınızı özelleştirin", "Personalise your defence feed")),
+        qa_sc_t = esc(&tr_text(tr, lang, "account.qa_sc_t", "2FA & KVKK Gizlilik", "2FA & KVKK Privacy")),
+        qa_sc_d = esc(&tr_text(tr, lang, "account.qa_sc_d", "İki aşamalı doğrulama ve veri dışa aktarım", "Authenticator, consent & export")),
+        qa_nt_t = esc(&tr_text(tr, lang, "account.qa_nt_t", "Bildirimler", "Notifications")),
+        qa_nt_d = esc(&tr_text(tr, lang, "account.qa_nt_d", "Hesap ve yayın bildirimlerini yönetin", "Review account & editorial alerts")),
     );
 
     // E-Dergi Issue Shelf (Section 2)
@@ -1768,11 +1944,10 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
     let purchased_html = render_purchased_library(ctx, is_en);
 
     // Corporate Verification Card (Section 3)
-    let corp_status_html = render_corporate_status_card(ctx, is_en);
-
+    let corp_status_html = render_corporate_status_card(ctx, inst_choices, is_en);
 
     // Notifications Mark-All button & list (Section 5)
-    let mark_all_lbl = if is_en { "Mark All Read" } else { "Tümünü Okundu İşaretle" };
+    let mark_all_lbl = tr_text(tr, lang, "account.mark_all_read", "Tümünü Okundu İşaretle", "Mark All Read");
     let mark_all_hidden = if unread_count == 0 { " hidden" } else { "" };
 
     let hidden_overview = if initial_tab == "overview" { "" } else { " hidden" };
@@ -1781,8 +1956,8 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
     let hidden_security = if initial_tab == "security" { "" } else { " hidden" };
     let hidden_notifications = if initial_tab == "notifications" { "" } else { " hidden" };
 
-    let ssb_toolbar_select = if is_en { "Select All" } else { "Tümünü Seç" };
-    let ssb_toolbar_clear = if is_en { "Clear" } else { "Temizle" };
+    let ssb_toolbar_select = tr_text(tr, lang, "account.ssb_select_all", "Tümünü Seç", "Select All");
+    let ssb_toolbar_clear = tr_text(tr, lang, "account.ssb_clear", "Temizle", "Clear");
     let total_ssb = if !tags.is_empty() {
         tags.len()
     } else {
@@ -1794,68 +1969,89 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         format!("{} / {} seçili", user.ssb_interests.len(), total_ssb)
     };
 
-    let del_modal_title = if is_en { "Confirm Permanent Account Deletion" } else { "Kalıcı Hesap Silmeyi Onaylayın" };
-    let del_modal_body = if is_en {
-        "This action permanently anonymizes your profile, terminates your session, and cannot be undone. Are you sure you wish to proceed?"
+    let del_modal_title = tr_text(tr, lang, "account.del_modal_title", "Kalıcı Hesap Silmeyi Onaylayın", "Confirm Permanent Account Deletion");
+    let del_modal_body = tr_text(
+        tr,
+        lang,
+        "account.del_modal_body",
+        "Bu işlem profilinizi kalıcı olarak anonimleştirir, oturumunuzu sonlandırır ve geri alınamaz. Devam etmek istediğinizden emin misiniz?",
+        "This action permanently anonymizes your profile, terminates your session, and cannot be undone. Are you sure you wish to proceed?",
+    );
+    let del_modal_cancel = tr_text(tr, lang, "account.del_modal_cancel", "Vazgeç", "Cancel");
+    let del_modal_confirm = tr_text(tr, lang, "account.del_modal_confirm", "Evet, Kalıcı Olarak Sil", "Yes, Delete Permanently");
+    let del_modal_close = tr_text(tr, lang, "portal.close", "Kapat", "Close");
+    let export_filename = if is_en {
+        "msi-account-data.json"
     } else {
-        "Bu işlem profilinizi kalıcı olarak anonimleştirir, oturumunuzu sonlandırır ve geri alınamaz. Devam etmek istediğinizden emin misiniz?"
+        "msi-hesap-verilerim.json"
     };
-    let del_modal_cancel = if is_en { "Cancel" } else { "Vazgeç" };
-    let del_modal_confirm = if is_en { "Yes, Delete Permanently" } else { "Evet, Kalıcı Olarak Sil" };
+    let notices_eyebrow = tr_text(tr, lang, "account.notices_eyebrow", "BİLDİRİMLER", "NOTIFICATIONS");
 
-    let sec_edergi_title = if is_en { "E-Magazine & Subscription Hub" } else { "E-Dergi & Abonelik Merkezi" };
-    let sec_edergi_desc = if is_en {
-        "Read digital issues, download watermarked subscriber PDFs, and review invoices."
-    } else {
-        "Dijital E-Dergi sayılarını okuyun, filigranlı PDF indirin ve fatura geçmişinizi inceleyin."
-    };
-    let sec_prof_title = if is_en { "Profile & SSB Technology Interests" } else { "Profil & SSB Teknoloji İlgi Alanları" };
-    let sec_prof_desc = if is_en {
-        "Keep your institutional details and personalised defence technology topics up to date."
-    } else {
-        "Kurumsal bilgilerinizi ve kişiselleştirilmiş savunma teknolojisi etiketlerinizi güncelleyin."
-    };
-    let sec_sec_title = if is_en { "Security, 2FA & KVKK Privacy" } else { "Güvenlik, 2FA & KVKK Gizlilik" };
-    let sec_sec_desc = if is_en {
-        "Protect your account with Two-Factor Authentication, inspect KVKK consent logs, or export data."
-    } else {
-        "Hesabınızı İki Aşamalı Doğrulama ile koruyun, KVKK rıza kayıtlarını inceleyin veya verilerinizi indirin."
-    };
-    let sec_notif_desc = if is_en {
-        "Account status updates, renewal reminders, and curated intelligence alerts."
-    } else {
-        "Hesap durumu güncellemeleri, abonelik hatırlatmaları ve özel yayın bildirimleri."
-    };
-    let security_posture_title = if is_en { "Account Verification & Password Access" } else { "Hesap Doğrulama ve Şifre Güvenliği" };
-    let security_posture_desc = if is_en {
-        "Email verification protects watermarked E-Magazine downloads and security alerts. You can reset your password anytime via the sign-in recovery flow."
-    } else {
-        "E-posta doğrulaması filigranlı E-Dergi indirmelerini ve güvenlik bildirimlerini korur. Şifrenizi dilediğiniz zaman şifre sıfırlama akışı üzerinden güncelleyebilirsiniz."
-    };
+    let sec_edergi_title = tr_text(tr, lang, "account.sec_edergi_title", "E-Dergi & Abonelik Merkezi", "E-Magazine & Subscription Hub");
+    let sec_edergi_desc = tr_text(
+        tr,
+        lang,
+        "account.sec_edergi_desc",
+        "Dijital E-Dergi sayılarını okuyun, filigranlı PDF indirin ve fatura geçmişinizi inceleyin.",
+        "Read digital issues, download watermarked subscriber PDFs, and review invoices.",
+    );
+    let sec_prof_title = tr_text(tr, lang, "account.sec_prof_title", "Profil & SSB Teknoloji İlgi Alanları", "Profile & SSB Technology Interests");
+    let sec_prof_desc = tr_text(
+        tr,
+        lang,
+        "account.sec_prof_desc",
+        "Kurumsal bilgilerinizi ve kişiselleştirilmiş savunma teknolojisi etiketlerinizi güncelleyin.",
+        "Keep your institutional details and personalised defence technology topics up to date.",
+    );
+    let sec_sec_title = tr_text(tr, lang, "account.sec_sec_title", "Güvenlik, 2FA & KVKK Gizlilik", "Security, 2FA & KVKK Privacy");
+    let sec_sec_desc = tr_text(
+        tr,
+        lang,
+        "account.sec_sec_desc",
+        "Hesabınızı İki Aşamalı Doğrulama ile koruyun, KVKK rıza kayıtlarını inceleyin veya verilerinizi indirin.",
+        "Protect your account with Two-Factor Authentication, inspect KVKK consent logs, or export data.",
+    );
+    let sec_notif_desc = tr_text(
+        tr,
+        lang,
+        "account.sec_notif_desc",
+        "Hesap durumu güncellemeleri, abonelik hatırlatmaları ve özel yayın bildirimleri.",
+        "Account status updates, renewal reminders, and curated intelligence alerts.",
+    );
+    let security_posture_title = tr_text(tr, lang, "account.sec_posture_title", "Hesap Doğrulama ve Şifre Güvenliği", "Account Verification & Password Access");
+    let security_posture_desc = tr_text(
+        tr,
+        lang,
+        "account.sec_posture_desc",
+        "E-posta doğrulaması filigranlı E-Dergi indirmelerini ve güvenlik bildirimlerini korur. Şifrenizi dilediğiniz zaman şifre sıfırlama akışı üzerinden güncelleyebilirsiniz.",
+        "Email verification protects watermarked E-Magazine downloads and security alerts. You can reset your password anytime via the sign-in recovery flow.",
+    );
     let role_pill_cls = format!("ap-role-pill is-{}", role_prof.tone);
+    let identity_fallback = tr_text(tr, lang, "account.reader_identity", "Okuyucu Kimliği", "Reader Identity");
     let identity_heading = if !user.organization_name.trim().is_empty() {
         user.organization_name.as_str()
     } else if !user.full_name.trim().is_empty() {
         user.full_name.as_str()
-    } else if is_en {
-        "Reader Identity"
     } else {
-        "Okuyucu Kimliği"
+        identity_fallback.as_str()
     };
     let org_lock_attr = if is_institution_locked { " disabled" } else { "" };
     let org_lock_note = if is_institution_locked {
-        let note_txt = if is_en {
-            "Verified institutional details are locked. Contact support if your organisation changes."
-        } else {
-            "Doğrulanmış kurum bilgileriniz kilitlidir. Kurum değişikliği için destek ekibimizle iletişime geçin."
-        };
-        format!(r#"<p class="field-help">{}</p>"#, esc(note_txt))
+        let note_txt = tr_text(
+            tr,
+            lang,
+            "account.org_lock_note",
+            "Doğrulanmış kurum bilgileriniz kilitlidir. Kurum değişikliği için destek ekibimizle iletişime geçin.",
+            "Verified institutional details are locked. Contact support if your organisation changes.",
+        );
+        format!(r#"<p class="field-help">{}</p>"#, esc(&note_txt))
     } else {
         String::new()
     };
 
     format!(
         r#"<div class="ap-workspace-inner">
+  {mobile_tabs_html}
   <section class="ap-hero">
     <div class="ap-hero-top">
       <div class="ap-hero-copy">
@@ -1887,7 +2083,6 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
   </section>
 
   {hint_banners}
-  {mobile_tabs_html}
 
   <section id="ap-panel-overview" class="portal-section" role="tabpanel" aria-labelledby="ap-tab-overview" data-ap-panel="overview"{hidden_overview}>
     {command_card}
@@ -2002,7 +2197,7 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
     <article class="account-panel" id="account-kvkk-card">
       <div class="panel-header-row">
         <div><div class="eyebrow">{kvkk_eyebrow}</div><h2>{kvkk_title}</h2></div>
-        <a href="/api/v1/account/export" class="button secondary btn-sm" download="msi-hesap-verilerim.json" data-kvkk-export>{kvkk_export_lbl}</a>
+        <a href="/api/v1/account/export" class="button secondary btn-sm" download="{export_filename}" data-kvkk-export>{kvkk_export_lbl}</a>
       </div>
       <p>{kvkk_tos_lbl}: <strong>{tos_version}</strong></p>
       <div class="table-responsive"><table class="table"><thead><tr><th scope="col">{th_kvkk_type}</th><th scope="col">{th_kvkk_version}</th><th scope="col">{th_kvkk_status}</th><th scope="col">{th_kvkk_date}</th></tr></thead><tbody>{kvkk_rows}</tbody></table></div>
@@ -2015,25 +2210,15 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         <label>{del_pw_lbl}<input type="password" name="password" autocomplete="current-password" placeholder="••••••••" required></label>
         <label class="check-label"><input type="checkbox" name="confirm_erasure" required><span>{del_confirm_lbl}</span></label>
         <p class="form-feedback" role="status"></p>
-        <div class="account-form-actions"><button type="submit" class="button secondary danger-outline">{del_btn_lbl}</button></div>
+        <div class="account-form-actions"><button type="submit" class="button danger-outline">{del_btn_lbl}</button></div>
       </form>
     </article>
-    <dialog id="account-delete-confirm-dialog" class="ap-dialog" aria-labelledby="ap-del-modal-title" aria-modal="true">
-      <div class="ap-dialog-head">
-        <h2 id="ap-del-modal-title">{del_modal_title}</h2>
-      </div>
-      <p class="ap-dialog-body">{del_modal_body}</p>
-      <div class="ap-dialog-actions">
-        <button type="button" class="button secondary" id="account-delete-cancel-btn">{del_modal_cancel}</button>
-        <button type="button" class="button danger-solid" id="account-delete-confirm-btn">{del_modal_confirm}</button>
-      </div>
-    </dialog>
   </section>
 
   <section id="ap-panel-notifications" class="portal-section" role="tabpanel" aria-labelledby="ap-tab-notifications" data-ap-panel="notifications"{hidden_notifications}>
     <div class="ap-panel-head">
       <div>
-        <div class="eyebrow">{notices_heading}</div>
+        <div class="eyebrow">{notices_eyebrow}</div>
         <h2>{notices_heading}</h2>
         <p>{sec_notif_desc}</p>
       </div>
@@ -2043,23 +2228,35 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
       {notices_block}
     </div>
   </section>
+
+  <dialog id="account-delete-confirm-dialog" class="ap-dialog" aria-labelledby="ap-del-modal-title" aria-describedby="ap-del-modal-body" aria-modal="true">
+    <div class="ap-dialog-head">
+      <h2 id="ap-del-modal-title">{del_modal_title}</h2>
+      <button type="button" class="button ghost ap-dialog-close" id="account-delete-close-btn" aria-label="{del_modal_close}">×</button>
+    </div>
+    <p id="ap-del-modal-body" class="ap-dialog-body">{del_modal_body}</p>
+    <div class="ap-dialog-actions">
+      <button type="button" class="button secondary" id="account-delete-cancel-btn">{del_modal_cancel}</button>
+      <button type="button" class="button danger-solid" id="account-delete-confirm-btn">{del_modal_confirm}</button>
+    </div>
+  </dialog>
 </div>"#,
         heading_html = heading_html,
         role_pill_cls = role_pill_cls,
         role_label = esc(role_prof.label),
         gov_badge = gov_badge,
         role_summary = esc(role_prof.summary),
-        kpi_tier_lbl = esc(kpi_tier_lbl),
+        kpi_tier_lbl = esc(&kpi_tier_lbl),
         kpi_tier_val = esc(&kpi_tier_val),
         expires_lbl = esc(&expires_lbl),
-        kpi_expires = esc(kpi_expires),
-        kpi_sec_lbl = esc(kpi_sec_lbl),
-        kpi_sec_val = esc(kpi_sec_val),
-        kpi_sec_sub = esc(kpi_sec_sub),
-        kpi_feed_lbl = esc(kpi_feed_lbl),
+        kpi_expires = esc(&formatted_expires),
+        kpi_sec_lbl = esc(&kpi_sec_lbl),
+        kpi_sec_val = esc(&kpi_sec_val),
+        kpi_sec_sub = esc(&kpi_sec_sub),
+        kpi_feed_lbl = esc(&kpi_feed_lbl),
         ssb_count = user.ssb_interests.len(),
         unread_count = unread_count,
-        unread_word = esc(if is_en { "Unread" } else { "Okunmamış" }),
+        unread_word = esc(&tr_text(tr, lang, "account.unread_word", "Okunmamış", "Unread")),
         email = esc(&user.email),
         hint_banners = hint_banners,
         mobile_tabs_html = mobile_tabs_html,
@@ -2089,12 +2286,12 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         personalized_html = personalized_html,
         related_html = related_html,
         sub_eyebrow = esc(&sub_eyebrow),
-        sec_edergi_title = esc(sec_edergi_title),
-        sec_edergi_desc = esc(sec_edergi_desc),
+        sec_edergi_title = esc(&sec_edergi_title),
+        sec_edergi_desc = esc(&sec_edergi_desc),
         sub_href = esc(&sub_href),
         sub_opts_lbl = esc(&sub_opts_lbl),
         tier = esc(&kpi_tier_val),
-        expires = esc(user.subscription_expires_at.as_deref().unwrap_or(&no_sub_lbl)),
+        expires = esc(&formatted_expires),
         reminder_text = esc(&reminder_text),
         edergi_shelf_html = edergi_shelf_html,
         purchased_html = purchased_html,
@@ -2107,8 +2304,8 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         invoice_rows = invoice_rows,
         empty_invoices = empty_invoices,
         prof_eyebrow = esc(&prof_eyebrow),
-        sec_prof_title = esc(sec_prof_title),
-        sec_prof_desc = esc(sec_prof_desc),
+        sec_prof_title = esc(&sec_prof_title),
+        sec_prof_desc = esc(&sec_prof_desc),
         corp_status_html = corp_status_html,
         prof_title = esc(&prof_title),
         full_name_lbl = esc(&full_name_lbl),
@@ -2122,20 +2319,21 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         org_lock_note = org_lock_note,
         ssb_legend = esc(&ssb_legend),
         ssb_selected_lbl = esc(&ssb_selected_lbl),
-        ssb_toolbar_select = esc(ssb_toolbar_select),
-        ssb_toolbar_clear = esc(ssb_toolbar_clear),
+        ssb_toolbar_select = esc(&ssb_toolbar_select),
+        ssb_toolbar_clear = esc(&ssb_toolbar_clear),
         ssb_checkboxes = ssb_checkboxes,
         email_opt_checked = email_opt_checked,
         email_opt_lbl = esc(&email_opt_lbl),
         save_profile_lbl = esc(&save_profile_lbl),
         totp_eyebrow = esc(&totp_eyebrow),
-        sec_sec_title = esc(sec_sec_title),
-        sec_sec_desc = esc(sec_sec_desc),
-        security_posture_title = esc(security_posture_title),
-        security_posture_desc = esc(security_posture_desc),
+        sec_sec_title = esc(&sec_sec_title),
+        sec_sec_desc = esc(&sec_sec_desc),
+        security_posture_title = esc(&security_posture_title),
+        security_posture_desc = esc(&security_posture_desc),
         totp_card_html = totp_card_html,
         kvkk_eyebrow = esc(&kvkk_eyebrow),
         kvkk_title = esc(&kvkk_title),
+        export_filename = export_filename,
         kvkk_export_lbl = esc(&kvkk_export_lbl),
         kvkk_tos_lbl = esc(&kvkk_tos_lbl),
         tos_version = esc(if user.tos_version.is_empty() { "2026-01" } else { &user.tos_version }),
@@ -2150,14 +2348,16 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
         del_pw_lbl = esc(&del_pw_lbl),
         del_confirm_lbl = esc(&del_confirm_lbl),
         del_btn_lbl = esc(&del_btn_lbl),
-        del_modal_title = esc(del_modal_title),
-        del_modal_body = esc(del_modal_body),
-        del_modal_cancel = esc(del_modal_cancel),
-        del_modal_confirm = esc(del_modal_confirm),
+        del_modal_title = esc(&del_modal_title),
+        del_modal_close = esc(&del_modal_close),
+        del_modal_body = esc(&del_modal_body),
+        del_modal_cancel = esc(&del_modal_cancel),
+        del_modal_confirm = esc(&del_modal_confirm),
+        notices_eyebrow = esc(&notices_eyebrow),
         notices_heading = esc(&notices_heading),
-        sec_notif_desc = esc(sec_notif_desc),
+        sec_notif_desc = esc(&sec_notif_desc),
         mark_all_hidden = mark_all_hidden,
-        mark_all_lbl = esc(mark_all_lbl),
+        mark_all_lbl = esc(&mark_all_lbl),
         notices_block = if notices_html.is_empty() {
             empty_state(&esc(&no_notices_lbl))
         } else {
@@ -2167,28 +2367,36 @@ fn render_portal_inner(ctx: &AccountPortalContext<'_>) -> String {
 }
 
 fn render_edergi_shelf(ctx: &AccountPortalContext<'_>, is_en: bool, lang: &str) -> String {
-    let title = if is_en { "Digital E-Magazine Shelf" } else { "Dijital E-Dergi Rafı" };
-    let eyebrow = if is_en { "ISSUE LIBRARY" } else { "SAYI KÜTÜPHANESİ" };
+    let tr = ctx.tr;
+    let title = tr_text(tr, lang, "account.edergi_shelf_title", "Dijital E-Dergi Rafı", "Digital E-Magazine Shelf");
+    let eyebrow = tr_text(tr, lang, "account.edergi_shelf_eyebrow", "SAYI KÜTÜPHANESİ", "ISSUE LIBRARY");
     let kiosk_href = lang_href("/e-dergi", lang);
-    let all_issues_lbl = if is_en { "All issues →" } else { "Tüm sayılar →" };
+    let all_issues_lbl = tr_text(tr, lang, "account.edergi_all_issues", "Tüm sayılar →", "All issues →");
 
     if ctx.issues.is_empty() {
-        let empty_lbl = if is_en {
-            "No published E-Magazine issues available yet."
-        } else {
-            "Henüz yayınlanmış E-Dergi sayısı bulunmuyor."
-        };
+        let empty_lbl = tr_text(
+            tr,
+            lang,
+            "account.edergi_empty",
+            "Henüz yayınlanmış E-Dergi sayısı bulunmuyor.",
+            "No published E-Magazine issues available yet.",
+        );
         return format!(
             r#"<article class="account-panel"><div class="panel-header-row"><div><div class="eyebrow">{eyebrow}</div><h2>{title}</h2></div><a href="{kiosk_href}" class="text-link">{all_issues_lbl}</a></div>{empty}</article>"#,
-            eyebrow = esc(eyebrow),
-            title = esc(title),
+            eyebrow = esc(&eyebrow),
+            title = esc(&title),
             kiosk_href = esc(&kiosk_href),
-            all_issues_lbl = esc(all_issues_lbl),
-            empty = empty_state(&esc(empty_lbl)),
+            all_issues_lbl = esc(&all_issues_lbl),
+            empty = empty_state(&esc(&empty_lbl)),
         );
     }
 
     let sub_href = lang_href("/abonelik-ve-satis", lang);
+    let open_flip_lbl = tr_text(tr, lang, "account.edergi_open_flip", "Flipbook'ta Aç →", "Open Flipbook →");
+    let preview_lbl = tr_text(tr, lang, "account.edergi_preview", "İçindekileri İncele →", "Preview Contents →");
+    let pdf_lbl = tr_text(tr, lang, "account.edergi_pdf", "Filigranlı PDF ↓", "Watermarked PDF ↓");
+    let verify_lbl = tr_text(tr, lang, "account.edergi_verify", "PDF için E-posta Doğrula", "Verify Email to Download");
+    let upg_lbl = tr_text(tr, lang, "account.edergi_unlock", "PDF Erişimini Aç", "Unlock PDF Access");
     let cards: String = ctx
         .issues
         .iter()
@@ -2225,11 +2433,9 @@ fn render_edergi_shelf(ctx: &AccountPortalContext<'_>, is_en: bool, lang: &str) 
             }
             let open_href = lang_href(&raw_open, lang);
             let open_lbl = if ctx.can_download_edergi {
-                if is_en { "Open Flipbook →" } else { "Flipbook'ta Aç →" }
-            } else if is_en {
-                "Preview Contents →"
+                open_flip_lbl.as_str()
             } else {
-                "İçindekileri İncele →"
+                preview_lbl.as_str()
             };
             let pdf_btn = if ctx.can_download_edergi {
                 let pdf_href = format!(
@@ -2237,24 +2443,21 @@ fn render_edergi_shelf(ctx: &AccountPortalContext<'_>, is_en: bool, lang: &str) 
                     issue.issue_number,
                     urlencoding::encode(&issue.publication_type)
                 );
-                let pdf_lbl = if is_en { "Watermarked PDF ↓" } else { "Filigranlı PDF ↓" };
                 format!(
                     r#"<a href="{href}" class="button primary btn-sm">{lbl}</a>"#,
                     href = esc(&pdf_href),
-                    lbl = esc(pdf_lbl)
+                    lbl = esc(&pdf_lbl)
                 )
             } else if ctx.has_subscriber_access && !ctx.user.email_verified {
-                let verify_lbl = if is_en { "Verify Email to Download" } else { "PDF için E-posta Doğrula" };
                 format!(
                     r#"<button type="button" class="button secondary btn-sm" data-ap-jump="security">{lbl}</button>"#,
-                    lbl = esc(verify_lbl)
+                    lbl = esc(&verify_lbl)
                 )
             } else {
-                let upg_lbl = if is_en { "Unlock PDF Access" } else { "PDF Erişimini Aç" };
                 format!(
                     r#"<a href="{href}" class="button secondary btn-sm">{lbl}</a>"#,
                     href = esc(&sub_href),
-                    lbl = esc(upg_lbl)
+                    lbl = esc(&upg_lbl)
                 )
             };
             let pages_lbl = if is_en {
@@ -2293,21 +2496,23 @@ fn render_edergi_shelf(ctx: &AccountPortalContext<'_>, is_en: bool, lang: &str) 
 
     format!(
         r#"<article class="account-panel"><div class="panel-header-row"><div><div class="eyebrow">{eyebrow}</div><h2>{title}</h2></div><a href="{kiosk_href}" class="text-link">{all_issues_lbl}</a></div><div class="ap-edergi-shelf">{cards}</div></article>"#,
-        eyebrow = esc(eyebrow),
-        title = esc(title),
+        eyebrow = esc(&eyebrow),
+        title = esc(&title),
         kiosk_href = esc(&kiosk_href),
-        all_issues_lbl = esc(all_issues_lbl),
+        all_issues_lbl = esc(&all_issues_lbl),
         cards = cards
     )
 }
 
-fn render_purchased_library(ctx: &AccountPortalContext<'_>, is_en: bool) -> String {
+fn render_purchased_library(ctx: &AccountPortalContext<'_>, _is_en: bool) -> String {
     if ctx.purchased_codes.is_empty() {
         return String::new();
     }
-    let eyebrow = if is_en { "DIGITAL LIBRARY" } else { "DİJİTAL KÜTÜPHANE" };
-    let title = if is_en { "Purchased Reports & Assets" } else { "Satın Alınan Rapor ve Yayınlar" };
-    let dl_lbl = if is_en { "Download ↓" } else { "İndir ↓" };
+    let tr = ctx.tr;
+    let lang = ctx.lang;
+    let eyebrow = tr_text(tr, lang, "account.purchased_eyebrow", "DİJİTAL KÜTÜPHANE", "DIGITAL LIBRARY");
+    let title = tr_text(tr, lang, "account.purchased_title", "Satın Alınan Rapor ve Yayınlar", "Purchased Reports & Assets");
+    let dl_lbl = tr_text(tr, lang, "account.purchased_dl", "İndir ↓", "Download ↓");
     let rows: String = ctx
         .purchased_codes
         .iter()
@@ -2317,91 +2522,114 @@ fn render_purchased_library(ctx: &AccountPortalContext<'_>, is_en: bool) -> Stri
                 r#"<div class="notification-item"><div class="notification-item-top"><strong><code>{sku}</code></strong><a href="{href}" class="button secondary btn-sm">{dl_lbl}</a></div></div>"#,
                 sku = esc(sku),
                 href = esc(&href),
-                dl_lbl = esc(dl_lbl)
+                dl_lbl = esc(&dl_lbl)
             )
         })
         .collect();
 
     format!(
         r#"<article class="account-panel"><div class="eyebrow">{eyebrow}</div><h2>{title}</h2><div class="ap-notif-list">{rows}</div></article>"#,
-        eyebrow = esc(eyebrow),
-        title = esc(title),
+        eyebrow = esc(&eyebrow),
+        title = esc(&title),
         rows = rows
     )
 }
 
-fn render_corporate_status_card(ctx: &AccountPortalContext<'_>, is_en: bool) -> String {
+fn render_corporate_status_card(
+    ctx: &AccountPortalContext<'_>,
+    inst_choices: &[InstitutionChoice],
+    is_en: bool,
+) -> String {
+    let tr = ctx.tr;
+    let lang = ctx.lang;
     let Some(latest) = ctx.corporate_requests.first() else {
         if !ctx.user.is_gov_verified {
             return String::new();
         }
-        let eyebrow = if is_en { "INSTITUTIONAL VERIFICATION" } else { "KURUMSAL DOĞRULAMA" };
-        let title = if is_en { "Public / Academic Status Active" } else { "Kamu / Akademik Doğrulama Aktif" };
-        let desc = if is_en {
-            "Your institutional domain has been verified for public-sector E-Magazine privileges."
-        } else {
-            "Kurumsal e-posta alan adınız kamu sektörü E-Dergi erişimi için doğrulanmıştır."
-        };
+        let eyebrow = tr_text(tr, lang, "account.corp_verified_eyebrow", "KURUMSAL DOĞRULAMA", "INSTITUTIONAL VERIFICATION");
+        let title = tr_text(tr, lang, "account.corp_verified_title", "Kamu / Akademik Doğrulama Aktif", "Public / Academic Status Active");
+        let desc = tr_text(
+            tr,
+            lang,
+            "account.corp_verified_desc",
+            "Kurumsal e-posta alan adınız kamu sektörü E-Dergi erişimi için doğrulanmıştır.",
+            "Your institutional domain has been verified for public-sector E-Magazine privileges.",
+        );
+        let badge = tr_text(tr, lang, "account.corp_verified_badge", "Doğrulandı", "Verified");
         return format!(
             r#"<article class="account-panel"><div class="panel-header-row"><div><div class="eyebrow">{eyebrow}</div><h2>{title}</h2></div><span class="status-badge is-gov">✓ {badge}</span></div><p>{desc}</p></article>"#,
-            eyebrow = esc(eyebrow),
-            title = esc(title),
-            badge = esc(if is_en { "Verified" } else { "Doğrulandı" }),
-            desc = esc(desc),
+            eyebrow = esc(&eyebrow),
+            title = esc(&title),
+            badge = esc(&badge),
+            desc = esc(&desc),
         );
     };
 
-    let (badge_cls, status_lbl) = match latest.status.as_str() {
-        "approved" => ("is-verified", if is_en { "Approved" } else { "Onaylandı" }),
-        "rejected" => ("is-danger", if is_en { "Rejected" } else { "Reddedildi" }),
-        _ => ("is-pending", if is_en { "Pending Review" } else { "İnceleme Bekliyor" }),
+    let status_norm = latest.status.trim().to_ascii_lowercase();
+    let (badge_cls, status_lbl) = match status_norm.as_str() {
+        "approved" => ("is-verified", tr_text(tr, lang, "account.corp_approved", "Onaylandı", "Approved")),
+        "rejected" => ("is-danger", tr_text(tr, lang, "account.corp_rejected", "Reddedildi", "Rejected")),
+        _ => ("is-pending", tr_text(tr, lang, "account.corp_pending", "İnceleme Bekliyor", "Pending Review")),
     };
-    let eyebrow = if is_en { "CORPORATE ACCESS REQUEST" } else { "KURUMSAL ERİŞİM TALEBİ" };
-    let title = if is_en { "Institutional Verification Status" } else { "Kurumsal Doğrulama Durumu" };
-    let submitted_lbl = if is_en { "Submitted:" } else { "Başvuru tarihi:" };
+    let eyebrow = tr_text(tr, lang, "account.corp_req_eyebrow", "KURUMSAL ERİŞİM TALEBİ", "CORPORATE ACCESS REQUEST");
+    let title = tr_text(tr, lang, "account.corp_req_title", "Kurumsal Doğrulama Durumu", "Institutional Verification Status");
+    let submitted_lbl = tr_text(tr, lang, "account.corp_submitted", "Başvuru tarihi:", "Submitted:");
+    let cat_display = resolve_org_category_label(&latest.organization_category, inst_choices, is_en);
+    let formatted_date = format_portal_date(&latest.created_at, is_en);
+    let org_html = if cat_display.trim().is_empty() {
+        format!("<strong>{}</strong>", esc(&latest.organization_name))
+    } else {
+        format!(
+            "<strong>{}</strong> ({})",
+            esc(&latest.organization_name),
+            esc(&cat_display)
+        )
+    };
 
     format!(
-        r#"<article class="account-panel"><div class="panel-header-row"><div><div class="eyebrow">{eyebrow}</div><h2>{title}</h2></div><span class="status-badge {badge_cls}">{status_lbl}</span></div><p><strong>{org}</strong> ({cat}) · {submitted_lbl} <code>{date}</code></p></article>"#,
-        eyebrow = esc(eyebrow),
-        title = esc(title),
+        r#"<article class="account-panel"><div class="panel-header-row"><div><div class="eyebrow">{eyebrow}</div><h2>{title}</h2></div><span class="status-badge {badge_cls}">{status_lbl}</span></div><p>{org_html} · {submitted_lbl} <code>{date}</code></p></article>"#,
+        eyebrow = esc(&eyebrow),
+        title = esc(&title),
         badge_cls = badge_cls,
-        status_lbl = esc(status_lbl),
-        org = esc(&latest.organization_name),
-        cat = esc(&latest.organization_category),
-        submitted_lbl = esc(submitted_lbl),
-        date = esc(latest.created_at.get(..10).unwrap_or(&latest.created_at)),
+        status_lbl = esc(&status_lbl),
+        org_html = org_html,
+        submitted_lbl = esc(&submitted_lbl),
+        date = esc(&formatted_date),
     )
 }
 
-fn render_portal_notification_card(n: &SystemNotification, lang: &str) -> String {
+fn render_portal_notification_card(
+    n: &SystemNotification,
+    lang: &str,
+    tr: Option<&TranslationCache>,
+) -> String {
     let is_en = lang.eq_ignore_ascii_case("en");
-    let view_lbl = if is_en { "View →" } else { "İncele →" };
+    let view_lbl = tr_text(tr, lang, "account.notif_view", "İncele →", "View →");
     let action = n
         .action_url
         .as_ref()
         .filter(|u| safe_url(u))
-        .map(|u| format!(r#"<a class="text-link" href="{}">{}</a>"#, esc(u), esc(view_lbl)))
+        .map(|u| format!(r#"<a class="text-link" href="{}">{}</a>"#, esc(u), esc(&view_lbl)))
         .unwrap_or_default();
 
     let state_cls = if n.is_read { "is-read" } else { "is-unread" };
     let badge_cls = if n.is_read { "status-badge is-muted" } else { "status-badge is-pending" };
     let badge_lbl = if n.is_read {
-        if is_en { "Read" } else { "Okundu" }
-    } else if is_en {
-        "Unread"
+        tr_text(tr, lang, "portal.notif_status_read", "Okundu", "Read")
     } else {
-        "Okunmadı"
+        tr_text(tr, lang, "account.notif_status_unread", "Okunmadı", "Unread")
     };
     let mark_btn = if !n.is_read {
-        let lbl = if is_en { "Mark as read" } else { "Okundu işaretle" };
+        let lbl = tr_text(tr, lang, "account.notif_mark_read", "Okundu işaretle", "Mark as read");
         format!(
             r#"<button type="button" class="button secondary btn-sm" data-mark-read="{}">{}</button>"#,
             n.id,
-            esc(lbl)
+            esc(&lbl)
         )
     } else {
         String::new()
     };
+    let formatted_date = format_portal_date(&n.created_at, is_en);
 
     format!(
         r#"<article class="notification-item {state_cls}" data-notification-id="{id}" data-is-read="{is_read}">
@@ -2416,9 +2644,9 @@ fn render_portal_notification_card(n: &SystemNotification, lang: &str) -> String
         state_cls = state_cls,
         id = n.id,
         is_read = if n.is_read { "true" } else { "false" },
-        date = esc(n.created_at.get(..10).unwrap_or(&n.created_at)),
+        date = esc(&formatted_date),
         badge_cls = badge_cls,
-        badge_lbl = esc(badge_lbl),
+        badge_lbl = esc(&badge_lbl),
         title = esc(localized(lang, &n.title_tr, &n.title_en)),
         msg = esc(localized(lang, &n.message_tr, &n.message_en)),
         action = action,
@@ -2591,8 +2819,12 @@ mod tests {
                 csp_nonce: Some("test-nonce"),
             };
             let html = render_portal_document(&ctx);
-            assert!(html.contains(r#"data-theme="light""#));
-            assert!(html.contains("/css/account-portal.css?v=35"));
+            assert!(!html.contains(r#"data-theme="light""#), "SSR HTML must not hardcode data-theme=\"light\"");
+            let prehydrate_pos = html.find("UNIFIED_THEME_PREHYDRATE_JS").or_else(|| html.find("msi_admin_theme")).expect("theme prehydrate script");
+            let tokens_pos = html.find("/css/design-tokens.css?v=35").expect("design-tokens.css link");
+            let portal_css_pos = html.find("/css/account-portal.css?v=35").expect("account-portal.css link");
+            assert!(prehydrate_pos < tokens_pos, "Theme prehydrate must run before design-tokens.css");
+            assert!(tokens_pos < portal_css_pos, "design-tokens.css must load before account-portal.css");
             assert!(html.contains("/js/account-portal.js?v=35"));
             assert!(!html.contains("gsap.min.js"));
             assert!(!html.contains("account-command-card"), "Non-staff '{}' leaked command card", role);
@@ -2638,8 +2870,12 @@ mod tests {
                 csp_nonce: Some("test-nonce"),
             };
             let html = render_portal_document(&ctx);
-            assert!(html.contains(r#"data-theme="light""#));
-            assert!(html.contains("/css/account-portal.css?v=35"));
+            assert!(!html.contains(r#"data-theme="light""#), "SSR HTML must not hardcode data-theme=\"light\"");
+            let prehydrate_pos = html.find("msi_admin_theme").expect("theme prehydrate script");
+            let tokens_pos = html.find("/css/design-tokens.css?v=35").expect("design-tokens.css link");
+            let portal_css_pos = html.find("/css/account-portal.css?v=35").expect("account-portal.css link");
+            assert!(prehydrate_pos < tokens_pos, "Theme prehydrate must run before design-tokens.css");
+            assert!(tokens_pos < portal_css_pos, "design-tokens.css must load before account-portal.css");
             assert!(html.contains("/js/account-portal.js?v=35"));
             assert!(html.contains("account-command-card"), "Staff '{}' missing command card", role);
             assert!(html.contains(r#"href="/podmin""#), "Staff '{}' missing /podmin link", role);
@@ -2701,5 +2937,192 @@ mod tests {
         assert!(!html_en.contains("<span> · Havacılık Editörü</span>"));
         assert!(html_en.contains("<span>Havacılık Editörü</span>"));
         assert!(html_en.contains("/e-dergi?issue=286&amp;publication_type=msi_tdr&amp;view=flipbook&amp;lang=en"));
+    }
+
+    #[test]
+    fn payment_status_consent_type_and_portal_dates_are_localized() {
+        assert_eq!(localize_payment_status("paid", false), ("is-verified", "Ödendi"));
+        assert_eq!(localize_payment_status("PAID_PAYTR", true), ("is-verified", "Paid"));
+        assert_eq!(localize_payment_status("pending", false), ("is-pending", "Beklemede"));
+        assert_eq!(localize_payment_status("pending_payment", true), ("is-pending", "Pending"));
+        assert_eq!(localize_payment_status("pending_bank_transfer", false), ("is-pending", "Havale Bekleniyor"));
+        assert_eq!(localize_payment_status("failed", true), ("is-danger", "Failed"));
+        assert_eq!(localize_payment_status("failed_payment", true), ("is-danger", "Failed"));
+        assert_eq!(localize_payment_status("failed_payment", false), ("is-danger", "Başarısız"));
+        assert_eq!(localize_payment_status("canceled", false), ("is-muted", "İptal Edildi"));
+        assert_eq!(localize_payment_status("refunded", true), ("is-muted", "Refunded"));
+        assert_eq!(localize_payment_status("paid_refunded", true), ("is-muted", "Refunded"));
+        assert_eq!(localize_payment_status("paid_refunded", false), ("is-muted", "İade Edildi"));
+        assert_eq!(localize_payment_status("custom_unknown", false), ("is-muted", "İşlemde"));
+
+        let upper_admin = sample_user("ADMIN", true, false);
+        let upper_prof = resolve_role_profile(&upper_admin, true);
+        assert_eq!(upper_prof.label, "System Admin");
+        assert_eq!(upper_prof.tone, "gold");
+        let mixed_sub = sample_user("Subscriber_Public", true, false);
+        assert_eq!(resolve_role_profile(&mixed_sub, false).tone, "emerald");
+
+        assert_eq!(localize_consent_type("kvkk", false), "KVKK Aydınlatma Metni");
+        assert_eq!(localize_consent_type("tos", true), "Terms of Service");
+        assert_eq!(localize_consent_type("etk", false), "Ticari İleti İzni (ETK)");
+
+        assert_eq!(format_portal_date("2026-11-21T14:35:00Z", false), "21.11.2026 14:35");
+        assert_eq!(format_portal_date("2026-11-21T14:35:00Z", true), "21 Nov 2026 14:35");
+        assert_eq!(format_portal_date("2027-12-31", false), "31.12.2027");
+        assert_eq!(format_portal_date("2027-12-31", true), "31 Dec 2027");
+        assert_eq!(format_portal_date("2026-01-01 00:00:00", false), "01.01.2026");
+        assert_eq!(format_portal_date("", false), "—");
+    }
+
+    #[test]
+    fn corporate_status_card_resolves_organization_category_and_formats_date() {
+        let user = sample_user("registered", true, false);
+        let choices = default_institution_choices();
+        let req = CorporateVerificationRequest {
+            id: 1,
+            user_id: 42,
+            email: "okur@savunma.gov.tr".into(),
+            full_name: "Test Kullanıcısı".into(),
+            organization_category: "SSB".into(),
+            organization_name: "Savunma Sanayii Başkanlığı".into(),
+            request_message: "Erişim talebi".into(),
+            status: "pending".into(),
+            reviewed_by: None,
+            created_at: "2026-11-21T12:00:00Z".into(),
+        };
+        let ctx_tr = AccountPortalContext {
+            lang: "tr",
+            user: &user,
+            reminders: &[],
+            invoices: &[],
+            notifications: &[],
+            tags: &[],
+            admin_path_opt: None,
+            tr: None,
+            institutions: &choices,
+            kvkk_logs: &[],
+            contents: &[],
+            issues: &[],
+            corporate_requests: std::slice::from_ref(&req),
+            purchased_codes: &[],
+            can_download_edergi: false,
+            has_subscriber_access: false,
+            can_access_design_studio: false,
+            hints: PortalQueryHints::default(),
+            csp_nonce: None,
+        };
+        let html_tr = render_corporate_status_card(&ctx_tr, &choices, false);
+        assert!(html_tr.contains("SSB (Savunma Sanayii Başkanlığı)"));
+        assert!(html_tr.contains("21.11.2026 12:00"));
+
+        let ctx_en = AccountPortalContext { lang: "en", ..ctx_tr };
+        let html_en = render_corporate_status_card(&ctx_en, &choices, true);
+        assert!(html_en.contains("SSB (Presidency of Defence Industries)"));
+        assert!(html_en.contains("21 Nov 2026 12:00"));
+
+        let mut req_no_cat = req.clone();
+        req_no_cat.organization_category = String::new();
+        req_no_cat.status = "APPROVED".into();
+        let ctx_empty_cat = AccountPortalContext {
+            corporate_requests: std::slice::from_ref(&req_no_cat),
+            ..ctx_en
+        };
+        let html_no_cat = render_corporate_status_card(&ctx_empty_cat, &choices, true);
+        assert!(html_no_cat.contains("status-badge is-verified"));
+        assert!(html_no_cat.contains("<strong>Savunma Sanayii Başkanlığı</strong> · "));
+        assert!(!html_no_cat.contains("()"));
+    }
+
+    #[test]
+    fn can_dl_parity_matches_across_all_17_canonical_roles() {
+        let issue = MagazineIssue {
+            issue_number: 285,
+            publication_type: "msi".into(),
+            slug: "msi-285".into(),
+            title_tr: "MSI 285".into(),
+            title_en: "MSI 285".into(),
+            publish_month_tr: "Ekim".into(),
+            publish_month_en: "October".into(),
+            year: 2026,
+            cover_image: "images/msi/cover.webp".into(),
+            page_count: 80,
+            dossier_count: 8,
+            ..Default::default()
+        };
+        let staff_roles = [
+            "super_admin", "admin", "site_operator", "editor_in_chief",
+            "managing_editor", "content_publisher", "content_editor", "editor",
+            "business_dev", "ads_manager", "finance_viewer", "support_agent",
+        ];
+        // Unverified staff WITH gov/subscriber access CAN download PDFs (parity with authorize_edergi_reader)
+        for role in staff_roles {
+            let mut u = sample_user(role, false, false);
+            u.is_gov_verified = true;
+            let (has_sub, can_dl) = compute_portal_edergi_permissions(&u);
+            assert!(has_sub, "Staff '{}' with gov_verified must have subscriber access", role);
+            assert!(can_dl, "Staff '{}' with subscriber access must bypass email_verified gate", role);
+
+            // Unverified non-editorial staff WITHOUT subscriber access cannot download
+            let mut u_nosub = sample_user(role, false, false);
+            u_nosub.is_gov_verified = false;
+            u_nosub.subscription_tier = String::new();
+            let (has_sub2, can_dl2) = compute_portal_edergi_permissions(&u_nosub);
+            let expect_sub_by_role = matches!(
+                role,
+                "super_admin" | "admin" | "site_operator" | "editor_in_chief"
+                | "managing_editor" | "content_publisher" | "content_editor" | "editor"
+            );
+            assert_eq!(has_sub2, expect_sub_by_role, "Unexpected subscriber access for unsubscribed staff '{}'", role);
+            assert_eq!(can_dl2, expect_sub_by_role, "Unexpected can_dl for unsubscribed staff '{}'", role);
+        }
+        // All 5 non-staff canonical roles: verified subscribers CAN download, unverified CANNOT, registered without sub CANNOT
+        for role in [
+            "subscriber_public",
+            "subscriber_corporate",
+            "subscriber_print_digital",
+            "subscriber_digital",
+        ] {
+            let mut v = sample_user(role, true, false);
+            v.is_gov_verified = false;
+            v.subscription_tier = "Dijital Abone".into();
+            assert_eq!(compute_portal_edergi_permissions(&v), (true, true), "Verified '{}' must download", role);
+
+            let mut uv = sample_user(role, false, false);
+            uv.is_gov_verified = false;
+            uv.subscription_tier = "Dijital Abone".into();
+            assert_eq!(compute_portal_edergi_permissions(&uv), (true, false), "Unverified '{}' must NOT download", role);
+        }
+        let mut reg = sample_user("registered", true, false);
+        reg.is_gov_verified = false;
+        reg.subscription_tier = String::new();
+        assert_eq!(compute_portal_edergi_permissions(&reg), (false, false));
+        // Unverified non-staff subscriber CANNOT download PDFs
+        let mut unverified_sub = sample_user("subscriber_digital", false, false);
+        unverified_sub.is_gov_verified = false;
+        unverified_sub.subscription_tier = "Dijital Abone".into();
+        let ctx_uv = AccountPortalContext {
+            lang: "tr",
+            user: &unverified_sub,
+            reminders: &[],
+            invoices: &[],
+            notifications: &[],
+            tags: &[],
+            admin_path_opt: None,
+            tr: None,
+            institutions: &[],
+            kvkk_logs: &[],
+            contents: &[],
+            issues: std::slice::from_ref(&issue),
+            corporate_requests: &[],
+            purchased_codes: &[],
+            can_download_edergi: false,
+            has_subscriber_access: true,
+            can_access_design_studio: false,
+            hints: PortalQueryHints::default(),
+            csp_nonce: None,
+        };
+        let html_uv = render_portal_document(&ctx_uv);
+        assert!(html_uv.contains("PDF için E-posta Doğrula"));
+        assert!(!html_uv.contains("/download-pdf?"));
     }
 }

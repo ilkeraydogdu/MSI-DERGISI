@@ -261,11 +261,56 @@ pub struct TagSuggestion {
     pub count: i32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PendingEditorConfirm {
     NewArticle,
     ClearEditor,
     MoveSelectedToEditor,
+    DeleteArticle {
+        article_id: String,
+        title: String,
+        is_draft: bool,
+    },
+    DeleteCategory {
+        id: i32,
+        name: String,
+    },
+    DeleteResearchSource {
+        id: i32,
+        name: String,
+    },
+    DeleteMediaAsset {
+        asset_id: i32,
+        label: String,
+    },
+    RestoreArticleRevision {
+        article_id: String,
+        rev_id: i64,
+        rev_title: String,
+    },
+    DeleteMagazineIssue {
+        id: i32,
+        label: String,
+    },
+    DeleteGlossaryRule {
+        id: i32,
+        label: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToastKind {
+    Success,
+    Error,
+    Warning,
+    Info,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToastItem {
+    pub id: u64,
+    pub kind: ToastKind,
+    pub message: String,
 }
 
 pub struct AppState {
@@ -391,18 +436,9 @@ pub struct AppState {
     pub crop_image_el: Option<Rc<web_sys::HtmlImageElement>>,
     pub crop_loaded_src: String,
 
-    // Change Password Modal
-    pub show_change_password: bool,
-    pub change_pw_current: String,
-    pub change_pw_new: String,
-    pub change_pw_confirm: String,
-    pub is_changing_password: bool,
-
-    // Notifications
-    pub error: Option<String>,
-    pub error_seq: u64,
-    pub success: Option<String>,
-    pub success_seq: u64,
+    // Notifications (queued bottom-right stack)
+    pub toasts: Vec<ToastItem>,
+    pub toast_seq: u64,
 
     // Research Desk & Multi-Source Clean Reader View
     pub research_query: String,
@@ -593,16 +629,8 @@ impl AppState {
             crop_image_el: None,
             crop_loaded_src: String::new(),
 
-            show_change_password: false,
-            change_pw_current: String::new(),
-            change_pw_new: String::new(),
-            change_pw_confirm: String::new(),
-            is_changing_password: false,
-
-            error: None,
-            error_seq: 0,
-            success: None,
-            success_seq: 0,
+            toasts: Vec::new(),
+            toast_seq: 0,
 
             research_query: String::new(),
             research_scope: "tr".to_string(),
@@ -675,6 +703,26 @@ impl AppState {
             .as_ref()
             .map(|u| u.capabilities.clone())
             .unwrap_or_default()
+    }
+
+    pub fn push_toast(&mut self, kind: ToastKind, message: impl Into<String>) -> u64 {
+        self.toast_seq += 1;
+        let id = self.toast_seq;
+        while self.toasts.len() >= 5 {
+            self.toasts.remove(0);
+        }
+        self.toasts.push(ToastItem {
+            id,
+            kind,
+            message: message.into(),
+        });
+        id
+    }
+
+    pub fn dismiss_toast(&mut self, id: u64) -> bool {
+        let before = self.toasts.len();
+        self.toasts.retain(|t| t.id != id);
+        self.toasts.len() != before
     }
 
     pub fn active_research_tab_index(&self) -> Option<usize> {
@@ -3025,5 +3073,77 @@ mod tests {
         assert!(!safe.contains("evil_raw_payload"));
         assert!(!safe.contains("onclick"));
         assert!(!safe.contains("javascript:"));
+    }
+
+    #[test]
+    fn queued_toast_stack_caps_at_five_and_dismisses_by_id() {
+        let mut s = AppState::new();
+        assert!(s.toasts.is_empty());
+
+        let mut ids = Vec::new();
+        for idx in 1..=6 {
+            let kind = match idx % 4 {
+                0 => ToastKind::Info,
+                1 => ToastKind::Success,
+                2 => ToastKind::Warning,
+                _ => ToastKind::Error,
+            };
+            ids.push(s.push_toast(kind, format!("Bildirim #{idx}")));
+        }
+
+        // Queue is capped at 5 items, FIFO evicted the oldest (#1)
+        assert_eq!(s.toasts.len(), 5);
+        assert_eq!(s.toasts[0].id, ids[1]);
+        assert_eq!(s.toasts[0].message, "Bildirim #2");
+        assert_eq!(s.toasts[4].id, ids[5]);
+        assert_eq!(s.toasts[4].message, "Bildirim #6");
+        assert_eq!(s.toast_seq, ids[5]);
+
+        // Dismissing middle item removes only that item
+        assert!(s.dismiss_toast(ids[3]));
+        assert_eq!(s.toasts.len(), 4);
+        assert!(!s.toasts.iter().any(|t| t.id == ids[3]));
+        assert!(!s.dismiss_toast(999999));
+    }
+
+    #[test]
+    fn pending_editor_confirm_stores_typed_context_for_all_destructive_variants() {
+        let variants = vec![
+            PendingEditorConfirm::DeleteArticle {
+                article_id: "pub-12".into(),
+                title: "Savunma Raporu".into(),
+                is_draft: false,
+            },
+            PendingEditorConfirm::DeleteCategory {
+                id: 3,
+                name: "Havacılık".into(),
+            },
+            PendingEditorConfirm::DeleteResearchSource {
+                id: 7,
+                name: "AA Savunma".into(),
+            },
+            PendingEditorConfirm::DeleteMediaAsset {
+                asset_id: 42,
+                label: "kaan-ucus.webp".into(),
+            },
+            PendingEditorConfirm::RestoreArticleRevision {
+                article_id: "draft-9".into(),
+                rev_id: 18,
+                rev_title: "İlk Revizyon".into(),
+            },
+            PendingEditorConfirm::DeleteMagazineIssue {
+                id: 5,
+                label: "#286 MSI Dergisi".into(),
+            },
+            PendingEditorConfirm::DeleteGlossaryRule {
+                id: 11,
+                label: "Türkiye → Türkiye".into(),
+            },
+        ];
+        let mut s = AppState::new();
+        for v in variants {
+            s.pending_editor_confirm = Some(v.clone());
+            assert_eq!(s.pending_editor_confirm.as_ref(), Some(&v));
+        }
     }
 }

@@ -356,6 +356,7 @@ export async function evaluatePageUxRubric(pageRes, meta = {}) {
       while (cur && cur.nodeType === 1 && cur !== document.body && cur !== document.documentElement) {
         if (
           cur.tagName === "DIALOG" ||
+          cur.id === "cart-drawer" ||
           cur.classList.contains("admin-drawer") ||
           cur.classList.contains("admin-modal") ||
           cur.classList.contains("studio-modal-overlay") ||
@@ -551,7 +552,7 @@ export async function evaluatePageUxRubric(pageRes, meta = {}) {
     // 4a/4b. Fixed-overlay collisions & fixed overlays obscuring primary CTAs/inputs (when no modal/drawer is open)
     const hasOpenModalOverlay = Boolean(
       document.querySelector(
-        "dialog[open], .admin-modal.open, .admin-drawer.open, .studio-modal-overlay.open"
+        'dialog[open], aside#cart-drawer.is-open, #cart-drawer[aria-hidden="false"], .admin-modal.open, .admin-drawer.open, .studio-modal-overlay.open, .studio-modal-overlay:not([hidden])'
       )
     );
     if (!hasOpenModalOverlay) {
@@ -739,6 +740,60 @@ export async function evaluatePageUxRubric(pageRes, meta = {}) {
       }
     }
 
+    // 6. Design token role & font verification (--ui-* & Role A / Role B)
+    function normalizeHex(raw) {
+      const s = String(raw || "").trim().toLowerCase();
+      if (!s) return "";
+      if (s.startsWith("#")) {
+        return s.length === 4 ? `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}` : s;
+      }
+      const m = s.match(/^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)/);
+      if (!m) return s;
+      const hex = (n) => Math.max(0, Math.min(255, Math.round(Number.parseFloat(n)))).toString(16).padStart(2, "0");
+      return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
+    }
+
+    const tokenRole =
+      surfaceName.startsWith("public_storefront") ||
+      ["hesabim_guest", "public_auth_dialog", "reset_password", "account_portal"].includes(surfaceName)
+        ? "brand"
+        : ["admin_login", "admin_command", "editorial_studio", "design_studio"].includes(surfaceName)
+          ? "ops"
+          : null;
+
+    const uiTokenIssues = [];
+    if (tokenRole) {
+      const rootSt = window.getComputedStyle(document.documentElement);
+      const reqScale = ["--ui-font-sans", "--ui-space-4", "--ui-radius-md", "--ui-z-toast", "--ui-success"];
+      for (const tok of reqScale) {
+        if (!rootSt.getPropertyValue(tok).trim()) {
+          uiTokenIssues.push(`missing ${tok}`);
+        }
+      }
+      const expected =
+        tokenRole === "brand"
+          ? activeTheme === "dark"
+            ? { "--ui-brand-bg": "#1d222c", "--ui-brand-surface": "#262c38", "--ui-brand-accent": "#d42020" }
+            : { "--ui-brand-bg": "#f6f3ee", "--ui-brand-surface": "#fcfbf9", "--ui-brand-accent": "#cb382a" }
+          : activeTheme === "dark"
+            ? { "--ui-ops-bg": "#161b24", "--ui-ops-surface": "#1e2532", "--ui-ops-accent": "#7da4f2" }
+            : { "--ui-ops-bg": "#f6f7f9", "--ui-ops-surface": "#ffffff", "--ui-ops-accent": "#3b66c4" };
+      for (const [tok, hex] of Object.entries(expected)) {
+        const val = rootSt.getPropertyValue(tok).trim();
+        if (!val || normalizeHex(val) !== hex) {
+          uiTokenIssues.push(`${tok}=${val || "(empty)"} != ${hex}`);
+        }
+      }
+      const bodyFf = (bodyStyle.fontFamily || "").toLowerCase();
+      if (!bodyFf.includes("ibm plex sans")) {
+        uiTokenIssues.push(`body fontFamily missing IBM Plex Sans (${bodyStyle.fontFamily})`);
+      }
+      const ffParts = bodyFf.split(",").map((p) => p.replace(/["']/g, "").trim());
+      if (ffParts.includes("inter")) {
+        uiTokenIssues.push(`forbidden Inter font leak (${bodyStyle.fontFamily})`);
+      }
+    }
+
     return {
       domNodeCount,
       visibleInteractiveCount: allInteractive.length,
@@ -761,6 +816,9 @@ export async function evaluatePageUxRubric(pageRes, meta = {}) {
       brokenImages,
       zeroSizeSvgs: zeroSizeSvgs.slice(0, 20),
       appliedTheme: document.documentElement.getAttribute("data-theme") || "",
+      tokenRole,
+      uiTokensOk: uiTokenIssues.length === 0,
+      uiTokenIssues,
     };
   }, { surfaceName: surface, activeTheme: theme });
 
@@ -802,7 +860,8 @@ export async function evaluatePageUxRubric(pageRes, meta = {}) {
   const strictExtrasPassed =
     domMetrics.contrastViolationsTotal === 0 &&
     (!expectGsap || domMetrics.gsapLoaded) &&
-    !domMetrics.harshBodyBg;
+    !domMetrics.harshBodyBg &&
+    domMetrics.uiTokensOk !== false;
 
   return {
     corePassed,
@@ -840,6 +899,13 @@ async function runAuditCheck(bm, {
   });
   try {
     await setTheme(pageRes.page, theme);
+    if (surface.startsWith("public_storefront")) {
+      const adDismiss = pageRes.page.locator("#ad-floating-popup [data-dismiss-floating-ad]").first();
+      if (await adDismiss.isVisible().catch(() => false)) {
+        await adDismiss.click().catch(() => {});
+        await pageRes.page.waitForTimeout(80);
+      }
+    }
     if (afterOpen) {
       await afterOpen(pageRes);
     }
@@ -1000,6 +1066,93 @@ export async function runUxRubricAudit(rawOpts = {}) {
     const hesabimStaffToAudit = opts.quick
       ? ["super_admin", "content_editor"]
       : ["super_admin", "editor_in_chief", "content_editor"];
+
+    // 0. Public Storefront & Reader (Surface 1) + Interactive Overlays
+    if (allowSurface("public_storefront")) {
+      const storefrontTargets = [
+        { surface: "public_storefront_home", route: "/", expectGsap: false },
+        { surface: "public_storefront_news", route: "/?mode=news", expectGsap: false },
+        { surface: "public_storefront_store", route: "/abonelik-ve-satis", expectGsap: false },
+        { surface: "public_storefront_edergi", route: "/e-dergi", expectGsap: false },
+        { surface: "public_storefront_search", route: "/arama", expectGsap: false },
+        {
+          surface: "public_storefront_auth_dialog",
+          route: "/hesabim",
+          expectGsap: false,
+          afterOpen: async (pRes) => {
+            await pRes.page.locator('a[href="#modal-login"]').first().click();
+            await pRes.page.locator("#auth-dialog").waitFor({ state: "visible", timeout: 5000 });
+          },
+        },
+        {
+          surface: "public_storefront_cart_drawer",
+          route: "/",
+          expectGsap: false,
+          afterOpen: async (pRes) => {
+            const toggle = pRes.page.locator(".site-header [data-cart-toggle], [data-cart-toggle]").first();
+            if (await toggle.isVisible().catch(() => false)) {
+              await toggle.click();
+              await pRes.page.locator("aside#cart-drawer").waitFor({ state: "visible", timeout: 5000 });
+            }
+          },
+        },
+        {
+          surface: "public_storefront_issue_dialog",
+          route: "/e-dergi",
+          expectGsap: false,
+          afterOpen: async (pRes) => {
+            const btn = pRes.page.locator("[data-open-issue]").first();
+            if (await btn.isVisible().catch(() => false)) {
+              await btn.click();
+              await pRes.page.locator("#issue-dialog").waitFor({ state: "visible", timeout: 5000 });
+            }
+          },
+        },
+      ];
+
+      for (const vp of viewports) {
+        for (const theme of themes) {
+          const ctx = await bm.newContext({ viewport: { width: vp.width, height: vp.height } });
+          try {
+            await ctx.addInitScript((t) => {
+              try {
+                window.localStorage.setItem("msi_admin_theme", t);
+                window.localStorage.setItem("msi_theme", t);
+                window.localStorage.setItem(
+                  "msi_cookie_consent",
+                  JSON.stringify({
+                    necessary: true,
+                    analytics: false,
+                    marketing: false,
+                    timestamp: new Date().toISOString(),
+                  })
+                );
+              } catch {
+                // ignore
+              }
+            }, theme);
+            for (const target of storefrontTargets) {
+              const entry = await runAuditCheck(bm, {
+                id: `${target.surface}:guest:${theme}:${vp.name}`,
+                surface: target.surface,
+                route: target.route,
+                role: "guest",
+                theme,
+                viewport: vp,
+                context: ctx,
+                outDir,
+                isIsolated,
+                expectGsap: target.expectGsap,
+                afterOpen: target.afterOpen,
+              });
+              results.push(entry);
+            }
+          } finally {
+            await ctx.close();
+          }
+        }
+      }
+    }
 
     // 1. Unauthenticated surfaces
     if (allowSurface("public_auth")) {
@@ -1458,7 +1611,7 @@ Options:
   --admin-password=<pw>   Admin password for external targets
   --role-creds=<json>     JSON file mapping role -> { email, password }
   --provision-roles       Provision temporary role accounts on external target (cleaned up on exit)
-  --surfaces=<list>       Filter surfaces: public_auth,design_studio,editorial_studio,admin_command,account_portal
+  --surfaces=<list>       Filter surfaces: public_storefront,public_auth,design_studio,editorial_studio,admin_command,account_portal
   --quick                 Run compact representative role subset
   --strict                Fail if WCAG contrast, harsh body bg, or GSAP checks fail
 `);
@@ -1474,7 +1627,7 @@ Options:
       const ok = opts.strict ? r.strictPassed : r.corePassed;
       if (!ok) {
         console.error(
-          `  FAIL [${r.id}] overflow=${r.metrics.hasHorizontalOverflow} overlaps=${r.metrics.overlapViolationsTotal} clipped=${r.metrics.clippedLabels.length} contrastViolations=${r.metrics.contrastViolationsTotal} harshBg=${r.metrics.harshBodyBg} brokenImgs=${r.metrics.brokenImages.length} zeroSvgs=${r.metrics.zeroSizeSvgs.length} httpErrs=${r.metrics.httpErrors.length} consoleErrs=${r.metrics.consoleErrors.length}`
+          `  FAIL [${r.id}] overflow=${r.metrics.hasHorizontalOverflow} overlaps=${r.metrics.overlapViolationsTotal} clipped=${r.metrics.clippedLabels.length} contrastViolations=${r.metrics.contrastViolationsTotal} harshBg=${r.metrics.harshBodyBg} uiTokensOk=${r.metrics.uiTokensOk} brokenImgs=${r.metrics.brokenImages.length} zeroSvgs=${r.metrics.zeroSizeSvgs.length} httpErrs=${r.metrics.httpErrors.length} consoleErrs=${r.metrics.consoleErrors.length}`
         );
       }
     }

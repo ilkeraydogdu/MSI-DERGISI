@@ -54,6 +54,33 @@ pub fn is_allowed_extension(ext: &str) -> bool {
     ALLOWED_EXTENSIONS.contains(&ext)
 }
 
+/// SECURITY FIX: Validates that a filename does not contain null bytes, double extensions,
+/// or other path traversal / injection patterns.
+pub fn is_safe_filename(name: &str) -> bool {
+    // Reject null bytes
+    if name.contains('\0') {
+        return false;
+    }
+    // Reject path separators and parent directory references
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return false;
+    }
+    // Reject filenames with multiple dots that could indicate double extensions
+    // (e.g., "shell.php.jpg"). Allow at most one dot for the extension separator.
+    let dot_count = name.chars().filter(|&c| c == '.').count();
+    if dot_count > 1 {
+        return false;
+    }
+    // Must have exactly one dot (name.ext) and non-empty parts
+    if dot_count != 1 {
+        return false;
+    }
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    !stem.is_empty() && !ext.is_empty() && is_allowed_extension(ext)
+}
+
 /// Returns `true` when the byte length is within the upload limit and non-zero.
 pub fn is_valid_size(len: usize) -> bool {
     len != 0 && len <= MAX_UPLOAD_BYTES

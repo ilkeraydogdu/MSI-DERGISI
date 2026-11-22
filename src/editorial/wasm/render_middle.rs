@@ -231,7 +231,7 @@ fn render_msi_meta_header_blocks(s: &AppState, art: &Article, is_en: bool) -> (S
                 };
                 format!(
                     r#"<div class="pt-4 border-t border-zinc-100 flex items-center flex-wrap gap-1.5">
-                        <span class="text-[9.5px] font-black uppercase tracking-widest text-zinc-400 mr-1">{heading}</span>
+                        <span class="text-xs font-black uppercase tracking-wider text-zinc-400 mr-1">{heading}</span>
                         {}
                     </div>"#,
                     pills.join("")
@@ -297,15 +297,15 @@ pub fn render_draft_article_sheet_html(s: &AppState, is_mobile_frame: bool) -> S
         if let Some(item) = tree.iter().find(|t| t.category.id == leaf_id) {
             let color = item.category.color.as_deref().unwrap_or("#52c2ef");
             format!(
-                r#"<span style="background-color: {color};" class="px-2.5 py-1 rounded-md text-white text-[10px] font-black uppercase tracking-widest shadow-sm">{path}</span>"#,
+                r#"<span style="background-color: {color};" class="px-2.5 py-1 rounded-md text-white text-xs font-black uppercase tracking-wider shadow-sm">{path}</span>"#,
                 color = escape_html(color),
                 path = escape_html(&item.path_label),
             )
         } else {
-            r#"<span class="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-500 text-[10px] font-black uppercase tracking-widest">GENEL HABER</span>"#.to_string()
+            r#"<span class="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-500 text-xs font-black uppercase tracking-wider">GENEL HABER</span>"#.to_string()
         }
     } else {
-        r#"<span class="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-500 text-[10px] font-black uppercase tracking-widest">KATEGORİ SEÇİLMEDİ</span>"#.to_string()
+        r#"<span class="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-500 text-xs font-black uppercase tracking-wider">KATEGORİ SEÇİLMEDİ</span>"#.to_string()
     };
 
     let live_badge_html = if art.is_live_blog {
@@ -350,7 +350,7 @@ pub fn render_draft_article_sheet_html(s: &AppState, is_mobile_frame: bool) -> S
 
     let slug_bar = if !effective_slug.is_empty() {
         format!(
-            r#"<span class="text-[10px] font-mono font-semibold text-zinc-400 truncate">/icerik/{}</span>"#,
+            r#"<span class="text-xs font-mono font-semibold text-zinc-400 truncate">/icerik/{}</span>"#,
             escape_html(&effective_slug)
         )
     } else {
@@ -431,7 +431,7 @@ pub fn render_draft_article_sheet_html(s: &AppState, is_mobile_frame: bool) -> S
             } else {
                 format!(
                     r#"<div class="pt-6 border-t border-zinc-100 flex items-center flex-wrap gap-2">
-                        <span class="text-[10px] font-black uppercase tracking-widest text-zinc-400 mr-1">Etiketler:</span>
+                        <span class="text-xs font-black uppercase tracking-wider text-zinc-400 mr-1">Etiketler:</span>
                         {}
                     </div>"#,
                     pills.join("")
@@ -518,7 +518,7 @@ pub fn render_middle_panel_inner(s: &AppState) -> String {
     if s.middle_preview_draft {
         let research_pill = crate::editorial::wasm::render_research::render_open_research_floating_pill(s);
         let back_to_selected_btn = if s.selected_article.is_some() {
-            r#"<button type="button" data-action="exit-middle-draft-preview" class="h-8 px-3 rounded-full bg-white border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 text-[10px] font-black uppercase tracking-wider transition-all">Seçili Habere Dön</button>"#
+            r#"<button type="button" data-action="exit-middle-draft-preview" class="min-h-[36px] px-3.5 rounded-[10px] bg-white border border-zinc-200 text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 text-xs font-semibold transition-all">Seçili Habere Dön</button>"#
         } else {
             ""
         };
@@ -527,12 +527,12 @@ pub fn render_middle_panel_inner(s: &AppState) -> String {
             r#"<div class="hf-middle-preview-bar">
                 <div class="flex items-center gap-2 min-w-0">
                     <span class="hf-live-preview-pill"><span class="hf-live-preview-dot"></span>CANLI TASLAK ÖNİZLEMESİ</span>
-                    <span class="hidden xl:inline text-[10px] font-semibold text-zinc-400 truncate">Sağ editördeki değişiklikler burada anlık görünür</span>
+                    <span class="hidden xl:inline text-xs font-medium text-zinc-500 truncate">Sağ editördeki değişiklikler burada anlık görünür</span>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     {research_pill}
                     {back_to_selected_btn}
-                    <button type="button" data-action="open-preview-modal" class="h-8 px-3.5 rounded-full bg-zinc-900 text-white hover:bg-brand-500 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all">
+                    <button type="button" data-action="open-preview-modal" class="min-h-[36px] px-3.5 rounded-[10px] bg-zinc-900 text-white hover:bg-brand-500 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                         {eye_ico}
                         <span>Tam Ekran</span>
                     </button>
@@ -625,7 +625,7 @@ pub fn render_middle_panel_inner(s: &AppState) -> String {
 
     let globe_btn_html = match wp_url_opt {
         Some(url) => format!(
-            r#"<a href="{href}" target="_blank" rel="noopener noreferrer" class="w-8 h-8 bg-white text-zinc-700 border border-zinc-200 rounded-lg flex items-center justify-center shadow-sm hover:text-brand-500 hover:border-brand-500/40 transition-all shrink-0" title="Yayındaki Haberi Aç">
+            r#"<a href="{href}" target="_blank" rel="noopener noreferrer" class="w-9 h-9 bg-white text-zinc-700 border border-zinc-200 rounded-[10px] flex items-center justify-center shadow-sm hover:text-brand-500 hover:border-brand-500/40 transition-all shrink-0" title="Yayındaki Haberi Aç">
                 {globe_ico}
             </a>"#,
             href = escape_html(url),
@@ -636,7 +636,7 @@ pub fn render_middle_panel_inner(s: &AppState) -> String {
 
     let revisions_btn_html = if !art.id.trim().is_empty() {
         format!(
-            r#"<button type="button" data-action="open-revisions-modal" data-article-id="{aid}" data-article-title="{atitle}" class="h-8 px-2.5 bg-white text-zinc-700 border border-zinc-200 rounded-lg flex items-center justify-center gap-1.5 shadow-sm hover:text-brand-500 hover:border-brand-500/40 transition-all text-[10px] font-bold tracking-wide shrink-0 whitespace-nowrap" title="Revizyon Geçmişi">
+            r#"<button type="button" data-action="open-revisions-modal" data-article-id="{aid}" data-article-title="{atitle}" class="min-h-[36px] px-3 bg-white text-zinc-700 border border-zinc-200 rounded-[10px] flex items-center justify-center gap-1.5 shadow-sm hover:text-brand-500 hover:border-brand-500/40 transition-all text-xs font-semibold shrink-0 whitespace-nowrap" title="Revizyon Geçmişi">
                 {hist_ico}
                 <span class="hidden sm:inline">Revizyon Geçmişi</span>
             </button>"#,
@@ -797,9 +797,9 @@ pub fn render_middle_panel_inner(s: &AppState) -> String {
     };
 
     format!(
-        r#"<div class="hf-middle-action-bar flex items-center justify-between gap-2 px-4 lg:px-6 py-2.5 border-b border-zinc-200/80 bg-white/95 backdrop-blur-sm shrink-0 z-30">
+        r#"<div class="hf-middle-action-bar flex items-center justify-between flex-wrap gap-2 px-4 lg:px-6 py-2.5 border-b border-zinc-200/80 bg-white/95 backdrop-blur-sm shrink-0 z-30">
             <div class="flex items-center gap-2 min-w-0">
-                <button type="button" data-action="mobile-back-left" class="lg:hidden w-8 h-8 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-600 border border-zinc-200 shrink-0" title="Haber Listesine Dön">
+                <button type="button" data-action="mobile-back-left" class="lg:hidden w-9 h-9 bg-zinc-50 rounded-[10px] flex items-center justify-center text-zinc-600 border border-zinc-200 shrink-0" title="Haber Listesine Dön">
                     {back_ico}
                 </button>
                 {mode_toggle_html}
@@ -808,7 +808,7 @@ pub fn render_middle_panel_inner(s: &AppState) -> String {
                 {research_floating_pill}
                 {revisions_btn_html}
                 {globe_btn_html}
-                <button type="button" data-action="move-to-editor" class="h-8 px-3.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-all text-[10px] font-extrabold uppercase tracking-wider shrink-0 whitespace-nowrap" title="Editöre Aktar">
+                <button type="button" data-action="move-to-editor" class="min-h-[36px] px-4 bg-brand-500 hover:bg-brand-600 text-white rounded-[10px] flex items-center justify-center gap-1.5 shadow-sm transition-all text-xs font-semibold shrink-0 whitespace-nowrap" title="Editöre Aktar">
                     {plus_ico}
                     <span class="hidden sm:inline">Editöre Aktar</span>
                 </button>
@@ -826,7 +826,7 @@ pub fn render_middle_panel_inner(s: &AppState) -> String {
 
                 <div class="space-y-3">
                     {msi_top_html}
-                    <div class="flex items-center flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                    <div class="flex items-center flex-wrap gap-2 text-xs font-black uppercase tracking-wider text-zinc-500">
                         {date_span}
                         {status_span}
                         {control_badges}

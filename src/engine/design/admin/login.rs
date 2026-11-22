@@ -1,8 +1,7 @@
-//! Modern 2026 Editorial Split-Screen Login Gateway (`/podmin` & `/{ADMIN_PATH_SECRET}`).
-//! Left half: sculpted inset full-height cinema window with vertical fighter jet photography,
-//! photographic ambient backlight bleed, optical glass rim, and fluid GSAP atmospheric motion.
-//! Right half: clean liquid-glass sign-in surface with autonomous OS / local-clock theming.
+//! Full-bleed interactive WebGL defence gallery & floating liquid-glass login gateway
+//! (`/podmin` & `/{ADMIN_PATH_SECRET}`) with autonomous OS / local-clock theming.
 
+use super::login_stage::{render_stage, STAGE_SLIDES};
 use super::ui::{form_group, icon, icon_with_attrs};
 use super::{clean_segment, tr_admin};
 use crate::engine::design::html_dsl::HtmlBuf;
@@ -24,16 +23,10 @@ pub fn render_login(nonce: Option<&str>, clean_admin_path: &str, tr: &Translatio
     );
     let back_link = tr_admin(tr, lang, "admin.login.back_to_site", "Yayına Dön", "Back to Site");
     let heading = tr_admin(tr, lang, "admin.login.clean_heading", "Giriş Yap", "Sign In");
-    let hero_aria = tr_admin(tr, lang, "admin.login.clean_visual_aria", "Savaş uçağı görseli", "Fighter jet visual");
-    let hero_alt = tr_admin(
-        tr,
-        lang,
-        "admin.login.clean_visual_alt",
-        "Bulutların üzerinde tırmanan çift motorlu savaş uçağı",
-        "Twin-engine stealth fighter jet climbing above twilight clouds",
-    );
+    let first_slide = &STAGE_SLIDES[0];
+    let preload_srcset = format!("{} 1280w, {} 2400w", first_slide.src_sm, first_slide.src);
 
-    let mut buf = HtmlBuf::with_capacity(8192);
+    let mut buf = HtmlBuf::with_capacity(12288);
     buf.raw("<!DOCTYPE html>");
     buf.el("html", &[("lang", lang), ("data-theme", "light")], |html| {
         html.el("head", &[], |head| {
@@ -52,73 +45,28 @@ pub fn render_login(nonce: Option<&str>, clean_admin_path: &str, tr: &Translatio
                 &[
                     ("rel", "preload"),
                     ("as", "image"),
-                    ("href", "/images/admin/podmin-fighter-vertical.webp"),
+                    ("href", first_slide.src),
+                    ("imagesrcset", &preload_srcset),
+                    ("imagesizes", "100vw"),
                     ("type", "image/webp"),
                 ],
             );
-            head.link_css("/css/admin/tokens.css?v=35")
-                .link_css("/css/admin/components.css?v=35")
-                .link_css("/css/admin/login.css?v=35");
+            head.link_css("/css/design-tokens.css")
+                .link_css("/css/admin/tokens.css?v=40")
+                .link_css("/css/admin/components.css?v=40")
+                .link_css("/css/admin/login.css?v=40");
             head.script_inline(AUTO_ONLY_THEME_PREHYDRATE_JS, clean_nonce, None);
         });
 
-        html.el("body", &[("data-admin-path", &admin_root), ("data-admin-lang", lang)], |body| {
-            body.el("div", &[("class", "login-canvas-bg"), ("aria-hidden", "true")], |bg| {
-                bg.el("div", &[("class", "canvas-dot-mesh")], |_| {});
-                bg.el("div", &[("class", "canvas-keylight")], |_| {});
-            });
+        html.el(
+            "body",
+            &[("class", "login-body"), ("data-admin-path", &admin_root), ("data-admin-lang", lang)],
+            |body| {
+                body.el("main", &[("class", "login-root")], |root| {
+                    render_stage(root, tr, lang, home_href, &back_link);
 
-            body.el("main", &[("class", "login-split")], |split| {
-                // Left half: Sculpted full-height inset cinema window with real ambient color bleed
-                split.el("aside", &[("class", "login-showcase"), ("id", "jet-stage"), ("aria-label", &hero_aria)], |sc| {
-                    sc.el("div", &[("class", "jet-ambient-bleed"), ("aria-hidden", "true")], |bleed| {
-                        bleed.void_el(
-                            "img",
-                            &[
-                                ("src", "/images/admin/podmin-fighter-vertical.webp"),
-                                ("alt", ""),
-                                ("class", "jet-bleed-img"),
-                                ("width", "896"),
-                                ("height", "1200"),
-                                ("decoding", "async"),
-                            ],
-                        );
-                    });
-
-                    sc.el("div", &[("class", "jet-cinema-frame"), ("id", "jet-cinema-frame")], |frame| {
-                        frame.el("div", &[("class", "jet-media-track"), ("id", "jet-media-track")], |tr_el| {
-                            tr_el.void_el(
-                                "img",
-                                &[
-                                    ("src", "/images/admin/podmin-fighter-vertical.webp"),
-                                    ("alt", &hero_alt),
-                                    ("class", "jet-visual-img"),
-                                    ("id", "jet-visual-img"),
-                                    ("width", "896"),
-                                    ("height", "1200"),
-                                    ("decoding", "async"),
-                                ],
-                            );
-                        });
-                        frame.el("div", &[("class", "jet-atmosphere-sheen"), ("aria-hidden", "true")], |_| {});
-                        frame.el("div", &[("class", "jet-glass-glare"), ("id", "jet-glass-glare"), ("aria-hidden", "true")], |_| {});
-                        frame.el("div", &[("class", "jet-cinema-rim"), ("aria-hidden", "true")], |_| {});
-                        frame.el("div", &[("class", "jet-reveal-veil"), ("id", "jet-reveal-veil"), ("aria-hidden", "true")], |_| {});
-                    });
-                });
-
-                // Right half: Spacious modern studio canvas + sculpted liquid-glass sign-in surface
-                split.el("section", &[("class", "login-panel")], |panel| {
-                    panel.el("header", &[("class", "login-topbar")], |top| {
-                        top.el("a", &[("href", home_href), ("class", "login-back-link")], |a| {
-                            icon(a, "fa-arrow-left");
-                            a.raw(" ");
-                            a.text(&back_link);
-                        });
-                    });
-
-                    panel.el("div", &[("class", "login-center")], |center| {
-                        center.el("div", &[("class", "login-card"), ("id", "login-card"), ("data-glow-card", "")], |card| {
+                    root.el("aside", &[("class", "login-dock")], |dock| {
+                        dock.el("div", &[("class", "login-card"), ("id", "login-card"), ("data-glow-card", "")], |card| {
                             card.el("div", &[("class", "login-brand")], |br| {
                                 br.void_el("img", &[
                                     ("src", "/images/logo-white.svg"),
@@ -147,19 +95,51 @@ pub fn render_login(nonce: Option<&str>, clean_admin_path: &str, tr: &Translatio
                             render_step_login(card, tr, lang);
                             render_step_totp(card, tr, lang);
                             render_step_forgot(card, tr, lang);
+
+                            card.el("footer", &[("class", "login-card-foot")], |f| {
+                                f.el("span", &[("class", "login-foot-copy")], |c| {
+                                    c.text("© 2026 MSI Dergisi");
+                                });
+                                f.el(
+                                    "a",
+                                    &[
+                                        ("href", "https://pofudukdijital.com/"),
+                                        ("target", "_blank"),
+                                        ("rel", "noopener noreferrer"),
+                                        ("class", "login-agency-link"),
+                                        ("aria-label", "Pofuduk Dijital"),
+                                        ("title", "Pofuduk Dijital"),
+                                    ],
+                                    |a| {
+                                        a.void_el("img", &[
+                                            ("src", "/images/admin/pofuduk-logo-dark.svg"),
+                                            ("alt", "Pofuduk Dijital"),
+                                            ("class", "login-agency-logo logo-for-dark"),
+                                            ("width", "70"),
+                                            ("height", "24"),
+                                            ("decoding", "async"),
+                                        ]);
+                                        a.void_el("img", &[
+                                            ("src", "/images/admin/pofuduk-logo.svg"),
+                                            ("alt", "Pofuduk Dijital"),
+                                            ("class", "login-agency-logo logo-for-light"),
+                                            ("width", "70"),
+                                            ("height", "24"),
+                                            ("decoding", "async"),
+                                        ]);
+                                    },
+                                );
+                            });
                         });
                     });
-
-                    panel.el("footer", &[("class", "login-bottom")], |f| {
-                        f.text("© 2026 MSI Dergisi");
-                    });
                 });
-            });
 
-            body.script_src("/js/vendor/gsap.min.js", clean_nonce, true);
-            body.script_src("/js/admin/core.js?v=35", clean_nonce, true);
-            body.script_src("/js/admin/login.js?v=35", clean_nonce, true);
-        });
+                body.script_src("/js/vendor/gsap.min.js", clean_nonce, true);
+                body.script_src("/js/admin/core.js?v=40", clean_nonce, true);
+                body.script_src("/js/admin/login-stage.js?v=40", clean_nonce, true);
+                body.script_src("/js/admin/login.js?v=40", clean_nonce, true);
+            },
+        );
     });
     buf.into_string()
 }

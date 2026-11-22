@@ -30,10 +30,10 @@ use crate::editorial::wasm::render::{
     apply_panel_widths_to_dom, auto_fit_textarea, refresh_attached_source_slot,
     refresh_blocks_list_only, refresh_header_banner, refresh_left_body,
     refresh_middle_panel,
-    refresh_modals, refresh_related_search_results, refresh_research_slots, refresh_right_panel,
+    refresh_related_search_results, refresh_research_slots, refresh_right_panel,
     refresh_settings_glossary_list_slot, refresh_settings_popover,
     refresh_single_block_embed_preview, refresh_single_block_image_preview,
-    refresh_step1_glossary_slots, refresh_step3_live_seo, refresh_step3_tags_ui, refresh_toasts,
+    refresh_step1_glossary_slots, refresh_step3_live_seo, refresh_step3_tags_ui,
     render_full, sync_editor_confirm_modal_state, sync_left_toolbar_state, sync_media_modal_state,
     sync_preview_modal_state, sync_redirects_modal_state, sync_revisions_modal_state,
     sync_settings_popover_state,
@@ -225,29 +225,23 @@ fn register_global_listeners() {
                 sync_preview_modal_state();
                 return;
             }
-            let (closed_media, closed_redir, closed_revs, closed_settings, closed_pw) =
+            let (closed_media, closed_redir, closed_revs, closed_settings) =
                 with_state_mut(|s| {
                     if s.show_media_modal {
                         s.show_media_modal = false;
-                        (true, false, false, false, false)
+                        (true, false, false, false)
                     } else if s.show_redirects_modal {
                         s.show_redirects_modal = false;
-                        (false, true, false, false, false)
+                        (false, true, false, false)
                     } else if s.show_revisions_modal {
                         s.show_revisions_modal = false;
-                        (false, false, true, false, false)
+                        (false, false, true, false)
                     } else if s.show_settings_popover {
                         s.show_settings_popover = false;
                         s.is_adding_user = false;
-                        (false, false, false, true, false)
-                    } else if s.show_change_password {
-                        s.show_change_password = false;
-                        s.change_pw_current.clear();
-                        s.change_pw_new.clear();
-                        s.change_pw_confirm.clear();
-                        (false, false, false, false, true)
+                        (false, false, false, true)
                     } else {
-                        (false, false, false, false, false)
+                        (false, false, false, false)
                     }
                 });
             if closed_media {
@@ -269,11 +263,6 @@ fn register_global_listeners() {
                 ev.prevent_default();
                 sync_left_toolbar_state();
                 sync_settings_popover_state(false);
-                return;
-            }
-            if closed_pw {
-                ev.prevent_default();
-                refresh_modals();
                 return;
             }
         }
@@ -970,27 +959,6 @@ fn handle_action_click(action: &str, act_el: &Element, ev: &MouseEvent) {
             with_state_mut(|s| s.is_profile_dropdown_open = false);
             refresh_header_banner();
         }
-        "open-change-pw" => {
-            with_state_mut(|s| {
-                s.is_profile_dropdown_open = false;
-                s.show_settings_popover = false;
-                s.is_adding_user = false;
-                s.show_change_password = true;
-            });
-            refresh_header_banner();
-            sync_left_toolbar_state();
-            refresh_modals();
-        }
-        "close-change-pw" => {
-            with_state_mut(|s| {
-                s.show_change_password = false;
-                s.change_pw_current.clear();
-                s.change_pw_new.clear();
-                s.change_pw_confirm.clear();
-            });
-            refresh_modals();
-        }
-        "submit-change-pw" => api::submit_change_password(),
         "logout" => api::perform_logout(),
         "toggle-msi-theme" => {
             let next = crate::editorial::wasm::state::toggle_msi_theme();
@@ -1475,11 +1443,32 @@ fn handle_action_click(action: &str, act_el: &Element, ev: &MouseEvent) {
                 Some(PendingEditorConfirm::MoveSelectedToEditor) => {
                     api::move_selected_to_editor_force()
                 }
+                Some(PendingEditorConfirm::DeleteArticle { article_id, .. }) => {
+                    api::execute_delete_article(article_id)
+                }
+                Some(PendingEditorConfirm::DeleteCategory { id, .. }) => {
+                    api::execute_delete_category(id)
+                }
+                Some(PendingEditorConfirm::DeleteResearchSource { id, .. }) => {
+                    api::execute_delete_research_source(id)
+                }
+                Some(PendingEditorConfirm::DeleteMediaAsset { asset_id, .. }) => {
+                    api::execute_delete_media_asset(asset_id)
+                }
+                Some(PendingEditorConfirm::RestoreArticleRevision {
+                    article_id, rev_id, ..
+                }) => api::execute_restore_article_revision(article_id, rev_id),
+                Some(PendingEditorConfirm::DeleteMagazineIssue { id, .. }) => {
+                    api::execute_delete_magazine_issue(id)
+                }
+                Some(PendingEditorConfirm::DeleteGlossaryRule { id, .. }) => {
+                    api::execute_delete_glossary_rule(id)
+                }
                 None => {}
             }
         }
         "save-draft-and-confirm-editor" => {
-            if let Some(pending) = with_state(|s| s.pending_editor_confirm) {
+            if let Some(pending) = with_state(|s| s.pending_editor_confirm.clone()) {
                 api::save_draft_and_execute_pending_confirm(pending);
             }
         }
@@ -2586,13 +2575,13 @@ fn handle_action_click(action: &str, act_el: &Element, ev: &MouseEvent) {
             api::show_success("Seçili cümle Bilgi Notu olarak sağ editöre eklendi!");
         }
 
-        "dismiss-error" => {
-            with_state_mut(|s| s.error = None);
-            refresh_toasts();
-        }
-        "dismiss-success" => {
-            with_state_mut(|s| s.success = None);
-            refresh_toasts();
+        "dismiss-toast" => {
+            if let Some(id) = act_el
+                .get_attribute("data-toast-id")
+                .and_then(|v| v.parse::<u64>().ok())
+            {
+                api::dismiss_toast(id);
+            }
         }
         _ => {}
     }
@@ -3093,37 +3082,6 @@ fn handle_input_event(kind: &str, el: &Element) {
         "new-glossary-abbr-en" => with_state_mut(|s| s.new_glossary_abbr_en = val),
         "new-glossary-forbidden" => with_state_mut(|s| s.new_glossary_forbidden = val),
         "new-glossary-note" => with_state_mut(|s| s.new_glossary_note = val),
-
-        "pw-current" => {
-            let dis = with_state_mut(|s| {
-                s.change_pw_current = val;
-                s.is_changing_password
-                    || s.change_pw_current.is_empty()
-                    || s.change_pw_new.is_empty()
-                    || s.change_pw_confirm.is_empty()
-            });
-            set_button_disabled("btn-submit-change-pw", dis);
-        }
-        "pw-new" => {
-            let dis = with_state_mut(|s| {
-                s.change_pw_new = val;
-                s.is_changing_password
-                    || s.change_pw_current.is_empty()
-                    || s.change_pw_new.is_empty()
-                    || s.change_pw_confirm.is_empty()
-            });
-            set_button_disabled("btn-submit-change-pw", dis);
-        }
-        "pw-confirm" => {
-            let dis = with_state_mut(|s| {
-                s.change_pw_confirm = val;
-                s.is_changing_password
-                    || s.change_pw_current.is_empty()
-                    || s.change_pw_new.is_empty()
-                    || s.change_pw_confirm.is_empty()
-            });
-            set_button_disabled("btn-submit-change-pw", dis);
-        }
         _ => {}
     }
 }

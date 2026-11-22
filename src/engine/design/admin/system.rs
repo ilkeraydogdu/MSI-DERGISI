@@ -5,8 +5,8 @@
 
 use super::tr_admin;
 use super::ui::{
-    action_btn, admin_card, check_pill, details_box, form_group, icon, input_ctrl, kpi_card_toned,
-    ops_table, select_ctrl, subtab_bar, subtab_pane, tab_pane,
+    action_btn, admin_card, check_pill, details_box, form_group, form_panel_header, icon,
+    input_ctrl, kpi_card_toned, ops_table, select_ctrl, subtab_bar, subtab_pane, tab_pane,
 };
 use crate::engine::design::html_dsl::HtmlBuf;
 use crate::engine::translation_engine::TranslationCache;
@@ -197,6 +197,8 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
     let tr_val_en_ph = tr_admin(tr, lang, "admin.system.tr_val_en_ph", "English translation...", "English translation...");
     let tr_save_btn = tr_admin(tr, lang, "admin.system.tr_save_btn", "Çeviriyi Kaydet", "Save Translation");
     let tr_auto_btn = tr_admin(tr, lang, "admin.system.tr_auto_btn", "Otomatik Çevir (TR → EN)", "Auto-Translate (TR → EN)");
+    let clear_btn = tr_admin(tr, lang, "admin.form.clear", "Temizle", "Clear");
+    let close_lbl = tr_admin(tr, lang, "admin.form.close", "Kapat", "Close");
     let tr_dict_title = tr_admin(tr, lang, "admin.system.tr_dict_title", "Merkezi Çok Dilli Çeviri Sözlüğü", "Central Multilingual Translation Dictionary");
     let tr_dict_desc = tr_admin(tr, lang, "admin.system.tr_dict_desc", "Arayüz metinlerini anahtar veya içerik bazında arayın ve anında düzenleyin.", "Search interface strings by key or content and edit immediately.");
     let tr_search_ph = tr_admin(tr, lang, "admin.system.tr_search_ph", "Anahtar veya metin ara...", "Search key or text...");
@@ -441,6 +443,7 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
                                 b.text(&tr_auto_btn);
                             },
                         );
+                        action_btn(act, "btn-cmd btn-cmd-sm", "reset-translation-form", None, Some("fa-eraser"), &clear_btn);
                     });
                 });
                 d.el("div", &[("id", "tr-glossary-warnings"), ("class", "hidden form-container-elevated mt-3"), ("role", "status")], |_| {});
@@ -451,7 +454,7 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
                 Some(&tr_dict_desc),
                 |hdr| input_ctrl(hdr, "text", "tr-search", "input-lg", "", &tr_search_ph, &[("aria-label", &tr_search_aria)]),
                 |card| {
-                    ops_table(card, "", None, &[(&col_key_grp, ""), (&col_tr, ""), (&col_en, ""), (&col_action, "")], "tbody-translations", Some(&tr_loading), Some("pagination-translations"));
+                    ops_table(card, "", None, &[(&col_key_grp, ""), (&col_tr, ""), (&col_en, ""), (&col_action, "col-action")], "tbody-translations", Some(&tr_loading), Some("pagination-translations"));
                 },
             );
 
@@ -481,7 +484,7 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
                         card,
                         "",
                         Some("table-pending-translations"),
-                        &[(&col_key_grp, ""), (&col_tr, ""), (&col_en, ""), (&col_status, ""), (&col_action, "")],
+                        &[(&col_key_grp, ""), (&col_tr, ""), (&col_en, ""), (&col_status, ""), (&col_action, "col-action")],
                         "tbody-pending-translations",
                         Some(&tr_pending_loading),
                         Some("pagination-pending-translations"),
@@ -517,6 +520,7 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
                 },
                 |card| {
                     card.el("div", &[("id", "glossary-form-container"), ("class", "hidden form-container-elevated")], |gc| {
+                        form_panel_header(gc, "glossary-form-title", "fa-book", &gl_new_btn, "hide-glossary-form", &close_lbl);
                         gc.el_with("form", |a| { a.attr("id", "form-glossary").bool_attr("novalidate", true); }, |f| {
                             f.void_el("input", &[("type", "hidden"), ("id", "gl-id"), ("value", "0")]);
                             f.el("div", &[("class", "form-row-3")], |r| {
@@ -583,7 +587,7 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
                             (&gl_col_dom, ""),
                             (&gl_col_forbid, ""),
                             (&col_status, ""),
-                            (&col_action, ""),
+                            (&col_action, "col-action"),
                         ],
                         "tbody-glossary",
                         Some(&gl_loading),
@@ -600,6 +604,7 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
                 |hdr| action_btn(hdr, "btn-cmd btn-cmd-primary btn-cmd-sm", "show-locale-form", Some("locales:manage"), Some("fa-plus"), &loc_new_btn),
                 |card| {
                     card.el("div", &[("id", "locale-form-container"), ("class", "hidden form-container-elevated")], |lc| {
+                        form_panel_header(lc, "locale-form-title", "fa-globe", &loc_new_btn, "hide-locale-form", &close_lbl);
                         lc.el_with("form", |a| { a.attr("id", "form-locale").bool_attr("novalidate", true); }, |f| {
                             f.void_el("input", &[("type", "hidden"), ("id", "loc-edit-mode"), ("value", "create")]);
                             f.el("div", &[("class", "form-row-3")], |r| {
@@ -647,7 +652,7 @@ fn render_tab_engines(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang:
                             (&loc_col_href, ""),
                             (&loc_col_dir, ""),
                             (&col_status, ""),
-                            (&col_action, ""),
+                            (&col_action, "col-action"),
                         ],
                         "tbody-locales",
                         Some(&loc_loading),
@@ -685,6 +690,7 @@ fn render_tab_rbac(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
     let chk_gov = tr_admin(tr, lang, "admin.system.u_gov_verified", "Kamu Doğrulamalı (.gov.tr / .tsk.tr)", "Public Sector Verified (.gov.tr / .tsk.tr)");
     let save_user_btn = tr_admin(tr, lang, "admin.system.save_user", "Kullanıcıyı Kaydet", "Save User");
     let cancel_btn = tr_admin(tr, lang, "admin.form.cancel", "Vazgeç", "Cancel");
+    let close_lbl = tr_admin(tr, lang, "admin.form.close", "Kapat", "Close");
 
     let quick_assign_lbl = tr_admin(tr, lang, "admin.system.quick_role_assign", "HIZLI ROL ATAMA:", "QUICK ROLE ASSIGNMENT:");
     let ph_user_id = tr_admin(tr, lang, "admin.system.user_id_ph", "Kullanıcı ID", "User ID");
@@ -757,26 +763,33 @@ fn render_tab_rbac(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                 },
                 |card| {
                     card.el("div", &[("id", "user-crud-form-container"), ("class", "hidden form-container-elevated")], |uc| {
-                        uc.void_el("input", &[("type", "hidden"), ("id", "u-edit-id"), ("value", "0")]);
-                        uc.el("div", &[("class", "form-row-3")], |r| {
-                            form_group(r, Some("u-email"), &lbl_email, |g| input_ctrl(g, "email", "u-email", "", "", &ph_email, &[]));
-                            form_group(r, Some("u-full-name"), &lbl_full_name, |g| input_ctrl(g, "text", "u-full-name", "", "", &lbl_full_name, &[]));
-                            form_group(r, Some("u-password"), &lbl_password, |g| input_ctrl(g, "password", "u-password", "", "", "••••••••", &[]));
-                        });
-                        uc.el("div", &[("class", "form-row-3")], |r| {
-                            form_group(r, Some("u-role"), &lbl_role, |g| select_ctrl(g, "u-role", "", &[("registered", "registered")], &[]));
-                            form_group(r, Some("u-org-cat"), &lbl_org_cat, |g| input_ctrl(g, "text", "u-org-cat", "", &def_org_cat, "", &[]));
-                            form_group(r, Some("u-org-name"), &lbl_org_name, |g| input_ctrl(g, "text", "u-org-name", "", "", &ph_org_name, &[]));
-                        });
-                        uc.el("div", &[("class", "form-row-3")], |r| {
-                            form_group(r, Some("u-job-title"), &lbl_job, |g| input_ctrl(g, "text", "u-job-title", "", "", &ph_job, &[]));
-                            form_group(r, Some("u-sub-tier"), &lbl_sub_tier, |g| input_ctrl(g, "text", "u-sub-tier", "", "", &ph_sub_tier, &[]));
-                            r.el("div", &[("class", "form-group form-group-end")], |g| check_pill(g, Some("u-gov-verified"), None, None, false, "", &chk_gov));
-                        });
-                        uc.el("div", &[("id", "user-custom-fields"), ("data-custom-field-values", "user"), ("class", "custom-fields-slot mb-3")], |_| {});
-                        uc.el("div", &[("class", "flex gap-2")], |fl| {
-                            action_btn(fl, "btn-cmd btn-cmd-primary btn-cmd-sm", "save-user-form", None, Some("fa-save"), &save_user_btn);
-                            action_btn(fl, "btn-cmd btn-cmd-sm", "hide-user-form", None, None, &cancel_btn);
+                        form_panel_header(uc, "user-form-title", "fa-user-plus", &new_user_btn, "hide-user-form", &close_lbl);
+                        uc.el_with("form", |a| { a.attr("id", "form-admin-user").bool_attr("novalidate", true); }, |f| {
+                            f.void_el("input", &[("type", "hidden"), ("id", "u-edit-id"), ("value", "0")]);
+                            f.el("div", &[("class", "form-row-3")], |r| {
+                                form_group(r, Some("u-email"), &lbl_email, |g| input_ctrl(g, "email", "u-email", "", "", &ph_email, &[]));
+                                form_group(r, Some("u-full-name"), &lbl_full_name, |g| input_ctrl(g, "text", "u-full-name", "", "", &lbl_full_name, &[]));
+                                form_group(r, Some("u-password"), &lbl_password, |g| input_ctrl(g, "password", "u-password", "", "", "••••••••", &[]));
+                            });
+                            f.el("div", &[("class", "form-row-3")], |r| {
+                                form_group(r, Some("u-role"), &lbl_role, |g| select_ctrl(g, "u-role", "", &[("registered", "registered")], &[]));
+                                form_group(r, Some("u-org-cat"), &lbl_org_cat, |g| input_ctrl(g, "text", "u-org-cat", "", &def_org_cat, "", &[]));
+                                form_group(r, Some("u-org-name"), &lbl_org_name, |g| input_ctrl(g, "text", "u-org-name", "", "", &ph_org_name, &[]));
+                            });
+                            f.el("div", &[("class", "form-row-3")], |r| {
+                                form_group(r, Some("u-job-title"), &lbl_job, |g| input_ctrl(g, "text", "u-job-title", "", "", &ph_job, &[]));
+                                form_group(r, Some("u-sub-tier"), &lbl_sub_tier, |g| input_ctrl(g, "text", "u-sub-tier", "", "", &ph_sub_tier, &[]));
+                                r.el("div", &[("class", "form-group form-group-end")], |g| check_pill(g, Some("u-gov-verified"), None, None, false, "", &chk_gov));
+                            });
+                            f.el("div", &[("id", "user-custom-fields"), ("data-custom-field-values", "user"), ("class", "custom-fields-slot mb-3")], |_| {});
+                            f.el("div", &[("class", "flex gap-2")], |fl| {
+                                fl.el("button", &[("type", "submit"), ("id", "btn-admin-user-save"), ("class", "btn-cmd btn-cmd-primary btn-cmd-sm")], |b| {
+                                    icon(b, "fa-save");
+                                    b.raw(" ");
+                                    b.text(&save_user_btn);
+                                });
+                                action_btn(fl, "btn-cmd btn-cmd-sm", "hide-user-form", None, None, &cancel_btn);
+                            });
                         });
                     });
 
@@ -809,33 +822,40 @@ fn render_tab_rbac(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                 |hdr| action_btn(hdr, "btn-cmd btn-cmd-primary btn-cmd-sm", "show-role-form", Some("roles:manage"), Some("fa-plus"), &new_role_btn),
                 |card| {
                     card.el("div", &[("id", "role-form-container"), ("class", "hidden form-container-elevated")], |rf| {
-                        rf.void_el("input", &[("type", "hidden"), ("id", "role-edit-mode"), ("value", "create")]);
-                        rf.el("div", &[("class", "form-row-3")], |r| {
-                            form_group(r, Some("role-code"), &lbl_role_code, |g| input_ctrl(g, "text", "role-code", "", "", &ph_role_code, &[]));
-                            form_group(r, Some("role-name-tr"), &lbl_role_tr, |g| input_ctrl(g, "text", "role-name-tr", "", "", &ph_role_tr, &[]));
-                            form_group(r, Some("role-name-en"), &lbl_role_en, |g| input_ctrl(g, "text", "role-name-en", "", "", "Defence Editor", &[]));
-                        });
-                        rf.el("div", &[("class", "mb-3")], |pm| {
-                            pm.el("div", &[("class", "form-label mb-2")], |l| { l.text(&lbl_mod_perms); });
-                            pm.el("div", &[("id", "role-permissions-grid"), ("class", "perm-groups-wrap")], |grid| {
-                                for (grp_key, fb_tr, fb_en, perms) in RBAC_PERMISSION_GROUPS {
-                                    let grp_title = tr_admin(tr, lang, grp_key, fb_tr, fb_en);
-                                    grid.el("div", &[("class", "perm-group-card")], |gc| {
-                                        gc.el("div", &[("class", "perm-group-title")], |gt| { gt.text(&grp_title); });
-                                        for p in *perms {
-                                            check_pill(gc, None, None, Some(p), false, "", p);
-                                        }
-                                    });
-                                }
+                        form_panel_header(rf, "role-form-title", "fa-shield", &new_role_btn, "hide-role-form", &close_lbl);
+                        rf.el_with("form", |a| { a.attr("id", "form-admin-role").bool_attr("novalidate", true); }, |f| {
+                            f.void_el("input", &[("type", "hidden"), ("id", "role-edit-mode"), ("value", "create")]);
+                            f.el("div", &[("class", "form-row-3")], |r| {
+                                form_group(r, Some("role-code"), &lbl_role_code, |g| input_ctrl(g, "text", "role-code", "", "", &ph_role_code, &[]));
+                                form_group(r, Some("role-name-tr"), &lbl_role_tr, |g| input_ctrl(g, "text", "role-name-tr", "", "", &ph_role_tr, &[]));
+                                form_group(r, Some("role-name-en"), &lbl_role_en, |g| input_ctrl(g, "text", "role-name-en", "", "", "Defence Editor", &[]));
                             });
-                        });
-                        rf.el("div", &[("class", "flex gap-2")], |fl| {
-                            action_btn(fl, "btn-cmd btn-cmd-primary btn-cmd-sm", "save-role", None, Some("fa-save"), &save_role_btn);
-                            action_btn(fl, "btn-cmd btn-cmd-sm", "hide-role-form", None, None, &cancel_btn);
+                            f.el("div", &[("class", "mb-3")], |pm| {
+                                pm.el("div", &[("class", "form-label mb-2")], |l| { l.text(&lbl_mod_perms); });
+                                pm.el("div", &[("id", "role-permissions-grid"), ("class", "perm-groups-wrap")], |grid| {
+                                    for (grp_key, fb_tr, fb_en, perms) in RBAC_PERMISSION_GROUPS {
+                                        let grp_title = tr_admin(tr, lang, grp_key, fb_tr, fb_en);
+                                        grid.el("div", &[("class", "perm-group-card")], |gc| {
+                                            gc.el("div", &[("class", "perm-group-title")], |gt| { gt.text(&grp_title); });
+                                            for p in *perms {
+                                                check_pill(gc, None, None, Some(p), false, "", p);
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+                            f.el("div", &[("class", "flex gap-2")], |fl| {
+                                fl.el("button", &[("type", "submit"), ("id", "btn-admin-role-save"), ("class", "btn-cmd btn-cmd-primary btn-cmd-sm")], |b| {
+                                    icon(b, "fa-save");
+                                    b.raw(" ");
+                                    b.text(&save_role_btn);
+                                });
+                                action_btn(fl, "btn-cmd btn-cmd-sm", "hide-role-form", None, None, &cancel_btn);
+                            });
                         });
                     });
 
-                    ops_table(card, "", None, &[(&col_r_code, ""), (&col_r_tr, ""), (&col_r_en, ""), (&col_r_perm, ""), (&col_r_prot, ""), (&col_action, "")], "tbody-user-roles", Some(&roles_loading), Some("pagination-user-roles"));
+                    ops_table(card, "", None, &[(&col_r_code, ""), (&col_r_tr, ""), (&col_r_en, ""), (&col_r_perm, ""), (&col_r_prot, ""), (&col_action, "col-action")], "tbody-user-roles", Some(&roles_loading), Some("pagination-user-roles"));
                 },
             );
         });
@@ -1103,7 +1123,7 @@ fn render_tab_automation(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         });
                     });
 
-                    ops_table(card, "", None, &[(&col_old, ""), (&col_new, ""), (&col_code, ""), (&col_hits, ""), (&col_action, "")], "tbody-redirects", Some(&red_loading), Some("pagination-redirects"));
+                    ops_table(card, "", None, &[(&col_old, ""), (&col_new, ""), (&col_code, ""), (&col_hits, ""), (&col_action, "col-action")], "tbody-redirects", Some(&red_loading), Some("pagination-redirects"));
                 },
             );
         });
@@ -1160,6 +1180,7 @@ fn render_tab_fields_cache(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str)
     let cf_req = tr_admin(tr, lang, "admin.system.cf_required", "Zorunlu Alan", "Required Field");
     let cf_save = tr_admin(tr, lang, "admin.system.cf_save", "Alanı Kaydet", "Save Field");
     let cancel_btn = tr_admin(tr, lang, "admin.form.cancel", "Vazgeç", "Cancel");
+    let close_lbl = tr_admin(tr, lang, "admin.form.close", "Kapat", "Close");
 
     let col_key = tr_admin(tr, lang, "admin.system.col_key", "Anahtar", "Key");
     let col_tr = tr_admin(tr, lang, "admin.system.col_label_tr", "Etiket (TR)", "Label (TR)");
@@ -1216,36 +1237,43 @@ fn render_tab_fields_cache(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str)
                 |hdr| action_btn(hdr, "btn-cmd btn-cmd-primary btn-cmd-sm", "show-custom-field-form", Some("settings:write"), Some("fa-plus"), &cf_new),
                 |card| {
                     card.el("div", &[("id", "custom-field-form-container"), ("class", "hidden form-container-elevated")], |cf| {
-                        cf.el("div", &[("class", "form-row-3")], |r| {
-                            form_group(r, Some("cf-key"), &cf_key, |g| input_ctrl(g, "text", "cf-key", "", "", &cf_key_ph, &[]));
-                            form_group(r, Some("cf-label-tr"), &cf_lbl_tr, |g| input_ctrl(g, "text", "cf-label-tr", "", "", &cf_lbl_tr_ph, &[]));
-                            form_group(r, Some("cf-label-en"), &cf_lbl_en, |g| input_ctrl(g, "text", "cf-label-en", "", "", "Platform Range", &[]));
-                        });
-                        cf.el("div", &[("class", "form-row-3")], |r| {
-                            form_group(r, Some("cf-type"), &cf_type, |g| {
-                                select_ctrl(g, "cf-type", "", &[
-                                    ("text", &dt_text), ("textarea", &dt_textarea), ("select", &dt_select),
-                                    ("checkbox", &dt_checkbox), ("number", &dt_number), ("date", &dt_date), ("url", &dt_url),
-                                ], &[]);
+                        form_panel_header(cf, "custom-field-form-title", "fa-puzzle-piece", &cf_new, "hide-custom-field-form", &close_lbl);
+                        cf.el_with("form", |a| { a.attr("id", "form-custom-field").bool_attr("novalidate", true); }, |f| {
+                            f.el("div", &[("class", "form-row-3")], |r| {
+                                form_group(r, Some("cf-key"), &cf_key, |g| input_ctrl(g, "text", "cf-key", "", "", &cf_key_ph, &[]));
+                                form_group(r, Some("cf-label-tr"), &cf_lbl_tr, |g| input_ctrl(g, "text", "cf-label-tr", "", "", &cf_lbl_tr_ph, &[]));
+                                form_group(r, Some("cf-label-en"), &cf_lbl_en, |g| input_ctrl(g, "text", "cf-label-en", "", "", "Platform Range", &[]));
                             });
-                            form_group(r, Some("cf-applies-to"), &cf_applies, |g| {
-                                select_ctrl(g, "cf-applies-to", "", &[("content", &ent_content), ("ad", &ent_ad), ("user", &ent_user)], &[]);
+                            f.el("div", &[("class", "form-row-3")], |r| {
+                                form_group(r, Some("cf-type"), &cf_type, |g| {
+                                    select_ctrl(g, "cf-type", "", &[
+                                        ("text", &dt_text), ("textarea", &dt_textarea), ("select", &dt_select),
+                                        ("checkbox", &dt_checkbox), ("number", &dt_number), ("date", &dt_date), ("url", &dt_url),
+                                    ], &[]);
+                                });
+                                form_group(r, Some("cf-applies-to"), &cf_applies, |g| {
+                                    select_ctrl(g, "cf-applies-to", "", &[("content", &ent_content), ("ad", &ent_ad), ("user", &ent_user)], &[]);
+                                });
+                                form_group(r, Some("cf-sort-order"), &cf_sort, |g| input_ctrl(g, "number", "cf-sort-order", "", "0", "", &[]));
                             });
-                            form_group(r, Some("cf-sort-order"), &cf_sort, |g| input_ctrl(g, "number", "cf-sort-order", "", "0", "", &[]));
-                        });
-                        form_group(cf, Some("cf-options"), &cf_opts, |g| {
-                            input_ctrl(g, "text", "cf-options", "", "", &cf_opts_ph, &[]);
-                        });
-                        cf.el("div", &[("class", "flex-between flex-wrap gap-2")], |fl| {
-                            check_pill(fl, Some("cf-required"), None, None, false, "", &cf_req);
-                            fl.el("div", &[("class", "flex gap-2")], |btns| {
-                                action_btn(btns, "btn-cmd btn-cmd-primary btn-cmd-sm", "save-custom-field", None, Some("fa-save"), &cf_save);
-                                action_btn(btns, "btn-cmd btn-cmd-sm", "hide-custom-field-form", None, None, &cancel_btn);
+                            form_group(f, Some("cf-options"), &cf_opts, |g| {
+                                input_ctrl(g, "text", "cf-options", "", "", &cf_opts_ph, &[]);
+                            });
+                            f.el("div", &[("class", "flex-between flex-wrap gap-2")], |fl| {
+                                check_pill(fl, Some("cf-required"), None, None, false, "", &cf_req);
+                                fl.el("div", &[("class", "flex gap-2")], |btns| {
+                                    btns.el("button", &[("type", "submit"), ("id", "btn-custom-field-save"), ("class", "btn-cmd btn-cmd-primary btn-cmd-sm")], |b| {
+                                        icon(b, "fa-save");
+                                        b.raw(" ");
+                                        b.text(&cf_save);
+                                    });
+                                    action_btn(btns, "btn-cmd btn-cmd-sm", "hide-custom-field-form", None, None, &cancel_btn);
+                                });
                             });
                         });
                     });
 
-                    ops_table(card, "", None, &[(&col_key, ""), (&col_tr, ""), (&col_en, ""), (&cf_type, ""), (&col_target, ""), (&col_req, ""), (&col_sort, ""), (&col_action, "")], "tbody-custom-fields", Some(&cf_loading), Some("pagination-custom-fields"));
+                    ops_table(card, "", None, &[(&col_key, ""), (&col_tr, ""), (&col_en, ""), (&cf_type, ""), (&col_target, ""), (&col_req, ""), (&col_sort, ""), (&col_action, "col-action")], "tbody-custom-fields", Some(&cf_loading), Some("pagination-custom-fields"));
                 },
             );
         });

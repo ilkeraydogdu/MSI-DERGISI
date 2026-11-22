@@ -11,7 +11,7 @@ use crate::editorial::wasm::render_modals::{
     render_editor_confirm_modal_body, render_media_modal_grid_body, render_modals_inner,
     render_preview_modal_body, render_redirects_modal_body, render_revisions_modal_body,
     render_settings_glossary_list_html, render_settings_popover_inner,
-    render_settings_popover_tab_body, render_toasts_inner,
+    render_settings_popover_tab_body, render_single_toast_html, render_toasts_inner,
 };
 use crate::editorial::wasm::render_right::{
     render_attached_source_bar_html, render_block_image_preview_inner,
@@ -100,20 +100,20 @@ fn render_header(s: &AppState) -> String {
 
     let filter_dropdown = if s.show_search_filters {
         format!(
-            r#"<div class="absolute top-full left-4 right-4 lg:left-12 lg:right-12 mt-2 bg-white border border-zinc-200 shadow-xl rounded-2xl p-4 z-50 hf-modal-enter">
+            r#"<div class="hf-dropdown-card absolute top-full left-4 right-4 lg:left-12 lg:right-12 mt-2 bg-white border border-zinc-200 shadow-xl rounded-2xl p-4 z-50 hf-modal-enter">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="space-y-1.5">
-                        <label class="text-[9px] font-black uppercase tracking-widest text-zinc-500 px-1">Başlangıç Tarihi</label>
-                        <input data-input="search-start-date" type="date" value="{sd}" class="w-full h-10 bg-zinc-100 rounded-xl px-3 text-xs font-bold focus:outline-none" />
+                        <label class="text-[11px] font-semibold text-zinc-500 px-1">Başlangıç Tarihi</label>
+                        <input data-input="search-start-date" type="date" value="{sd}" class="w-full h-10 bg-zinc-100 rounded-xl px-3 text-xs font-semibold focus:outline-none" />
                     </div>
                     <div class="space-y-1.5">
-                        <label class="text-[9px] font-black uppercase tracking-widest text-zinc-500 px-1">Bitiş Tarihi</label>
-                        <input data-input="search-end-date" type="date" value="{ed}" class="w-full h-10 bg-zinc-100 rounded-xl px-3 text-xs font-bold focus:outline-none" />
+                        <label class="text-[11px] font-semibold text-zinc-500 px-1">Bitiş Tarihi</label>
+                        <input data-input="search-end-date" type="date" value="{ed}" class="w-full h-10 bg-zinc-100 rounded-xl px-3 text-xs font-semibold focus:outline-none" />
                     </div>
                 </div>
                 <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-100">
-                    <button type="button" data-action="clear-search-filters" class="px-4 h-8 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-700">Temizle</button>
-                    <button type="button" data-action="apply-search-filters" class="px-6 h-8 bg-brand-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-brand-600 transition-colors">Uygula</button>
+                    <button type="button" data-action="clear-search-filters" class="px-4 min-h-[36px] text-xs font-semibold text-zinc-600 hover:text-zinc-900 rounded-[10px]">Temizle</button>
+                    <button type="button" data-action="apply-search-filters" class="px-5 min-h-[36px] bg-brand-500 text-white rounded-[10px] text-xs font-semibold shadow-sm hover:bg-brand-600 transition-colors">Uygula</button>
                 </div>
             </div>"#,
             sd = escape_html(&s.search_start_date),
@@ -167,39 +167,39 @@ fn render_header(s: &AppState) -> String {
     let profile_menu = if s.is_profile_dropdown_open {
         format!(
             r#"<div data-action="close-profile-menu" class="fixed inset-0 z-40 bg-transparent"></div>
-            <div class="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-zinc-200 py-2 z-50 origin-top-right overflow-hidden hf-modal-enter">
+            <div id="hf-profile-menu" class="hf-dropdown-card absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-zinc-200 py-2 z-50 origin-top-right overflow-hidden hf-modal-enter">
                 <div class="px-4 py-2 border-b border-zinc-100 mb-1">
-                    <div class="text-[10px] font-black uppercase tracking-widest text-zinc-400">Rol: {role}</div>
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Rol: {role}</div>
                     <div class="text-sm font-bold">{uname}</div>
                 </div>
-                <a href="{admin_href}" class="w-full px-4 py-2 text-left text-sm font-bold hover:bg-zinc-100 transition-colors flex items-center gap-2 text-zinc-800">
+                <a href="{admin_href}" class="w-full px-4 py-2.5 text-left text-sm font-semibold hover:bg-zinc-100 transition-colors flex items-center gap-2 text-zinc-800">
                     {home_ico}
                     Komuta Merkezi
                 </a>
                 {design_studio_item}
-                <a href="/hesabim" class="w-full px-4 py-2 text-left text-sm font-bold hover:bg-zinc-100 transition-colors flex items-center gap-2 text-zinc-800">
+                <a href="/hesabim#security" class="w-full px-4 py-2.5 text-left text-sm font-semibold hover:bg-zinc-100 transition-colors flex items-center gap-2 text-zinc-800">
                     {lock_ico}
-                    Hesap Portalı
+                    Hesap &amp; Güvenlik
                 </a>
-                <button type="button" id="menu-msi-theme-toggle" data-action="toggle-msi-theme" class="w-full px-4 py-2 text-left text-sm font-bold hover:bg-zinc-100 transition-colors flex items-center gap-2 text-zinc-800">
+                <button type="button" id="menu-msi-theme-toggle" data-action="toggle-msi-theme" class="w-full px-4 py-2.5 text-left text-sm font-semibold hover:bg-zinc-100 transition-colors flex items-center gap-2 text-zinc-800">
                     {theme_ico}
                     <span>{theme_lbl}</span>
                 </button>
                 <div class="h-px bg-zinc-100 my-1.5"></div>
-                <button type="button" data-action="logout" class="w-full px-4 py-2 text-left text-sm font-bold hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2">
+                <button type="button" data-action="logout" class="hf-menu-danger-item w-full px-4 py-2.5 text-left text-sm font-semibold transition-colors flex items-center gap-2">
                     {out_ico}
                     Çıkış Yap
                 </button>
                 <div class="h-px bg-zinc-100 my-1"></div>
-                <div class="px-4 py-2 text-[9px] text-zinc-400 font-semibold bg-zinc-50/60">
-                    <div class="font-bold text-zinc-600">MSI Dergisi · Editör Stüdyosu</div>
+                <div class="hf-dropdown-footer px-4 py-2 text-[11px] text-zinc-500 font-medium">
+                    <div class="font-semibold text-zinc-700">MSI Dergisi · Editör Stüdyosu</div>
                     <div>© 2026 UMSA Prodüksiyon</div>
                 </div>
             </div>"#,
             role = escape_html(&role_upper),
             uname = escape_html(uname),
             home_ico = icons::arrow_left("w-4 h-4 text-zinc-500"),
-            lock_ico = icons::user("w-4 h-4 text-zinc-500"),
+            lock_ico = icons::shield_check("w-4 h-4 text-zinc-500"),
             theme_ico = icons::sparkles("w-4 h-4 text-zinc-500"),
             out_ico = icons::log_out("w-4 h-4"),
         )
@@ -208,9 +208,9 @@ fn render_header(s: &AppState) -> String {
     };
 
     format!(
-        r#"<header class="h-[58px] sticky top-0 flex items-center justify-between gap-3 px-4 lg:px-5 shrink-0 z-[100] transition-colors border-b bg-white/90 backdrop-blur-md border-zinc-200">
+        r#"<header class="hf-studio-header h-[58px] sticky top-0 flex items-center justify-between gap-3 px-4 lg:px-5 shrink-0 transition-colors border-b bg-white/90 backdrop-blur-md border-zinc-200">
             <div class="flex items-center gap-2.5 shrink-0 min-w-0">
-                <a href="{admin_href}" class="px-2.5 h-8 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-[11px] font-bold transition-colors inline-flex items-center gap-1.5 whitespace-nowrap" title="Komuta Merkezine Dön">
+                <a href="{admin_href}" class="px-3 min-h-[36px] rounded-[10px] border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 whitespace-nowrap" title="Komuta Merkezine Dön">
                     {back_ico}
                     <span class="hidden sm:inline">Komuta Merkezi</span>
                 </a>
@@ -219,7 +219,7 @@ fn render_header(s: &AppState) -> String {
                     <img src="/images/logo.svg" alt="MSI Dergisi" class="h-7 w-auto object-contain" style="max-width: 112px;" />
                     <div class="hidden xl:flex flex-col leading-tight">
                         <span class="text-xs font-black tracking-tight text-zinc-900">MSI Dergisi</span>
-                        <span class="text-[9.5px] font-bold uppercase tracking-widest text-brand-600">Editör Stüdyosu</span>
+                        <span class="text-xs font-bold uppercase tracking-wider text-brand-600">Editör Stüdyosu</span>
                     </div>
                 </a>
             </div>
@@ -238,7 +238,7 @@ fn render_header(s: &AppState) -> String {
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
-                <button id="btn-msi-theme-toggle" type="button" data-action="toggle-msi-theme" title="Tema Değiştir (Açık / Koyu)" class="px-3 h-8 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-[11px] font-bold transition-colors hidden sm:inline-flex items-center gap-1.5 whitespace-nowrap">
+                <button id="btn-msi-theme-toggle" type="button" data-action="toggle-msi-theme" title="Tema Değiştir (Açık / Koyu)" class="px-3 min-h-[36px] rounded-[10px] border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-semibold transition-colors hidden sm:inline-flex items-center gap-1.5 whitespace-nowrap">
                     <span>{theme_lbl}</span>
                 </button>
                 <div class="relative">
@@ -247,8 +247,8 @@ fn render_header(s: &AppState) -> String {
                             {initial}
                         </div>
                         <div class="text-left hidden md:block leading-tight">
-                            <div class="text-[11px] font-bold text-zinc-900 max-w-[140px] truncate">{uname}</div>
-                            <div class="text-[9px] font-bold uppercase tracking-wider text-zinc-400">{role}</div>
+                            <div class="text-xs font-bold text-zinc-900 max-w-[140px] truncate">{uname}</div>
+                            <div class="text-[11.5px] font-bold uppercase tracking-wider text-zinc-400">{role}</div>
                         </div>
                         {chev}
                     </button>
@@ -889,9 +889,9 @@ pub fn sync_preview_modal_state() {
     }
 
     let active_dev_cls =
-        "px-3 h-8 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all bg-white text-zinc-900 shadow-sm";
+        "px-3.5 min-h-[36px] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-white text-zinc-900 shadow-sm";
     let idle_dev_cls =
-        "px-3 h-8 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all text-zinc-500 hover:text-zinc-900";
+        "px-3.5 min-h-[36px] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-zinc-500 hover:text-zinc-900";
 
     if let Some(b_desk) = document.get_element_by_id("btn-preview-desk") {
         b_desk.set_class_name(if dev == PreviewDevice::Desktop {
@@ -943,6 +943,11 @@ pub fn sync_editor_confirm_modal_state() {
         if let Some(slot) = document.get_element_by_id("hf-editor-confirm-body-slot") {
             let html = with_state(render_editor_confirm_modal_body);
             slot.set_inner_html(&html);
+            if let Ok(Some(cancel_btn)) = slot.query_selector(r#"[data-action="cancel-editor-confirm"]"#) {
+                if let Ok(el) = cancel_btn.dyn_into::<HtmlElement>() {
+                    let _ = el.focus();
+                }
+            }
         }
     } else {
         let _ = backdrop.class_list().remove_1("hf-popover-open");
@@ -990,9 +995,9 @@ pub fn sync_settings_popover_state(refresh_body: bool) {
     }
 
     let active_sub_cls =
-        "flex-1 px-2 h-8 text-[9.5px] font-black uppercase tracking-wider rounded-lg transition-all whitespace-nowrap bg-white shadow-sm text-brand-600";
+        "flex-1 px-3 min-h-[36px] text-xs font-semibold rounded-lg transition-all whitespace-nowrap bg-white shadow-sm text-brand-600";
     let idle_sub_cls =
-        "flex-1 px-2 h-8 text-[9.5px] font-black uppercase tracking-wider rounded-lg transition-all whitespace-nowrap text-zinc-500 hover:text-zinc-900";
+        "flex-1 px-3 min-h-[36px] text-xs font-semibold rounded-lg transition-all whitespace-nowrap text-zinc-500 hover:text-zinc-900";
 
     if let Some(btn_cats) = document.get_element_by_id("btn-settings-tab-categories") {
         btn_cats.set_class_name(if active_subtab == SettingsTab::Categories {
@@ -1052,8 +1057,55 @@ pub fn refresh_toasts() {
     let Some(slot) = document.get_element_by_id("hf-toast-slot") else {
         return;
     };
-    let html = with_state(render_toasts_inner);
-    slot.set_inner_html(&html);
+    let toasts = with_state(|s| s.toasts.clone());
+    if toasts.is_empty() {
+        slot.set_inner_html("");
+        return;
+    }
+
+    let Some(region) = document.get_element_by_id("hf-toast-region") else {
+        let html = with_state(render_toasts_inner);
+        slot.set_inner_html(&html);
+        return;
+    };
+
+    // Remove dismissed toast nodes without touching existing visible toasts
+    let active_ids: std::collections::HashSet<String> =
+        toasts.iter().map(|t| t.id.to_string()).collect();
+    if let Ok(existing) = region.query_selector_all("[data-toast-id]") {
+        let mut to_remove = Vec::new();
+        for idx in 0..existing.length() {
+            if let Some(node) = existing.item(idx) {
+                if let Ok(el) = node.dyn_into::<web_sys::Element>() {
+                    let tid = el.get_attribute("data-toast-id").unwrap_or_default();
+                    if !active_ids.contains(&tid) {
+                        to_remove.push(el);
+                    }
+                }
+            }
+        }
+        for el in to_remove {
+            el.remove();
+        }
+    }
+
+    // Append only newly added toasts so older toasts never re-animate
+    for item in &toasts {
+        let selector = format!(r#"[data-toast-id="{}"]"#, item.id);
+        let already_mounted = region
+            .query_selector(&selector)
+            .ok()
+            .flatten()
+            .is_some();
+        if !already_mounted {
+            if let Ok(tmp) = document.create_element("div") {
+                tmp.set_inner_html(&render_single_toast_html(item, true));
+                if let Some(node) = tmp.first_element_child() {
+                    let _ = region.append_child(&node);
+                }
+            }
+        }
+    }
 }
 
 pub fn apply_panel_widths_to_dom(w: PanelWidths) {
@@ -1183,7 +1235,7 @@ mod tests {
         assert!(ws1.contains("aria-hidden=\"true\""));
         assert!(ws1.contains("Haber Seçilmedi"));
         assert!(ws1.contains("1. İçerik Taslağı"));
-        assert!(ws1.contains("İLERLE"));
+        assert!(ws1.contains("İlerle"));
         assert!(ws1.contains("id=\"hf-selection-bubble\""));
         assert!(ws1.contains("id=\"hf-reader-quote-bubble\""));
         assert!(ws1.contains("id=\"btn-left-tab-research\""));
@@ -1493,5 +1545,46 @@ mod tests {
         assert!(ws_glo.contains("Terminoloji"));
         assert!(ws_glo.contains("data-action=\"create-glossary-rule\""));
         assert!(ws_glo.contains("Turkey"));
+    }
+
+    #[test]
+    fn no_sub_11px_classes_emitted_in_workspace_or_modals() {
+        let mut s = AppState::new();
+        s.auth_loading = false;
+        s.token = Some("__cookie_session__".to_string());
+        s.user = Some(User {
+            id: 1,
+            username: "msi_editor".to_string(),
+            role: "admin".to_string(),
+            capabilities: EditorialCapabilities::from_permissions(&["*".into()]),
+            ..Default::default()
+        });
+        s.editing_article.id = "draft-1".to_string();
+        s.editing_article.title = "Test Başlık".to_string();
+        s.editing_article.is_live_blog = true;
+
+        let sub11 = ["6", "7", "8", "8.5", "9", "9.5", "10", "10.5"]
+            .map(|px| format!("text-[{px}px]"));
+
+        for step in 1u8..=4u8 {
+            s.editor_step = step;
+            let ws = render_workspace(&s);
+            for cls in &sub11 {
+                assert!(
+                    !ws.contains(cls),
+                    "Step {step} workspace must not emit sub-11px class {cls}"
+                );
+            }
+        }
+        let modals = crate::editorial::wasm::render_modals::render_modals_inner(&s);
+        let bubble = crate::editorial::wasm::render_research::render_reader_quote_bubble_shell();
+        for html in [&modals, &bubble] {
+            for cls in &sub11 {
+                assert!(
+                    !html.contains(cls),
+                    "Modals/bubble must not emit sub-11px class {cls}"
+                );
+            }
+        }
     }
 }

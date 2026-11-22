@@ -60,12 +60,21 @@
     const c = C();
     toggleHidden("role-form-container", true);
     c.setVal("role-edit-mode", role ? "edit" : "create");
+    const titleEl = c.byId("role-form-title");
+    if (titleEl) {
+      titleEl.textContent = role
+        ? `${c.t("admin.system.edit_role", "Rolü Düzenle", "Edit Role")} (${role.role_code})`
+        : c.t("admin.system.new_role_btn", "Yeni Rol Tanımla", "Define New Role");
+    }
     const codeEl = c.byId("role-code");
     if (codeEl) { codeEl.value = role ? role.role_code : ""; codeEl.readOnly = !!role; }
     c.setVal("role-name-tr", role ? role.name_tr : "");
     c.setVal("role-name-en", role ? role.name_en : "");
     let pSet = new Set(); try { if (role) pSet = new Set(JSON.parse(role.permissions_json || "[]")); } catch (_) {}
     document.querySelectorAll("#role-permissions-grid input[type='checkbox']").forEach((cb) => { cb.checked = pSet.has(cb.value); });
+    c.byId("role-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    (role ? c.byId("role-name-tr") : codeEl)?.focus();
+    if (role) c.showToast(c.t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", role.name_tr || role.role_code));
   }
 
   async function saveRole() {
@@ -116,6 +125,12 @@
   function showUserForm(u) {
     const c = C(), sel = c.byId("u-role"), em = c.byId("u-email");
     toggleHidden("user-crud-form-container", true);
+    const titleEl = c.byId("user-form-title");
+    if (titleEl) {
+      titleEl.textContent = u
+        ? `${c.t("admin.system.edit_user", "Kullanıcıyı Düzenle", "Edit User")} (#${u.id ?? u.user_id})`
+        : c.t("admin.system.new_user", "Yeni Kullanıcı", "New User");
+    }
     if (sel && c.state.userRoles.length) sel.innerHTML = c.state.userRoles.map((r) => `<option value="${c.esc(r.role_code)}">${c.esc(r.role_code)} — ${c.esc(r.name_tr)}</option>`).join("");
     if (em) { em.value = u?.email || ""; em.readOnly = !!u; }
     [["u-edit-id", u ? String(u.id ?? u.user_id ?? 0) : "0"], ["u-full-name", u?.full_name || ""], ["u-password", ""],
@@ -123,6 +138,9 @@
       ["u-org-name", u?.organization_name || ""], ["u-job-title", u?.job_title || ""], ["u-sub-tier", u?.subscription_tier || ""]]
       .forEach(([id, v]) => c.setVal(id, v));
     if (c.byId("u-gov-verified")) c.byId("u-gov-verified").checked = !!u?.is_gov_verified;
+    c.byId("user-crud-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    (u ? c.byId("u-full-name") : em)?.focus();
+    if (u) c.showToast(c.t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", u.full_name || u.email));
     return c.loadCustomFieldValues("user-custom-fields", "user", String(u?.id ?? u?.user_id ?? 0));
   }
 
@@ -213,7 +231,17 @@
       const enVal = String(s.value_en || "");
       return `<tr><td class="text-mono text-xs text-info">${c.esc(s.key)}</td><td class="text-xs">${c.esc(trVal.length > 80 ? trVal.substring(0, 80) + "…" : trVal)}</td><td class="text-xs text-muted">${c.esc(enVal.length > 80 ? enVal.substring(0, 80) + "…" : enVal)}</td><td><span class="badge-tag">${c.esc(s.setting_group)}</span></td></tr>`;
     });
-    render("tbody-sys-notifications", notifRes, "notifications", 4, (n) => `<tr><td><span class="badge-tag">${c.esc(n.target_audience)}</span></td><td><span class="badge-tag badge-paywall-1">${c.esc(n.severity)}</span></td><td><strong>${c.esc(n.title_tr)}</strong><br><span class="text-muted text-xs">${c.esc(n.message_tr)}</span></td><td>${n.is_banner || n.is_active_banner ? `<span class="badge-tag badge-paywall-0">${c.esc(c.t("admin.system.banner_badge", "Üst Bant", "Top Banner"))}</span>` : `<span class="badge-tag">${c.esc(c.t("admin.system.notif_badge", "Bildirim", "Notification"))}</span>`}</td></tr>`);
+    render("tbody-sys-notifications", notifRes, "notifications", 4, (n) => {
+      const audMapTr = { all: "Tüm Ziyaretçiler", MSB: "MSB Personeli", SSB: "SSB Personeli" };
+      const audMapEn = { all: "All Visitors", MSB: "MoD (MSB) Personnel", SSB: "SSB Personnel" };
+      const sevMapTr = { info: "Bilgi", success: "Başarı", warning: "Uyarı", critical: "Kritik" };
+      const sevMapEn = { info: "Info", success: "Success", warning: "Warning", critical: "Critical" };
+      const audRaw = String(n.target_audience || "all");
+      const sevRaw = String(n.severity || "info").toLowerCase();
+      const audLbl = c.t("admin.system.aud_" + audRaw.toLowerCase(), audMapTr[audRaw] || audRaw, audMapEn[audRaw] || audRaw);
+      const sevLbl = c.t("admin.system.sev_" + sevRaw, sevMapTr[sevRaw] || sevRaw, sevMapEn[sevRaw] || sevRaw);
+      return `<tr><td><span class="badge-tag">${c.esc(audLbl)}</span></td><td><span class="badge-tag badge-paywall-1">${c.esc(sevLbl)}</span></td><td><strong>${c.esc(n.title_tr)}</strong><br><span class="text-muted text-xs">${c.esc(n.message_tr)}</span></td><td>${n.is_banner || n.is_active_banner ? `<span class="badge-tag badge-paywall-0">${c.esc(c.t("admin.system.banner_badge", "Üst Bant", "Top Banner"))}</span>` : `<span class="badge-tag">${c.esc(c.t("admin.system.notif_badge", "Bildirim", "Notification"))}</span>`}</td></tr>`;
+    });
   }
 
   function renderTranslationsTable() {
@@ -421,7 +449,7 @@
       const sysBadge = eg.is_system ? ` <span class="badge-tag">${c.esc(c.t("admin.rbac.system_role", "Sistem", "System"))}</span>` : "";
       const consentPill = eg.requires_marketing_consent !== false
         ? `<span class="badge-tag badge-placement">KVKK</span>`
-        : `<span class="badge-tag">No KVKK</span>`;
+        : `<span class="badge-tag">${c.esc(c.t("admin.email_groups.no_kvkk", "KVKK İzinsiz", "No KVKK"))}</span>`;
       const activePill = eg.is_active !== false
         ? `<span class="badge-tag badge-status-published">${c.esc(c.t("admin.status.active", "Aktif", "Active"))}</span>`
         : `<span class="badge-tag badge-status-draft">${c.esc(c.t("admin.status.inactive", "Pasif", "Inactive"))}</span>`;
@@ -479,7 +507,13 @@
     const c = C(), tb = c.byId("tbody-newsletters"); if (!tb) return;
     if (!list.length) { c.renderTableState(tb, "empty", { colCount: 6, emptyMsg: c.t("admin.state.no_newsletters", "Henüz gönderilmiş bülten kampanyası bulunmuyor.", "No newsletter campaigns sent yet.") }); return; }
     const canW = c.hasPerm("newsletters:write");
-    tb.innerHTML = list.map((n) => `<tr><td class="text-mono text-xs"><strong>#${c.esc(n.id)}</strong><br><span class="text-muted">${c.esc(n.scheduled_at || n.sent_at || "")}</span></td><td><div class="font-semibold">${c.esc(n.subject_tr)}</div><div class="text-xs text-muted">${c.esc(n.subject_en || "")}</div></td><td><span class="badge-tag">${c.esc(n.email_group_code || n.target_institution)}</span> <span class="badge-tag badge-ssb">${c.esc(n.target_ssb_tag)}</span></td><td><span class="badge-tag badge-sponsored">${c.esc(n.sponsor_name || c.t("admin.label.unsponsored", "Sponsorsuz", "Unsponsored"))}</span></td><td class="text-mono text-xs"><strong class="text-success">${Number(n.recipient_count || 0).toLocaleString(c.locale())} ${c.esc(c.t("admin.label.recipients", "alıcı", "recipients"))}</strong><div class="text-muted">${c.esc(n.status)}</div></td><td>${canW ? `<button type="button" class="btn-cmd btn-cmd-sm btn-cmd-danger" data-ext-op="delete-newsletter" data-id="${c.esc(n.id)}">${c.svgIcon("trash")}</button>` : "—"}</td></tr>`).join("");
+    const nlStatusLabel = (st) => {
+      const k = String(st || "sent").toLowerCase();
+      const trMap = { sent: "Gönderildi", scheduled: "Zamanlandı", draft: "Taslak", queued: "Kuyrukta", failed: "Başarısız" };
+      const enMap = { sent: "Sent", scheduled: "Scheduled", draft: "Draft", queued: "Queued", failed: "Failed" };
+      return c.t("admin.status." + k, trMap[k] || st, enMap[k] || st);
+    };
+    tb.innerHTML = list.map((n) => `<tr><td class="text-mono text-xs"><strong>#${c.esc(n.id)}</strong><br><span class="text-muted">${c.esc(n.scheduled_at || n.sent_at || "")}</span></td><td><div class="font-semibold">${c.esc(n.subject_tr)}</div><div class="text-xs text-muted">${c.esc(n.subject_en || "")}</div></td><td><span class="badge-tag">${c.esc(n.email_group_code || n.target_institution)}</span> <span class="badge-tag badge-ssb">${c.esc(n.target_ssb_tag)}</span></td><td><span class="badge-tag badge-sponsored">${c.esc(n.sponsor_name || c.t("admin.label.unsponsored", "Sponsorsuz", "Unsponsored"))}</span></td><td class="text-mono text-xs"><strong class="text-success">${Number(n.recipient_count || 0).toLocaleString(c.locale())} ${c.esc(c.t("admin.label.recipients", "alıcı", "recipients"))}</strong><div class="text-muted">${c.esc(nlStatusLabel(n.status))}</div></td><td>${canW ? `<button type="button" class="btn-cmd btn-cmd-sm btn-cmd-danger" data-ext-op="delete-newsletter" data-id="${c.esc(n.id)}">${c.svgIcon("trash")}</button>` : "—"}</td></tr>`).join("");
   }, loadNewsletters, p);
 
   const loadReminders = (p) => fetchPaginated("subscriptions:read|analytics:read", "/api/v1/admin/reminders", "reminders", "reminders", "pagination-reminders", (list) => {
@@ -510,11 +544,23 @@
     const c = C(), tb = c.byId("tbody-custom-fields"); if (!tb) return;
     if (!list.length) { c.renderTableState(tb, "empty", { colCount: 8, emptyMsg: c.t("admin.state.no_custom_fields", "Tanımlı dinamik özel alan bulunmuyor.", "No custom fields defined.") }); return; }
     const canW = c.hasPerm("settings:write");
+    const cfTypeLabel = (ft) => {
+      const k = String(ft || "text").toLowerCase();
+      const trMap = { text: "Kısa Metin", textarea: "Uzun Metin", select: "Açılır Seçim Listesi", checkbox: "Onay Kutusu", number: "Sayısal Değer", date: "Tarih", url: "Bağlantı (URL)" };
+      const enMap = { text: "Short Text", textarea: "Long Text", select: "Dropdown List", checkbox: "Checkbox", number: "Numeric Value", date: "Date", url: "URL" };
+      return c.t("admin.system.dt_" + k, trMap[k] || ft, enMap[k] || ft);
+    };
+    const cfEntityLabel = (ent) => {
+      const k = String(ent || "content").toLowerCase();
+      const trMap = { content: "İçerik", ad: "Reklam Kampanyası", user: "Kullanıcı" };
+      const enMap = { content: "Content", ad: "Ad Campaign", user: "User" };
+      return c.t("admin.system.ent_" + k, trMap[k] || ent, enMap[k] || ent);
+    };
     tb.innerHTML = list.map((f) => {
       const ops = canW
         ? `<div class="flex gap-2"><button type="button" class="btn-cmd btn-cmd-sm" data-admin-action="edit-custom-field" data-key="${c.esc(f.field_key)}" title="${c.esc(c.t("admin.action.edit", "Düzenle", "Edit"))}">${c.svgIcon("pencil")}</button><button type="button" class="btn-cmd btn-cmd-sm btn-cmd-danger" data-admin-action="delete-custom-field" data-key="${c.esc(f.field_key)}" title="${c.esc(c.t("admin.action.delete", "Sil", "Delete"))}">${c.svgIcon("trash")}</button></div>`
         : "—";
-      return `<tr><td class="text-mono text-xs text-info">${c.esc(f.field_key)}</td><td class="font-semibold">${c.esc(f.label_tr)}</td><td class="text-muted">${c.esc(f.label_en)}</td><td><span class="badge-tag badge-placement">${c.esc(f.field_type)}</span></td><td class="text-xs">${c.esc(f.applies_to)}</td><td>${f.is_required ? c.svgIcon("check", "text-success") : c.svgIcon("minus", "text-muted")}</td><td class="text-mono text-xs">${c.esc(f.sort_order)}</td><td>${ops}</td></tr>`;
+      return `<tr><td class="text-mono text-xs text-info">${c.esc(f.field_key)}</td><td class="font-semibold">${c.esc(f.label_tr)}</td><td class="text-muted">${c.esc(f.label_en)}</td><td><span class="badge-tag badge-placement">${c.esc(cfTypeLabel(f.field_type))}</span></td><td class="text-xs">${c.esc(cfEntityLabel(f.applies_to))}</td><td>${f.is_required ? c.svgIcon("check", "text-success") : c.svgIcon("minus", "text-muted")}</td><td class="text-mono text-xs">${c.esc(f.sort_order)}</td><td>${ops}</td></tr>`;
     }).join("");
   }, loadCustomFields, p);
 
@@ -566,16 +612,30 @@
       toggleHidden("totp-setup-stage-init", false); toggleHidden("totp-setup-stage-verify", true);
     },
     "open-newsletter-drawer": () => { c.byId("form-newsletter")?.reset(); populateNewsletterSelects(); c.openDrawer("drawer-newsletter"); },
+    "reset-newsletter-form": () => {
+      c.byId("form-newsletter")?.reset();
+      c.setVal("nl-scheduled-at", "");
+      populateNewsletterSelects();
+      c.switchLangTab?.(c.byId("form-newsletter"), "tr");
+    },
     "delete-newsletter": (el) => delItem(`/api/v1/admin/newsletters/${el.getAttribute("data-id")}`, c.t("admin.confirm.delete_newsletter", "Bülten kaydı silinsin mi?", "Delete this newsletter record?"), c.t("admin.toast.newsletter_deleted", "Bülten silindi.", "Newsletter deleted."), loadNewsletters),
     "halt-renewed-reminders": () => submitJson("/api/v1/admin/reminders/halt-renewed", { action: "halt_renewed" }, c.t("admin.toast.reminders_halted", "Yenileyen abonelerin hatırlatmaları durduruldu.", "Reminders halted for renewed subscribers."), loadReminders),
     "delete-redirect": (el) => delItem(`/api/v1/admin/redirects/${el.getAttribute("data-id")}`, c.t("admin.confirm.delete_redirect", "301 yönlendirmesi silinsin mi?", "Delete this 301 redirect?"), c.t("admin.toast.redirect_deleted", "Yönlendirme silindi.", "Redirect deleted."), loadRedirects),
+    "reset-translation-form": () => {
+      c.byId("form-translation-upsert")?.reset();
+      c.setVal("tr-group", "general");
+      const warnBox = c.byId("tr-glossary-warnings");
+      if (warnBox) { warnBox.classList.add("hidden"); warnBox.innerHTML = ""; }
+    },
     "edit-tr": (el) => {
       const trItem = c.state.translations.find((x) => x.key === el.getAttribute("data-key"));
       if (trItem) {
         const det = c.byId("form-translation-upsert")?.closest("details");
         if (det) det.open = true;
         c.setVal("tr-key", trItem.key); c.setVal("tr-group", trItem.group || "general"); c.setVal("tr-val-tr", trItem.value_tr); c.setVal("tr-val-en", trItem.value_en);
+        det?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
         c.byId("tr-val-tr")?.focus();
+        c.showToast(c.t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", trItem.key));
       }
     },
     "delete-tr": (el) => { const k = el.getAttribute("data-key"); delItem(`/api/v1/admin/translations/${encodeURIComponent(k)}`, c.t("admin.confirm.delete_translation", "\"${key}\" çevirisi silinsin mi?", "Delete translation \"${key}\"?").replace("${key}", k), c.t("admin.toast.translation_deleted", "Çeviri silindi.", "Translation deleted."), loadTranslations); },
@@ -596,7 +656,10 @@
       c.setVal("gl-priority", "50");
       if (c.byId("gl-case-sensitive")) c.byId("gl-case-sensitive").checked = false;
       if (c.byId("gl-is-active")) c.byId("gl-is-active").checked = true;
+      const titleEl = c.byId("glossary-form-title");
+      if (titleEl) titleEl.textContent = c.t("admin.system.gl_new_btn", "Yeni Terim", "New Term");
       toggleHidden("glossary-form-container", true);
+      c.byId("glossary-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       c.byId("gl-term-tr")?.focus();
     },
     "hide-glossary-form": () => toggleHidden("glossary-form-container", false),
@@ -617,8 +680,12 @@
       c.setVal("gl-notes", g.notes || "");
       if (c.byId("gl-case-sensitive")) c.byId("gl-case-sensitive").checked = !!g.case_sensitive;
       if (c.byId("gl-is-active")) c.byId("gl-is-active").checked = g.is_active !== false;
+      const titleEl = c.byId("glossary-form-title");
+      if (titleEl) titleEl.textContent = `${c.t("admin.system.gl_edit", "Terimi Düzenle", "Edit Term")} (#${g.id})`;
       toggleHidden("glossary-form-container", true);
+      c.byId("glossary-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       c.byId("gl-term-tr")?.focus();
+      c.showToast(c.t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", g.term_tr));
     },
     "delete-glossary": (el) => {
       const id = el.getAttribute("data-id");
@@ -634,7 +701,10 @@
       c.setVal("loc-sort-order", "0");
       if (c.byId("loc-is-enabled")) c.byId("loc-is-enabled").checked = true;
       if (c.byId("loc-is-default")) c.byId("loc-is-default").checked = false;
+      const titleEl = c.byId("locale-form-title");
+      if (titleEl) titleEl.textContent = c.t("admin.system.loc_new", "Yeni Dil Ekle", "Add Locale");
       toggleHidden("locale-form-container", true);
+      c.byId("locale-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       codeEl?.focus();
     },
     "hide-locale-form": () => toggleHidden("locale-form-container", false),
@@ -653,8 +723,12 @@
       c.setVal("loc-sort-order", String(loc.sort_order ?? 0));
       if (c.byId("loc-is-enabled")) c.byId("loc-is-enabled").checked = loc.is_enabled !== false;
       if (c.byId("loc-is-default")) c.byId("loc-is-default").checked = !!loc.is_default;
+      const titleEl = c.byId("locale-form-title");
+      if (titleEl) titleEl.textContent = `${c.t("admin.system.loc_edit", "Dili Düzenle", "Edit Locale")} (${loc.code})`;
       toggleHidden("locale-form-container", true);
+      c.byId("locale-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       c.byId("loc-name-native")?.focus();
+      c.showToast(c.t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", loc.name_native || loc.code));
     },
     "delete-locale": (el) => {
       const code = el.getAttribute("data-code");
@@ -670,7 +744,10 @@
       c.setVal("eg-sort-order", "0");
       if (c.byId("eg-requires-consent")) c.byId("eg-requires-consent").checked = true;
       if (c.byId("eg-is-active")) c.byId("eg-is-active").checked = true;
+      const titleEl = c.byId("email-group-form-title");
+      if (titleEl) titleEl.textContent = c.t("admin.workflow.eg_new", "Yeni E-Posta Grubu", "New Email Group");
       toggleHidden("email-group-form-container", true);
+      c.byId("email-group-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       codeEl?.focus();
     },
     "hide-email-group-form": () => toggleHidden("email-group-form-container", false),
@@ -689,8 +766,12 @@
       c.setVal("eg-static-emails-json", eg.static_emails_json || "[]");
       if (c.byId("eg-requires-consent")) c.byId("eg-requires-consent").checked = eg.requires_marketing_consent !== false;
       if (c.byId("eg-is-active")) c.byId("eg-is-active").checked = eg.is_active !== false;
+      const titleEl = c.byId("email-group-form-title");
+      if (titleEl) titleEl.textContent = `${c.t("admin.workflow.eg_edit", "E-Posta Grubunu Düzenle", "Edit Email Group")} (${eg.code})`;
       toggleHidden("email-group-form-container", true);
+      c.byId("email-group-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       c.byId("eg-name-tr")?.focus();
+      c.showToast(c.t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", eg.name_tr || eg.code));
     },
     "delete-email-group": (el) => {
       const code = el.getAttribute("data-code");
@@ -740,7 +821,10 @@
       c.setVal("cf-sort-order", "0");
       c.setVal("cf-options", "");
       if (c.byId("cf-required")) c.byId("cf-required").checked = false;
+      const titleEl = c.byId("custom-field-form-title");
+      if (titleEl) titleEl.textContent = c.t("admin.system.cf_new", "Yeni Özel Alan", "New Custom Field");
       toggleHidden("custom-field-form-container", true);
+      c.byId("custom-field-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       c.byId("cf-key")?.focus();
     },
     "hide-custom-field-form": () => toggleHidden("custom-field-form-container", false),
@@ -756,67 +840,81 @@
       c.setVal("cf-sort-order", f.sort_order ?? 0);
       c.setVal("cf-options", f.options_json && f.options_json !== "[]" ? f.options_json : "");
       if (c.byId("cf-required")) c.byId("cf-required").checked = !!f.is_required;
+      const titleEl = c.byId("custom-field-form-title");
+      if (titleEl) titleEl.textContent = `${c.t("admin.system.cf_edit", "Özel Alanı Düzenle", "Edit Custom Field")} (${f.field_key})`;
       toggleHidden("custom-field-form-container", true);
+      c.byId("custom-field-form-container")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       c.byId("cf-label-tr")?.focus();
       c.showToast(c.t("admin.toast.editing_item", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", f.label_tr || f.field_key));
     },
-    "save-custom-field": () => {
-      const fKey = c.val("cf-key"), lblTr = c.val("cf-label-tr"), fType = c.val("cf-type") || "text";
-      if (!fKey || !lblTr) { c.showToast(c.t("admin.error.custom_field_required", "Alan anahtarı ve Türkçe etiketi zorunludur.", "Field key and Turkish label are required."), true); return; }
-      let optsJson = (c.val("cf-options") || "").trim();
-      if (fType === "select") {
-        if (!optsJson) {
-          c.byId("cf-options")?.focus();
-          c.showToast(c.t("admin.error.custom_field_select_options", "Seçim listesi türü için en az bir seçenek girin (JSON dizi veya virgülle ayrılmış).", "Enter at least one option for select type (JSON array or comma-separated)."), true);
-          return;
-        }
-        if (optsJson.startsWith("[")) {
-          try {
-            const parsed = JSON.parse(optsJson);
-            if (!Array.isArray(parsed) || !parsed.length) throw new Error("empty");
-          } catch (_) {
-            c.byId("cf-options")?.focus();
-            c.showToast(c.t("admin.error.custom_field_options_json", "Seçenekler geçerli bir JSON dizisi (ör. [\"A\",\"B\"]) veya virgülle ayrılmış liste olmalıdır.", "Options must be a valid JSON array (e.g. [\"A\",\"B\"]) or comma-separated list."), true);
-            return;
-          }
-        } else {
-          const items = optsJson.split(",").map((s) => s.trim()).filter(Boolean);
-          if (!items.length) {
-            c.byId("cf-options")?.focus();
-            c.showToast(c.t("admin.error.custom_field_select_options", "Seçim listesi türü için en az bir seçenek girin (JSON dizi veya virgülle ayrılmış).", "Enter at least one option for select type (JSON array or comma-separated)."), true);
-            return;
-          }
-          optsJson = JSON.stringify(items);
-        }
-      } else if (!optsJson) {
-        optsJson = "[]";
-      }
-      submitJson(
-        "/api/v1/admin/custom-fields",
-        { field_key: fKey, label_tr: lblTr, label_en: c.val("cf-label-en") || lblTr, field_type: fType, options_json: optsJson, is_required: !!c.byId("cf-required")?.checked, sort_order: parseInt(c.val("cf-sort-order") || "0", 10), applies_to: c.val("cf-applies-to") || "content" },
-        c.t("admin.toast.custom_field_saved", "Özel alan kaydedildi.", "Custom field saved."),
-        () => {
-          c.setVal("cf-key", "");
-          c.setVal("cf-label-tr", "");
-          c.setVal("cf-label-en", "");
-          c.setVal("cf-type", "text");
-          c.setVal("cf-applies-to", "content");
-          c.setVal("cf-sort-order", "0");
-          c.setVal("cf-options", "");
-          if (c.byId("cf-required")) c.byId("cf-required").checked = false;
-          toggleHidden("custom-field-form-container", false);
-          return loadCustomFields();
-        },
-      );
-    },
+    "save-custom-field": () => saveCustomField(),
     "delete-custom-field": (el) => { const k = el.getAttribute("data-key"); delItem(`/api/v1/admin/custom-fields/${encodeURIComponent(k)}`, c.t("admin.confirm.delete_custom_field", "\"${key}\" alanı silinsin mi?", "Delete field \"${key}\"?").replace("${key}", k), c.t("admin.toast.custom_field_deleted", "Özel alan silindi.", "Custom field deleted."), loadCustomFields); },
     "flush-cache": async () => { if (await c.confirmDialog(c.t("admin.confirm.flush_cache", "Tüm önbellek katmanları temizlenecek. Devam etmek istiyor musunuz?", "Flush all cache layers?"))) await submitJson("/api/v1/admin/cache", { cache_key: "all" }, c.t("admin.toast.cache_flushed", "Tüm önbellek katmanları temizlendi.", "All cache layers flushed."), loadCacheOperations); },
   });
 
+  async function saveCustomField() {
+    const fKey = c.val("cf-key"), lblTr = c.val("cf-label-tr"), fType = c.val("cf-type") || "text";
+    if (!fKey || !lblTr) { c.showToast(c.t("admin.error.custom_field_required", "Alan anahtarı ve Türkçe etiketi zorunludur.", "Field key and Turkish label are required."), true); return; }
+    let optsJson = (c.val("cf-options") || "").trim();
+    if (fType === "select") {
+      if (!optsJson) {
+        c.byId("cf-options")?.focus();
+        c.showToast(c.t("admin.error.custom_field_select_options", "Seçim listesi türü için en az bir seçenek girin (JSON dizi veya virgülle ayrılmış).", "Enter at least one option for select type (JSON array or comma-separated)."), true);
+        return;
+      }
+      if (optsJson.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(optsJson);
+          if (!Array.isArray(parsed) || !parsed.length) throw new Error("empty");
+        } catch (_) {
+          c.byId("cf-options")?.focus();
+          c.showToast(c.t("admin.error.custom_field_options_json", "Seçenekler geçerli bir JSON dizisi (ör. [\"A\",\"B\"]) veya virgülle ayrılmış liste olmalıdır.", "Options must be a valid JSON array (e.g. [\"A\",\"B\"]) or comma-separated list."), true);
+          return;
+        }
+      } else {
+        const items = optsJson.split(",").map((s) => s.trim()).filter(Boolean);
+        if (!items.length) {
+          c.byId("cf-options")?.focus();
+          c.showToast(c.t("admin.error.custom_field_select_options", "Seçim listesi türü için en az bir seçenek girin (JSON dizi veya virgülle ayrılmış).", "Enter at least one option for select type (JSON array or comma-separated)."), true);
+          return;
+        }
+        optsJson = JSON.stringify(items);
+      }
+    } else if (!optsJson) {
+      optsJson = "[]";
+    }
+    await submitJson(
+      "/api/v1/admin/custom-fields",
+      { field_key: fKey, label_tr: lblTr, label_en: c.val("cf-label-en") || lblTr, field_type: fType, options_json: optsJson, is_required: !!c.byId("cf-required")?.checked, sort_order: parseInt(c.val("cf-sort-order") || "0", 10), applies_to: c.val("cf-applies-to") || "content" },
+      c.t("admin.toast.custom_field_saved", "Özel alan kaydedildi.", "Custom field saved."),
+      () => {
+        c.setVal("cf-key", "");
+        c.setVal("cf-label-tr", "");
+        c.setVal("cf-label-en", "");
+        c.setVal("cf-type", "text");
+        c.setVal("cf-applies-to", "content");
+        c.setVal("cf-sort-order", "0");
+        c.setVal("cf-options", "");
+        if (c.byId("cf-required")) c.byId("cf-required").checked = false;
+        toggleHidden("custom-field-form-container", false);
+        return loadCustomFields();
+      },
+    );
+  }
+
   document.addEventListener("submit", async (ev) => {
     const id = ev.target?.id;
     if (!id) return;
-    if (id === "form-site-setting") {
+    if (id === "form-admin-user") {
+      ev.preventDefault();
+      await saveUserForm();
+    } else if (id === "form-admin-role") {
+      ev.preventDefault();
+      await saveRole();
+    } else if (id === "form-custom-field") {
+      ev.preventDefault();
+      await saveCustomField();
+    } else if (id === "form-site-setting") {
       ev.preventDefault();
       await submitJson("/api/v1/admin/settings", { key: c.val("set-key"), value_tr: c.val("set-val-tr"), value_en: c.val("set-val-en") || c.val("set-val-tr"), setting_group: c.val("set-group") || "general" }, c.t("admin.toast.setting_updated", "Site ayarı güncellendi.", "Site setting updated."), refreshCentralEnginesTab);
     } else if (id === "form-sys-notif") {

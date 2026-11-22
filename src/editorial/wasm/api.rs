@@ -20,7 +20,7 @@ use crate::editorial::wasm::state::{
     empty_editing_article, is_valid_image_url, js_now_iso, js_now_ms, normalize_draft_for_editor,
     save_editing_baseline_sig, save_editing_draft, set_article_image,
     should_confirm_editor_discard, storage_remove, with_state, with_state_mut, LeftTab,
-    MobileView, PendingEditorConfirm, TagSuggestion,
+    MobileView, PendingEditorConfirm, TagSuggestion, ToastKind,
 };
 
 pub fn set_timeout_ms<F: FnOnce() + 'static>(ms: i32, f: F) {
@@ -34,56 +34,38 @@ pub fn set_timeout_ms<F: FnOnce() + 'static>(ms: i32, f: F) {
     }
 }
 
-pub fn confirm_dialog(msg: &str) -> bool {
-    web_sys::window()
-        .and_then(|w| w.confirm_with_message(msg).ok())
-        .unwrap_or(true)
+pub fn dismiss_toast(id: u64) {
+    let changed = with_state_mut(|s| s.dismiss_toast(id));
+    if changed {
+        crate::editorial::wasm::render::refresh_toasts();
+    }
+}
+
+pub fn push_toast(kind: ToastKind, msg: impl Into<String>, duration_ms: i32) {
+    let text = msg.into();
+    let id = with_state_mut(|s| s.push_toast(kind, text));
+    crate::editorial::wasm::render::refresh_toasts();
+    if duration_ms > 0 {
+        set_timeout_ms(duration_ms, move || {
+            dismiss_toast(id);
+        });
+    }
 }
 
 pub fn show_error(msg: impl Into<String>) {
-    let text = msg.into();
-    let seq = with_state_mut(|s| {
-        s.error_seq += 1;
-        s.error = Some(text);
-        s.error_seq
-    });
-    crate::editorial::wasm::render::refresh_toasts();
-    set_timeout_ms(2600, move || {
-        let changed = with_state_mut(|s| {
-            if s.error_seq == seq {
-                s.error = None;
-                true
-            } else {
-                false
-            }
-        });
-        if changed {
-            crate::editorial::wasm::render::refresh_toasts();
-        }
-    });
+    push_toast(ToastKind::Error, msg, 4200);
 }
 
 pub fn show_success(msg: impl Into<String>) {
-    let text = msg.into();
-    let seq = with_state_mut(|s| {
-        s.success_seq += 1;
-        s.success = Some(text);
-        s.success_seq
-    });
-    crate::editorial::wasm::render::refresh_toasts();
-    set_timeout_ms(2600, move || {
-        let changed = with_state_mut(|s| {
-            if s.success_seq == seq {
-                s.success = None;
-                true
-            } else {
-                false
-            }
-        });
-        if changed {
-            crate::editorial::wasm::render::refresh_toasts();
-        }
-    });
+    push_toast(ToastKind::Success, msg, 4200);
+}
+
+pub fn show_warning(msg: impl Into<String>) {
+    push_toast(ToastKind::Warning, msg, 4200);
+}
+
+pub fn show_info(msg: impl Into<String>) {
+    push_toast(ToastKind::Info, msg, 4200);
 }
 
 fn read_cookie(name: &str) -> Option<String> {
@@ -299,7 +281,6 @@ pub fn perform_logout() {
         s.show_redirects_modal = false;
         s.show_revisions_modal = false;
         s.is_adding_user = false;
-        s.show_change_password = false;
         s.active_locks.clear();
         s.editing_conflict_lock = None;
         s.published_articles.clear();
@@ -319,41 +300,6 @@ pub fn perform_logout() {
         s.preview_lang = "tr".to_string();
     });
     crate::editorial::wasm::render::render_full();
-}
-
-pub fn submit_change_password() {
-    let (token, cur, new_pw, confirm_pw, busy) = with_state(|s| {
-        (
-            s.token.clone(),
-            s.change_pw_current.clone(),
-            s.change_pw_new.clone(),
-            s.change_pw_confirm.clone(),
-            s.is_changing_password,
-        )
-    });
-    if busy {
-        return;
-    }
-    let Some(tok) = token else { return };
-
-    if new_pw.len() < 6 {
-        show_error("Yeni şifre en az 6 karakter olmalı.");
-        return;
-    }
-    if new_pw != confirm_pw {
-        show_error("Yeni şifreler eşleşmiyor.");
-        return;
-    }
-
-    with_state_mut(|s| s.is_changing_password = true);
-    crate::editorial::wasm::render::refresh_modals();
-
-    spawn_local(async move {
-        let _ = (cur, new_pw, tok);
-        with_state_mut(|s| s.is_changing_password = false);
-        crate::editorial::wasm::render::refresh_modals();
-        show_error("Şifre değiştirme işlemi için Hesap Portalı (/hesabim) kullanılır.");
-    });
 }
 
 // ============================================================================
@@ -609,10 +555,37 @@ fn fetch_articles_internal(kind: &'static str, load_more: bool, silent: bool) {
 }
 
 pub fn delete_article(article_id: String) {
-    if article_id.trim().is_empty() {
+    let clean_id = article_id.trim().to_string();
+    if clean_id.is_empty() {
         return;
     }
-    if !confirm_dialog("Bu haberi kalıcı olarak silmek istediğinize emin misiniz?") {
+    with_state_mut(|s| {
+        let mut title = String::new();
+        let mut is_draft = clean_id.starts_with("draft-");
+        if let Some(a) = s.draft_articles.iter().find(|x| x.id == clean_id) {
+            title = a.title.clone();
+            is_draft = true;
+        } else if let Some(a) = s.published_articles.iter().find(|x| x.id == clean_id) {
+            title = a.title.clone();
+            is_draft = false;
+        } else if s.editing_article.id == clean_id {
+            title = s.canonical_editing_article().title;
+            is_draft = is_draft || s.editing_article.article_type.as_deref() == Some("draft");
+        }
+        if title.trim().is_empty() {
+            title = format!("#{clean_id}");
+        }
+        s.pending_editor_confirm = Some(PendingEditorConfirm::DeleteArticle {
+            article_id: clean_id,
+            title,
+            is_draft,
+        });
+    });
+    crate::editorial::wasm::render::sync_editor_confirm_modal_state();
+}
+
+pub fn execute_delete_article(article_id: String) {
+    if article_id.trim().is_empty() {
         return;
     }
     let Some(tok) = with_state(|s| s.token.clone()) else {
@@ -1411,11 +1384,8 @@ pub fn publish_article_now() {
 
     with_state_mut(|s| {
         s.is_posting = true;
-        s.error = None;
-        s.success = None;
     });
     crate::editorial::wasm::render::refresh_right_panel();
-    crate::editorial::wasm::render::refresh_toasts();
 
     let final_content = match art.blocks.as_ref().filter(|b| !b.is_empty()) {
         Some(blocks) => blocks_to_wp_html(blocks),
@@ -1614,11 +1584,8 @@ fn save_draft_internal(force_plain_draft: bool) {
 
     with_state_mut(|s| {
         s.is_posting = true;
-        s.error = None;
-        s.success = None;
     });
     crate::editorial::wasm::render::refresh_right_panel();
-    crate::editorial::wasm::render::refresh_toasts();
 
     let final_content = match art.blocks.as_ref().filter(|b| !b.is_empty()) {
         Some(blocks) => blocks_to_wp_html(blocks),
@@ -1833,6 +1800,7 @@ pub fn save_draft_and_execute_pending_confirm(action: PendingEditorConfirm) {
                         crate::editorial::wasm::reset_editor_now(false);
                         show_success("İçerik taslaklara kaydedildi ve editör temizlendi.");
                     }
+                    _ => {}
                 }
             }
             Ok((_, _, data)) => {
@@ -2212,9 +2180,20 @@ pub fn update_category() {
 }
 
 pub fn delete_category(id: i32) {
-    if !confirm_dialog("Bu kategoriyi silmek istediğinize emin misiniz?") {
-        return;
-    }
+    with_state_mut(|s| {
+        let name = s
+            .categories
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.name.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| format!("Kategori #{id}"));
+        s.pending_editor_confirm = Some(PendingEditorConfirm::DeleteCategory { id, name });
+    });
+    crate::editorial::wasm::render::sync_editor_confirm_modal_state();
+}
+
+pub fn execute_delete_category(id: i32) {
     let Some(tok) = with_state(|s| s.token.clone()) else {
         return;
     };
@@ -2480,9 +2459,20 @@ pub fn toggle_research_source(id: i32) {
 }
 
 pub fn delete_research_source(id: i32) {
-    if !confirm_dialog("Bu haber kaynağını silmek istediğinize emin misiniz?") {
-        return;
-    }
+    with_state_mut(|s| {
+        let name = s
+            .research_sources
+            .iter()
+            .find(|x| x.id == id)
+            .map(|x| x.name.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| format!("Kaynak #{id}"));
+        s.pending_editor_confirm = Some(PendingEditorConfirm::DeleteResearchSource { id, name });
+    });
+    crate::editorial::wasm::render::sync_editor_confirm_modal_state();
+}
+
+pub fn execute_delete_research_source(id: i32) {
     let Some(tok) = with_state(|s| s.token.clone()) else { return };
 
     spawn_local(async move {
@@ -2753,9 +2743,28 @@ pub fn fetch_media_assets() {
 }
 
 pub fn delete_media_asset(asset_id: i32) {
-    if !confirm_dialog("Bu görseli medya arşivinden kalıcı olarak silmek istediğinize emin misiniz?") {
-        return;
-    }
+    with_state_mut(|s| {
+        let label = s
+            .media_assets
+            .iter()
+            .find(|a| a.id == asset_id)
+            .map(|a| {
+                if !a.original_name.trim().is_empty() {
+                    a.original_name.trim().to_string()
+                } else if !a.filename.trim().is_empty() {
+                    a.filename.trim().to_string()
+                } else {
+                    format!("#{asset_id}")
+                }
+            })
+            .unwrap_or_else(|| format!("Görsel #{asset_id}"));
+        s.pending_editor_confirm =
+            Some(PendingEditorConfirm::DeleteMediaAsset { asset_id, label });
+    });
+    crate::editorial::wasm::render::sync_editor_confirm_modal_state();
+}
+
+pub fn execute_delete_media_asset(asset_id: i32) {
     let Some(tok) = with_state(|s| s.token.clone()) else {
         return;
     };
@@ -2933,7 +2942,26 @@ pub fn restore_article_revision(article_id: String, rev_id: i64) {
     if aid.is_empty() {
         return;
     }
-    if !confirm_dialog("Bu revizyon sürümüne geri dönmek istediğinize emin misiniz?") {
+    with_state_mut(|s| {
+        let rev_title = s
+            .revisions
+            .iter()
+            .find(|r| r.id == rev_id)
+            .map(|r| r.title.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(|| format!("Revizyon #{rev_id}"));
+        s.pending_editor_confirm = Some(PendingEditorConfirm::RestoreArticleRevision {
+            article_id: aid,
+            rev_id,
+            rev_title,
+        });
+    });
+    crate::editorial::wasm::render::sync_editor_confirm_modal_state();
+}
+
+pub fn execute_restore_article_revision(article_id: String, rev_id: i64) {
+    let aid = article_id.trim().to_string();
+    if aid.is_empty() {
         return;
     }
     let Some(tok) = with_state(|s| s.token.clone()) else {
@@ -3542,9 +3570,30 @@ pub fn create_magazine_issue() {
 }
 
 pub fn delete_magazine_issue(id: i32) {
-    if !confirm_dialog("Bu dergi sayısını listeden silmek istediğinize emin misiniz?") {
-        return;
-    }
+    with_state_mut(|s| {
+        let label = s
+            .magazine_issues
+            .iter()
+            .find(|x| x.id == id)
+            .map(|x| {
+                let ttl = if !x.title_tr.trim().is_empty() {
+                    x.title_tr.trim()
+                } else {
+                    x.title_en.trim()
+                };
+                if ttl.is_empty() {
+                    format!("Sayı #{}", x.issue_number)
+                } else {
+                    format!("#{} {}", x.issue_number, ttl)
+                }
+            })
+            .unwrap_or_else(|| format!("Sayı #{id}"));
+        s.pending_editor_confirm = Some(PendingEditorConfirm::DeleteMagazineIssue { id, label });
+    });
+    crate::editorial::wasm::render::sync_editor_confirm_modal_state();
+}
+
+pub fn execute_delete_magazine_issue(id: i32) {
     let Some(tok) = with_state(|s| s.token.clone()) else {
         return;
     };
@@ -3705,9 +3754,19 @@ pub fn create_glossary_rule() {
 }
 
 pub fn delete_glossary_rule(id: i32) {
-    if !confirm_dialog("Bu terminoloji kuralını silmek istediğinize emin misiniz?") {
-        return;
-    }
+    with_state_mut(|s| {
+        let label = s
+            .glossary_rules
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| format!("{} → {}", r.term_tr.trim(), r.preferred_en.trim()))
+            .unwrap_or_else(|| format!("Kural #{id}"));
+        s.pending_editor_confirm = Some(PendingEditorConfirm::DeleteGlossaryRule { id, label });
+    });
+    crate::editorial::wasm::render::sync_editor_confirm_modal_state();
+}
+
+pub fn execute_delete_glossary_rule(id: i32) {
     let Some(tok) = with_state(|s| s.token.clone()) else {
         return;
     };

@@ -17,14 +17,17 @@
     if (byId("kpi-total-contents")) byId("kpi-total-contents").textContent = totalContents.toLocaleString(locale());
     if (byId("kpi-placements-sub")) byId("kpi-placements-sub").textContent = `${totalPlacements.toLocaleString(locale())} ${t("admin.analytics.multi_section_display", "çoklu bölüm gösterimi", "multi-section placements")}`;
 
-    const views = typeof ov.total_views === "number" ? ov.total_views : state.contents.reduce((a, c) => a + (c.view_count || 0), 0);
-    const reads = typeof ov.total_true_reads === "number" ? ov.total_true_reads : state.contents.reduce((a, c) => a + (c.true_read_count || 0), 0);
+    // Only use real analytics event totals from overviewStats — never fall back to
+    // seed/harvested view_count or true_read_count which represent the original site's traffic.
+    const views = typeof ov.total_views === "number" ? ov.total_views : 0;
+    const reads = typeof ov.total_true_reads === "number" ? ov.total_true_reads : 0;
     const ratio = views > 0 ? Math.round((reads / views) * 100) : 0;
     if (byId("kpi-true-reads")) byId("kpi-true-reads").textContent = `${reads.toLocaleString(locale())} (%${ratio})`;
     if (byId("kpi-views-sub")) byId("kpi-views-sub").textContent = `${t("admin.analytics.total_views_prefix", "Toplam", "Total")} ${views.toLocaleString(locale())} ${t("admin.analytics.views_label", "görüntülenme", "views")}`;
 
     const activeAds = typeof ov.active_ads === "number" ? ov.active_ads : state.ads.filter((a) => a.is_active !== false).length;
-    const totalImps = state.ads.reduce((a, x) => a + (x.impressions_count || 0), 0);
+    // Only use real analytics event totals — never fall back to seed/harvested impressions_count.
+    const totalImps = typeof ov.total_impressions === "number" ? ov.total_impressions : 0;
     if (byId("kpi-active-ads")) byId("kpi-active-ads").textContent = activeAds.toLocaleString(locale());
     if (byId("kpi-ads-sub")) byId("kpi-ads-sub").textContent = `${totalImps.toLocaleString(locale())} ${t("admin.analytics.corporate_impressions", "kurumsal gösterim", "corporate impressions")}`;
 

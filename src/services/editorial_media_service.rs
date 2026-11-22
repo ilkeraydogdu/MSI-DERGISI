@@ -131,6 +131,24 @@ pub fn detect_image_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.len() >= 2 && &bytes[0..2] == b"BM" {
         return Some("bmp");
     }
+    // SECURITY FIX: PDF magic byte validation (%PDF-)
+    if bytes.len() >= 5 && &bytes[0..5] == b"%PDF-" {
+        return Some("pdf");
+    }
+    // SECURITY FIX: MP4/ISO base media file format magic byte validation (ftyp box at offset 4)
+    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        let brand = &bytes[8..12];
+        if brand == b"avif" || brand == b"avis" || brand == b"mif1" || brand == b"heic" {
+            return Some("avif");
+        }
+        // Accept common MP4/MOV brands
+        if brand == b"isom" || brand == b"iso2" || brand == b"mp41" || brand == b"mp42"
+            || brand == b"M4V " || brand == b"qt  " || brand == b"3gp4" || brand == b"3gp5"
+            || brand == b"MSNV" || brand == b"F4V " || brand == b"F4P "
+        {
+            return Some("mp4");
+        }
+    }
     // Safe SVG check across 100% of bytes (rejects embedded scripts/event handlers/obfuscated entities)
     if crate::engine::validation_engine::validate_svg_safe(bytes).is_ok() {
         return Some("svg");

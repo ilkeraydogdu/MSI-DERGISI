@@ -97,14 +97,33 @@ pub async fn admin_overview(
         0
     };
 
-    let total_views: i64 = contents.iter().map(|c| c.view_count).sum();
-    let total_true_reads: i64 = contents.iter().map(|c| c.true_read_count).sum();
+    // Compute real analytics totals from analytics_events, not seed/harvested counters.
+    let events = state.db.get_all_analytics_events();
+    let total_views: i64 = events.len() as i64;
+    let total_true_reads: i64 = events
+        .iter()
+        .filter(|e| {
+            (e.duration_sec >= crate::db::constants::TRUE_READ_MIN_DURATION_SEC
+                && e.scroll_depth_pct >= crate::db::constants::TRUE_READ_MIN_SCROLL_PCT)
+                || e.is_true_read
+        })
+        .count() as i64;
+    let total_impressions: i64 = events
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.event_type.as_str(),
+                "ad_impression" | "impression" | "ad_view"
+            )
+        })
+        .count() as i64;
     let total_placements: i64 = contents.iter().map(|c| c.placements.len() as i64).sum();
 
     Json(json!({
         "total_contents": contents.len(),
         "total_views": total_views,
         "total_true_reads": total_true_reads,
+        "total_impressions": total_impressions,
         "total_placements": total_placements,
         "active_ads": active_ads,
         "registered_users": registered_users,

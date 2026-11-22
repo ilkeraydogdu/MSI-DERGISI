@@ -149,18 +149,232 @@
 
   function syncScrollLock() {
     if (!lenis) return;
-    if ($("dialog[open]")) lenis.stop();
+    if ($("dialog[open]") || $("#cart-drawer")?.classList.contains("is-open")) lenis.stop();
     else lenis.start();
   }
 
-  function toast(message) {
+  function createToastIcon(type) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("aria-hidden", "true");
+    const addPath = (d) => {
+      const p = document.createElementNS(ns, "path");
+      p.setAttribute("d", d);
+      svg.appendChild(p);
+    };
+    const addCircle = (cx, cy, r) => {
+      const c = document.createElementNS(ns, "circle");
+      c.setAttribute("cx", String(cx));
+      c.setAttribute("cy", String(cy));
+      c.setAttribute("r", String(r));
+      svg.appendChild(c);
+    };
+    if (type === "success") {
+      addCircle(12, 12, 9);
+      addPath("m9 12 2 2 4-4");
+    } else if (type === "error") {
+      addCircle(12, 12, 9);
+      addPath("m15 9-6 6M9 9l6 6");
+    } else if (type === "warning") {
+      addPath("M10.3 3.9 1.8 18.2A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z");
+      addPath("M12 9v4M12 17h.01");
+    } else {
+      addCircle(12, 12, 9);
+      addPath("M12 16v-4M12 8h.01");
+    }
+    return svg;
+  }
+
+  function toast(message, options = {}) {
     const region = $(".toast-region");
     if (!region) return;
+    let type = "info";
+    let duration = 4200;
+    if (typeof options === "string") {
+      type = options;
+    } else if (options === true) {
+      type = "error";
+    } else if (options && typeof options === "object") {
+      if (options.type) type = options.type;
+      if (Number.isFinite(options.duration) && options.duration > 0) {
+        duration = options.duration;
+      }
+    }
+    if (!["success", "error", "warning", "info"].includes(type)) type = "info";
+
+    while (region.children.length >= 4) {
+      region.firstElementChild?.remove();
+    }
+
     const el = document.createElement("div");
-    el.className = "toast-message";
-    el.textContent = message;
-    region.replaceChildren(el);
-    setTimeout(() => el.remove(), 4500);
+    el.className = `toast-message is-${type}`;
+    el.setAttribute("role", type === "error" ? "alert" : "status");
+
+    const iconWrap = document.createElement("span");
+    iconWrap.className = "toast-icon";
+    iconWrap.setAttribute("aria-hidden", "true");
+    iconWrap.appendChild(createToastIcon(type));
+
+    const body = document.createElement("span");
+    body.className = "toast-body";
+    body.textContent = String(message || "");
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "toast-close";
+    closeBtn.setAttribute("aria-label", text("Bildirimi kapat", "Dismiss notification"));
+    closeBtn.textContent = "×";
+
+    let timer = null;
+    const dismiss = () => {
+      if (timer) clearTimeout(timer);
+      el.remove();
+    };
+    closeBtn.addEventListener("click", dismiss);
+
+    el.append(iconWrap, body, closeBtn);
+    region.appendChild(el);
+    timer = setTimeout(dismiss, duration);
+  }
+
+  function msiConfirm(options = {}) {
+    return new Promise((resolve) => {
+      const prevFocus = document.activeElement;
+      let dlg = document.getElementById("msi-confirm-dialog");
+      if (!dlg) {
+        dlg = document.createElement("dialog");
+        dlg.id = "msi-confirm-dialog";
+        dlg.className = "ui-dialog ui-confirm-dialog";
+        dlg.setAttribute("aria-modal", "true");
+        dlg.setAttribute("aria-labelledby", "msi-confirm-title");
+        dlg.setAttribute("aria-describedby", "msi-confirm-desc");
+
+        const head = document.createElement("div");
+        head.className = "dialog-heading";
+        const titleWrap = document.createElement("div");
+        const eyebrow = document.createElement("div");
+        eyebrow.className = "eyebrow";
+        eyebrow.id = "msi-confirm-eyebrow";
+        const h2 = document.createElement("h2");
+        h2.id = "msi-confirm-title";
+        titleWrap.append(eyebrow, h2);
+
+        const xBtn = document.createElement("button");
+        xBtn.type = "button";
+        xBtn.className = "icon-button";
+        xBtn.dataset.confirmCancel = "1";
+        xBtn.setAttribute("aria-label", text("Kapat", "Close"));
+        xBtn.textContent = "×";
+        head.append(titleWrap, xBtn);
+
+        const body = document.createElement("p");
+        body.id = "msi-confirm-desc";
+        body.className = "ui-confirm-body";
+
+        const actions = document.createElement("div");
+        actions.className = "ui-confirm-actions";
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "button secondary";
+        cancelBtn.id = "msi-confirm-cancel";
+        cancelBtn.dataset.confirmCancel = "1";
+        const okBtn = document.createElement("button");
+        okBtn.type = "button";
+        okBtn.className = "button primary";
+        okBtn.id = "msi-confirm-ok";
+        actions.append(cancelBtn, okBtn);
+
+        dlg.append(head, body, actions);
+        document.body.appendChild(dlg);
+      }
+
+      const danger = Boolean(options.danger);
+      dlg.classList.toggle("is-danger", danger);
+      const eyebrowEl = document.getElementById("msi-confirm-eyebrow");
+      const titleEl = document.getElementById("msi-confirm-title");
+      const descEl = document.getElementById("msi-confirm-desc");
+      const cancelBtn = document.getElementById("msi-confirm-cancel");
+      const okBtn = document.getElementById("msi-confirm-ok");
+
+      if (eyebrowEl) {
+        eyebrowEl.textContent =
+          options.eyebrow || text("ONAY GEREKLİ", "CONFIRMATION REQUIRED");
+      }
+      if (titleEl) {
+        titleEl.textContent =
+          options.title || text("İşlemi Onaylayın", "Confirm Action");
+      }
+      if (descEl) {
+        descEl.textContent =
+          options.message ||
+          text("Bu işlemi gerçekleştirmek istiyor musunuz?", "Do you want to proceed with this action?");
+      }
+      if (cancelBtn) {
+        cancelBtn.textContent = options.cancelLabel || text("Vazgeç", "Cancel");
+      }
+      if (okBtn) {
+        okBtn.textContent = options.confirmLabel || text("Onayla", "Confirm");
+        okBtn.className = danger ? "button danger" : "button primary";
+      }
+
+      let settled = false;
+      const finish = (val) => {
+        if (settled) return;
+        settled = true;
+        dlg.removeEventListener("close", onClose);
+        dlg.removeEventListener("click", onBackdrop);
+        dlg.removeEventListener("cancel", onCancel);
+        okBtn?.removeEventListener("click", onOk);
+        dlg.querySelectorAll("[data-confirm-cancel]").forEach((b) =>
+          b.removeEventListener("click", onCancelBtn),
+        );
+        if (dlg.open) dlg.close();
+        syncScrollLock();
+        if (prevFocus && document.contains(prevFocus)) prevFocus.focus?.();
+        resolve(val);
+      };
+      const onOk = () => finish(true);
+      const onCancelBtn = () => finish(false);
+      const onCancel = (ev) => {
+        ev.preventDefault();
+        finish(false);
+      };
+      const onClose = () => finish(false);
+      const onBackdrop = (ev) => {
+        if (ev.target !== dlg) return;
+        const r = dlg.getBoundingClientRect();
+        if (
+          ev.clientX < r.left ||
+          ev.clientX > r.right ||
+          ev.clientY < r.top ||
+          ev.clientY > r.bottom
+        ) {
+          finish(false);
+        }
+      };
+
+      okBtn?.addEventListener("click", onOk);
+      dlg.querySelectorAll("[data-confirm-cancel]").forEach((b) =>
+        b.addEventListener("click", onCancelBtn),
+      );
+      dlg.addEventListener("cancel", onCancel);
+      dlg.addEventListener("close", onClose);
+      dlg.addEventListener("click", onBackdrop);
+
+      try {
+        dlg.showModal();
+        syncScrollLock();
+        (danger ? cancelBtn : okBtn)?.focus?.();
+      } catch {
+        finish(false);
+      }
+    });
   }
 
   function animateAuthSurface(el, fromVars, durationSec = 0.22) {
@@ -414,7 +628,14 @@
       e.preventDefault();
       const lang = el.dataset.language || "tr";
       document.cookie = `msi_lang=${lang};path=/;SameSite=Lax;max-age=31536000`;
-      location.href = el.getAttribute("href") || `/switch/${lang}`;
+      const baseHref = el.getAttribute("href") || `/switch/${lang}`;
+      const rawHash = (location.hash || "").replace(/^#/, "");
+      if (/^[a-zA-Z0-9_-]{1,40}$/.test(rawHash)) {
+        const sep = baseHref.includes("?") ? "&" : "?";
+        location.href = `${baseHref}${sep}hash=${encodeURIComponent(rawHash)}`;
+      } else {
+        location.href = baseHref;
+      }
     }),
   );
 
@@ -433,7 +654,7 @@
       el.classList.toggle("is-read", read);
       if (!read) count++;
     });
-    const badge = $(".notification-count");
+    const badge = $(".notification-count:not(.cart-count)");
     if (badge) {
       badge.textContent = count;
       badge.hidden = !count;
@@ -451,6 +672,7 @@
         "Bildirimler bu cihazda okundu olarak işaretlendi.",
         "Notifications marked as read on this device.",
       ),
+      "success",
     );
   });
   $("[data-dismiss-announcement]")?.addEventListener("click", () => {
@@ -1034,7 +1256,7 @@
       loginBtn.className = "button primary";
       loginBtn.textContent = text("Giriş yap / Hesap oluştur →", "Sign in / Create account →");
       const subBtn = document.createElement("a");
-      subBtn.href = boot.lang === "en" ? "/en/abonelik-ve-satis" : "/abonelik-ve-satis";
+      subBtn.href = boot.lang === "en" ? "/abonelik-ve-satis?lang=en" : "/abonelik-ve-satis";
       subBtn.className = "button secondary";
       subBtn.textContent = text("Abonelikleri incele", "Explore subscriptions");
       actEl.append(loginBtn, subBtn);
@@ -1560,6 +1782,7 @@
           "Şu anda görüntülenebilecek sayı bulunmuyor.",
           "No issue is available.",
         ),
+        "warning",
       );
       return;
     }
@@ -1880,6 +2103,7 @@
           "Yayın bilgileri yüklenemedi. Lütfen tekrar deneyin.",
           "Publication details could not be loaded. Please try again.",
         ),
+        "error",
       );
     }
   }
@@ -1987,6 +2211,36 @@
     }
   });
 
+  let authStatePromise = null;
+  function checkAuthState() {
+    if (typeof boot.authenticated === "boolean") {
+      return Promise.resolve(boot.authenticated);
+    }
+    if ($(".account-welcome") || $('.account-link[href="#modal-login"]')) {
+      boot.authenticated = false;
+      return Promise.resolve(false);
+    }
+    if (!authStatePromise) {
+      authStatePromise = fetch("/api/v1/health", { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && typeof data.authenticated === "boolean") {
+            boot.authenticated = data.authenticated;
+            $$(".account-link").forEach((link) => {
+              link.dataset.authState = data.authenticated ? "authenticated" : "guest";
+            });
+            return data.authenticated;
+          }
+          return null;
+        })
+        .catch(() => null);
+    }
+    return authStatePromise;
+  }
+  if (!inIframe && $("#auth-dialog") && $(".account-link")) {
+    void checkAuthState();
+  }
+
   document.addEventListener("click", (e) => {
     const buyArticle = e.target.closest("[data-buy-article]");
     if (buyArticle) {
@@ -2022,6 +2276,7 @@
                 "Yedek kurtarma kodları panoya kopyalandı.",
                 "Backup recovery codes copied to clipboard.",
               ),
+              "success",
             ),
           )
           .catch(() =>
@@ -2030,6 +2285,7 @@
                 "Kodları seçerek kopyalayabilirsiniz.",
                 "Select the codes to copy manually.",
               ),
+              "info",
             ),
           );
       }
@@ -2069,9 +2325,40 @@
       openDialog("auth-dialog");
       return;
     }
+    const acctLink = e.target.closest(".account-link");
+    if (
+      acctLink &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.shiftKey &&
+      !e.altKey &&
+      e.button === 0 &&
+      acctLink.getAttribute("href") !== "#modal-login" &&
+      $("#auth-dialog")
+    ) {
+      if (boot.authenticated === false) {
+        e.preventDefault();
+        authView("login");
+        openDialog("auth-dialog");
+        return;
+      }
+      if (typeof boot.authenticated !== "boolean") {
+        e.preventDefault();
+        const targetHref = acctLink.href;
+        checkAuthState().then((authed) => {
+          if (authed === false) {
+            authView("login");
+            openDialog("auth-dialog");
+          } else if (targetHref) {
+            location.href = targetHref;
+          }
+        });
+        return;
+      }
+    }
     if (e.target.closest('[href="#modal-reklam"]')) {
       e.preventDefault();
-      location.href = "/kurumsal/iletisim";
+      location.href = boot.lang === "en" ? "/kurumsal/iletisim?lang=en" : "/kurumsal/iletisim";
     }
   });
 
@@ -2090,6 +2377,44 @@
       ssbRoot.append(label);
     });
   }
+  const regFormEl = $("#register-form");
+  const regPills = $$("[data-reg-jump]", regFormEl || document);
+  function syncRegProgress(activeStep) {
+    if (!regFormEl || !regPills.length) return;
+    const step1Done = Boolean(
+      regFormEl.elements.full_name?.value?.trim() &&
+        regFormEl.elements.email?.value?.trim() &&
+        (regFormEl.elements.password?.value || "").length >= 8,
+    );
+    const step2Done = Boolean(regFormEl.elements.organization_name?.value?.trim());
+    const step3Done = $$("#register-ssb-tags input:checked", regFormEl).length > 0;
+    const step4Done = Boolean(
+      regFormEl.elements.kvkk_consent?.checked && regFormEl.elements.tos_accepted?.checked,
+    );
+    const doneMap = { 1: step1Done, 2: step2Done, 3: step3Done, 4: step4Done };
+    regPills.forEach((pill) => {
+      const n = Number(pill.dataset.regJump || "1");
+      if (activeStep) pill.classList.toggle("is-active", n === Number(activeStep));
+      pill.classList.toggle("is-complete", Boolean(doneMap[n]));
+    });
+  }
+  regPills.forEach((pill) => {
+    pill.addEventListener("click", () => {
+      const step = pill.dataset.regJump;
+      const section = $(`[data-reg-step="${step}"]`, regFormEl || document);
+      if (!section) return;
+      syncRegProgress(step);
+      section.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" });
+      const firstInput = $("input:not([type=hidden]), select", section);
+      firstInput?.focus?.();
+    });
+  });
+  regFormEl?.addEventListener("focusin", (e) => {
+    const sec = e.target.closest("[data-reg-step]");
+    if (sec) syncRegProgress(sec.dataset.regStep);
+  });
+  regFormEl?.addEventListener("input", () => syncRegProgress());
+  regFormEl?.addEventListener("change", () => syncRegProgress());
   const regEmail = $('#register-form [name="email"]');
   const govHint = $("#gov-domain-hint");
   regEmail?.addEventListener("input", () => {
@@ -2166,9 +2491,13 @@
   });
 
   function completeAuthenticatedLogin(msgText) {
-    const link = $(".account-link");
-    if (link) link.href = "/hesabim";
-    toast(msgText);
+    boot.authenticated = true;
+    const accountTarget = boot.lang === "en" ? "/hesabim?lang=en" : "/hesabim";
+    $$(".account-link").forEach((link) => {
+      link.href = accountTarget;
+      link.dataset.authState = "authenticated";
+    });
+    toast(msgText, "success");
     $("#auth-dialog")?.close();
     const next = safeRelativePath(new URL(location.href).searchParams.get("next"));
     if (next) {
@@ -2176,8 +2505,7 @@
     } else if (
       location.pathname === "/hesabim" ||
       location.pathname.startsWith("/icerik/") ||
-      location.pathname === "/e-dergi" ||
-      location.pathname === "/en/e-magazine"
+      location.pathname === "/e-dergi"
     ) {
       location.reload();
     }
@@ -2188,13 +2516,13 @@
     const nextParam = safeRelativePath(
       new URL(location.href).searchParams.get("next"),
     );
-    if (
-      nextParam &&
-      !inIframe &&
-      ($('.account-link[href="#modal-login"]') || $(".account-welcome"))
-    ) {
-      authView("login");
-      openDialog("auth-dialog");
+    if (nextParam && !inIframe) {
+      checkAuthState().then((authed) => {
+        if (authed === false) {
+          authView("login");
+          openDialog("auth-dialog");
+        }
+      });
     }
   })();
 
@@ -2491,10 +2819,10 @@
         ),
       );
       if (fb) fb.textContent = msg;
-      toast(msg);
+      toast(msg, "success");
     } catch (err) {
       if (fb) fb.textContent = err.message;
-      toast(err.message);
+      toast(err.message, "error");
     } finally {
       btn.disabled = false;
     }
@@ -2775,7 +3103,7 @@
         "Passwords do not match.",
       );
       if (fb) fb.textContent = mismatchMsg;
-      toast(mismatchMsg);
+      toast(mismatchMsg, "error");
       return;
     }
     btn.disabled = true;
@@ -2817,9 +3145,9 @@
       fb?.classList.add("is-success");
       card?.classList.add("is-success");
       if (fb) fb.textContent = msg;
-      toast(msg);
+      toast(msg, "success");
       setTimeout(() => {
-        location.href = "/hesabim";
+        location.href = boot.lang === "en" ? "/hesabim?lang=en" : "/hesabim";
       }, 1400);
     } catch (err) {
       fb?.classList.remove("is-success");
@@ -2849,6 +3177,29 @@
       return;
     }
     const password = String(form.elements.password?.value || "");
+    if (!password.trim()) {
+      fb?.classList.add("error");
+      if (fb) {
+        fb.textContent = text(
+          "Devam etmek için mevcut şifrenizi girin.",
+          "Please enter your current password to continue.",
+        );
+      }
+      form.elements.password?.focus?.();
+      return;
+    }
+    const confirmed = await msiConfirm({
+      eyebrow: text("KVKK HESAP SİLME", "ACCOUNT ERASURE"),
+      title: text("Hesabınızı kalıcı olarak silmek istiyor musunuz?", "Permanently delete your account?"),
+      message: text(
+        "Bu işlem geri alınamaz. Profiliniz, okuma geçmişiniz ve dijital erişim yetkileriniz kalıcı olarak kaldırılacaktır.",
+        "This action cannot be undone. Your profile, reading history, and digital access entitlements will be permanently erased.",
+      ),
+      confirmLabel: text("Hesabı Kalıcı Olarak Sil", "Delete Account Permanently"),
+      cancelLabel: text("Vazgeç", "Cancel"),
+      danger: true,
+    });
+    if (!confirmed) return;
     if (btn) btn.disabled = true;
     form.setAttribute("aria-busy", "true");
     fb?.classList.remove("error");
@@ -2889,10 +3240,10 @@
       if (fb) fb.textContent = msg;
       try {
         localStorage.removeItem("msi_active_user");
-        localStorage.removeItem("msi_session_token");
+        // SECURITY FIX: Removed legacy msi_session_token cleanup — sessions are HttpOnly cookies only
       } catch {}
       form.closest("dialog")?.close();
-      toast(msg);
+      toast(msg, "success");
       setTimeout(() => {
         location.href = boot.lang === "en" ? "/en" : "/";
       }, 900);
@@ -2919,28 +3270,30 @@
       if (!response.ok) throw Error();
       try {
         localStorage.removeItem("msi_active_user");
-        localStorage.removeItem("msi_session_token");
+        // SECURITY FIX: Removed legacy msi_session_token cleanup — sessions are HttpOnly cookies only
       } catch {}
-      location.href = "/hesabim";
+      location.href = boot.lang === "en" ? "/hesabim?lang=en" : "/hesabim";
     } catch {
       toast(
         text(
           "Çıkış yapılamadı. Tekrar deneyin.",
           "Sign-out failed. Please try again.",
         ),
+        "error",
       );
     }
   });
   $("[data-share-article]")?.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(location.origin + location.pathname);
-      toast(text("Bağlantı kopyalandı.", "Link copied."));
+      toast(text("Bağlantı kopyalandı.", "Link copied."), "success");
     } catch {
       toast(
         text(
           "Bağlantıyı tarayıcınızın adres çubuğundan kopyalayabilirsiniz.",
           "Please copy the link from your browser's address bar.",
         ),
+        "info",
       );
     }
   });
@@ -3544,19 +3897,21 @@
     if (open) {
       if (!isCartOpen()) cartRestoreFocus = document.activeElement;
       drawer.hidden = false;
-      drawer.classList.add("is-open");
+      requestAnimationFrame(() => drawer.classList.add("is-open"));
       drawer.setAttribute("aria-hidden", "false");
       $("#cart-backdrop")?.removeAttribute("hidden");
+      syncScrollLock();
       const focusTarget = $("[data-cart-close]", drawer) || drawer;
       if (focusTarget === drawer && !drawer.hasAttribute("tabindex")) {
         drawer.setAttribute("tabindex", "-1");
       }
       focusTarget?.focus?.();
     } else {
-      drawer.hidden = true;
       drawer.classList.remove("is-open");
+      drawer.hidden = true;
       drawer.setAttribute("aria-hidden", "true");
       $("#cart-backdrop")?.setAttribute("hidden", "");
+      syncScrollLock();
       if (cartRestoreFocus && document.contains(cartRestoreFocus)) {
         cartRestoreFocus.focus?.();
       }
@@ -3666,7 +4021,7 @@
       }
       clearCartFeedback();
       writeCart(items);
-      toast(text(`${title} sepete eklendi.`, `${title} added to cart.`));
+      toast(text(`${title} sepete eklendi.`, `${title} added to cart.`), "success");
       setCartOpen(true);
       return;
     }
@@ -3999,16 +4354,18 @@
           "E-posta tercihleriniz kaydedildi.",
           "Your email preferences have been saved.",
         ),
+        "success",
       );
     } catch (err) {
       toast(
         err?.message ||
           text("Bağlantı hatası oluştu.", "A connection error occurred."),
+        "error",
       );
     } finally {
       if (btn) btn.disabled = false;
     }
   });
 
-  window.MSIUI = { toast, openIssue };
+  window.MSIUI = { toast, openIssue, msiConfirm };
 })();

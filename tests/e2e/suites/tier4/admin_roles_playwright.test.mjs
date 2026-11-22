@@ -799,9 +799,12 @@ export function registerTests(suite, ctx) {
             await gwRes.page.reload({ waitUntil: "networkidle" });
             assert.assertEqual(await gwRes.page.locator("html").getAttribute("data-theme"), "light");
 
-            // Full-bleed fighter visual stage integrity
-            const heroLoaded = await gwRes.page.locator("#jet-visual-img").evaluate((img) => Boolean(img && img.complete && img.naturalWidth > 0));
-            assert.assertOk(heroLoaded, "#jet-visual-img must load cleanly on /podmin");
+            // Full-bleed interactive WebGL / fallback defence gallery stage integrity
+            await gwRes.page.locator("#login-stage").waitFor({ state: "visible", timeout: 5000 });
+            const heroLoaded = await gwRes.page.locator("#stage-fallback-img").evaluate((img) => Boolean(img && img.complete && img.naturalWidth > 0));
+            assert.assertOk(heroLoaded, "#stage-fallback-img must load cleanly on /podmin");
+            const activeIdx = await gwRes.page.locator("#login-stage").getAttribute("data-active-index");
+            assert.assertEqual(activeIdx, "0", "#login-stage initial active index should be 0");
 
             // Forgot password subview
             await gwRes.page.locator("#btn-show-forgot").click();

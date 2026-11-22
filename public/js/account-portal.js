@@ -91,20 +91,76 @@
     return { res, json, payload: unwrapPayload(json) };
   }
 
-  // ── Toast Region ────────────────────────────────────────────────────────
+  // ── Toast Region (Queued Stack, 4200ms, Semantic Variants) ───────────────
   const toastRegion = $(".ap-toast-region");
-  function showToast(message, isError = false) {
+  const MAX_VISIBLE_TOASTS = 4;
+  function toastIconSvg(variant) {
+    switch (variant) {
+      case "success":
+        return '<svg class="ap-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>';
+      case "error":
+        return '<svg class="ap-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/></svg>';
+      case "warning":
+        return '<svg class="ap-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg>';
+      default:
+        return '<svg class="ap-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>';
+    }
+  }
+  function showToast(message, variantOrIsError = "success") {
     if (!toastRegion || !message) return;
+    let variant = "success";
+    if (variantOrIsError === true) {
+      variant = "error";
+    } else if (variantOrIsError === false) {
+      variant = "success";
+    } else if (
+      variantOrIsError === "success" ||
+      variantOrIsError === "error" ||
+      variantOrIsError === "warning" ||
+      variantOrIsError === "info"
+    ) {
+      variant = variantOrIsError;
+    }
+
+    while (toastRegion.children.length >= MAX_VISIBLE_TOASTS) {
+      toastRegion.firstElementChild?.remove();
+    }
+
     const item = document.createElement("div");
-    item.className = "ap-toast" + (isError ? " is-error" : "");
-    item.setAttribute("role", isError ? "alert" : "status");
-    item.textContent = message;
-    toastRegion.replaceChildren(item);
-    window.setTimeout(() => {
+    item.className = `ap-toast is-${variant}`;
+    item.setAttribute("role", variant === "error" ? "alert" : "status");
+
+    const iconWrap = document.createElement("span");
+    iconWrap.innerHTML = toastIconSvg(variant);
+    if (iconWrap.firstElementChild) {
+      item.append(iconWrap.firstElementChild);
+    }
+
+    const msgEl = document.createElement("span");
+    msgEl.className = "ap-toast-msg";
+    msgEl.textContent = message;
+    item.append(msgEl);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "ap-toast-close";
+    closeBtn.setAttribute("aria-label", t("portal.close", "Kapat", "Close"));
+    closeBtn.textContent = "×";
+    item.append(closeBtn);
+
+    toastRegion.append(item);
+
+    let dismissed = false;
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      window.clearTimeout(timerId);
       if (item.parentNode === toastRegion) {
         item.remove();
       }
-    }, 4500);
+    };
+    const timerId = window.setTimeout(dismiss, 4200);
+    closeBtn.addEventListener("click", dismiss);
   }
 
   const prefersReducedMotion = () =>
@@ -172,6 +228,8 @@
       const t2 = localStorage.getItem("msi_admin_theme");
       if (t2 === "dark" || t2 === "light") return t2;
     } catch {}
+    const c = getCookie("msi_admin_theme");
+    if (c === "dark" || c === "light") return c;
     return "";
   }
   function getActiveTheme() {
@@ -244,7 +302,7 @@
 
   function openSidebar() {
     if (!sidebar) return;
-    sidebar.classList.add("is-open");
+    sidebar.classList.add("is-open", "open");
     if (sidebarBackdrop) {
       sidebarBackdrop.hidden = false;
       animateEntrance(sidebarBackdrop, { opacity: 0 }, 180);
@@ -286,7 +344,10 @@
     void sidebar.offsetWidth;
     sidebarClose?.focus();
     requestAnimationFrame(() => {
-      if (sidebar.classList.contains("is-open") && document.activeElement !== sidebarClose) {
+      if (
+        (sidebar.classList.contains("is-open") || sidebar.classList.contains("open")) &&
+        document.activeElement !== sidebarClose
+      ) {
         sidebarClose?.focus();
       }
     });
@@ -294,15 +355,17 @@
 
   function closeSidebar(restoreFocus = false) {
     if (!sidebar) return;
-    if (!sidebar.classList.contains("is-open")) return;
-    sidebar.classList.remove("is-open");
+    const wasOpen = sidebar.classList.contains("is-open") || sidebar.classList.contains("open");
+    const hasBackdrop = Boolean(sidebarBackdrop && !sidebarBackdrop.hidden);
+    if (!wasOpen && !hasBackdrop) return;
+    sidebar.classList.remove("is-open", "open");
     if (sidebarBackdrop) sidebarBackdrop.hidden = true;
     sidebarToggle?.setAttribute("aria-expanded", "false");
-    if (restoreFocus) sidebarToggle?.focus();
+    if (restoreFocus && wasOpen) sidebarToggle?.focus();
   }
 
   sidebarToggle?.addEventListener("click", () => {
-    if (sidebar?.classList.contains("is-open")) {
+    if (sidebar?.classList.contains("is-open") || sidebar?.classList.contains("open")) {
       closeSidebar(true);
     } else {
       openSidebar();
@@ -311,11 +374,28 @@
   sidebarClose?.addEventListener("click", () => closeSidebar(true));
   sidebarBackdrop?.addEventListener("click", () => closeSidebar(true));
 
+  const desktopMq =
+    typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 960px)") : null;
+  if (desktopMq) {
+    const onDesktopTransition = (e) => {
+      if (e.matches) {
+        closeSidebar(false);
+      }
+    };
+    if (typeof desktopMq.addEventListener === "function") {
+      desktopMq.addEventListener("change", onDesktopTransition);
+    } else if (typeof desktopMq.addListener === "function") {
+      desktopMq.addListener(onDesktopTransition);
+    }
+    if (desktopMq.matches) {
+      closeSidebar(false);
+    }
+  }
+
   // ── Multi-Section Tab Navigation ────────────────────────────────────────
   const VALID_TABS = ["overview", "edergi", "profile", "security", "notifications"];
   const tabButtons = $$("[data-ap-tab]");
   const panels = $$("[data-ap-panel]");
-  const mobileJumps = $$(".ap-mobile-tab[data-ap-jump]");
   let lastActiveTab = null;
 
   function normalizeTab(raw) {
@@ -329,7 +409,7 @@
     return VALID_TABS.includes(cleaned) ? cleaned : "";
   }
 
-  function activateTab(tabName, updateHash = true) {
+  function activateTab(tabName, updateUrl = true) {
     const target = normalizeTab(tabName) || "overview";
     const shouldAnimate = lastActiveTab !== null && lastActiveTab !== target;
 
@@ -338,12 +418,6 @@
       btn.setAttribute("aria-selected", active ? "true" : "false");
       btn.classList.toggle("is-active", active);
       btn.tabIndex = active ? 0 : -1;
-    });
-
-    mobileJumps.forEach((btn) => {
-      const active = btn.dataset.apJump === target;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-pressed", active ? "true" : "false");
     });
 
     let activePanel = null;
@@ -358,58 +432,95 @@
     }
     lastActiveTab = target;
 
-    if (updateHash && window.history && typeof window.history.replaceState === "function") {
+    try {
+      sessionStorage.setItem("msi_ap_active_tab", target);
+    } catch {}
+
+    if (updateUrl && window.history && typeof window.history.replaceState === "function") {
       const url = new URL(window.location.href);
-      url.hash = target === "overview" ? "" : "#" + target;
+      if (target === "overview") {
+        url.searchParams.delete("tab");
+        url.hash = "";
+      } else {
+        url.searchParams.set("tab", target);
+        url.hash = "#" + target;
+      }
       window.history.replaceState(null, "", url.toString());
     }
   }
 
-  tabButtons.forEach((btn, idx) => {
+  tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       activateTab(btn.dataset.apTab, true);
       closeSidebar(false);
     });
 
     btn.addEventListener("keydown", (e) => {
+      const list = btn.closest('[role="tablist"]');
+      const groupTabs = list ? $$('[role="tab"][data-ap-tab]', list) : tabButtons;
+      const idx = groupTabs.indexOf(btn);
+      if (idx < 0 || !groupTabs.length) return;
       let nextIdx = -1;
       if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-        nextIdx = (idx + 1) % tabButtons.length;
+        nextIdx = (idx + 1) % groupTabs.length;
       } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-        nextIdx = (idx - 1 + tabButtons.length) % tabButtons.length;
+        nextIdx = (idx - 1 + groupTabs.length) % groupTabs.length;
       } else if (e.key === "Home") {
         nextIdx = 0;
       } else if (e.key === "End") {
-        nextIdx = tabButtons.length - 1;
+        nextIdx = groupTabs.length - 1;
       }
       if (nextIdx >= 0) {
         e.preventDefault();
-        const nextBtn = tabButtons[nextIdx];
+        const nextBtn = groupTabs[nextIdx];
         activateTab(nextBtn.dataset.apTab, true);
         nextBtn.focus();
       }
     });
   });
 
-  $$("[data-ap-jump]").forEach((btn) => {
+  $$("[data-ap-jump]:not(.ap-mobile-tab)").forEach((btn) => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.apJump;
       activateTab(target, true);
       const panel = $(`[data-ap-panel="${target}"]`);
       if (panel) {
-        panel.scrollIntoView({
-          behavior: prefersReducedMotion() ? "auto" : "smooth",
-          block: "start",
-        });
+        const rect = panel.getBoundingClientRect();
+        if (rect.top < 72 || rect.top > window.innerHeight * 0.72) {
+          panel.scrollIntoView({
+            behavior: prefersReducedMotion() ? "auto" : "smooth",
+            block: "start",
+          });
+        }
       }
     });
   });
 
+  $$("[data-ap-lang-switch]").forEach((link) => {
+    link.addEventListener("click", () => {
+      try {
+        sessionStorage.setItem("msi_ap_lang_switching", "1");
+        sessionStorage.setItem("msi_ap_active_tab", lastActiveTab || "overview");
+      } catch {}
+    });
+  });
+
+  let storedLangTab = "";
+  try {
+    if (sessionStorage.getItem("msi_ap_lang_switching") === "1") {
+      storedLangTab = normalizeTab(sessionStorage.getItem("msi_ap_active_tab"));
+      sessionStorage.removeItem("msi_ap_lang_switching");
+    }
+  } catch {}
+
+  const queryTab = normalizeTab(new URLSearchParams(window.location.search).get("tab"));
   const initialTab =
     normalizeTab(window.location.hash) ||
+    queryTab ||
+    storedLangTab ||
     normalizeTab(document.body.dataset.initialTab) ||
     "overview";
-  activateTab(initialTab, false);
+  activateTab(initialTab, Boolean(storedLangTab && !queryTab && !window.location.hash));
 
   window.addEventListener("hashchange", () => {
     const hashed = normalizeTab(window.location.hash);
@@ -772,13 +883,19 @@
   const deleteDialog = $("#account-delete-confirm-dialog");
   const deleteConfirmBtn = $("#account-delete-confirm-btn");
   const deleteCancelBtn = $("#account-delete-cancel-btn");
+  const deleteCloseBtn = $("#account-delete-close-btn");
   let pendingDeletePassword = "";
+  let deleteInFlight = false;
+  let deletionSucceeded = false;
 
   async function executeAccountDeletion() {
-    if (!deleteForm) return;
+    if (!deleteForm || deleteInFlight) return;
+    deleteInFlight = true;
     const submitBtn = $('[type="submit"]', deleteForm);
     const fb = $(".form-feedback", deleteForm);
     if (deleteConfirmBtn) deleteConfirmBtn.disabled = true;
+    if (deleteCancelBtn) deleteCancelBtn.disabled = true;
+    if (deleteCloseBtn) deleteCloseBtn.disabled = true;
     if (submitBtn) submitBtn.disabled = true;
     deleteForm.setAttribute("aria-busy", "true");
     fb?.classList.remove("error");
@@ -806,6 +923,7 @@
           )
         );
       }
+      deletionSucceeded = true;
       const msg = extractMessage(
         json,
         payload,
@@ -818,10 +936,10 @@
       if (fb) fb.textContent = msg;
       try {
         localStorage.removeItem("msi_active_user");
-        localStorage.removeItem("msi_session_token");
+        // SECURITY FIX: Removed legacy msi_session_token cleanup — sessions are HttpOnly cookies only
       } catch {}
       if (deleteDialog?.open) deleteDialog.close();
-      showToast(msg);
+      showToast(msg, "success");
       window.setTimeout(() => {
         window.location.href = isEn ? "/en" : "/";
       }, 900);
@@ -831,9 +949,12 @@
       const msg =
         err?.message || t("portal.conn_err", "Bağlantı hatası oluştu.", "A connection error occurred.");
       if (fb) fb.textContent = msg;
-      showToast(msg, true);
+      showToast(msg, "error");
     } finally {
+      deleteInFlight = false;
       if (deleteConfirmBtn) deleteConfirmBtn.disabled = false;
+      if (deleteCancelBtn) deleteCancelBtn.disabled = false;
+      if (deleteCloseBtn) deleteCloseBtn.disabled = false;
       if (submitBtn) submitBtn.disabled = false;
       deleteForm.removeAttribute("aria-busy");
     }
@@ -873,6 +994,7 @@
     fb?.classList.remove("error");
     if (fb) fb.textContent = "";
     pendingDeletePassword = password;
+    deletionSucceeded = false;
 
     if (deleteDialog && typeof deleteDialog.showModal === "function") {
       deleteDialog.showModal();
@@ -883,30 +1005,73 @@
     }
   });
 
-  deleteCancelBtn?.addEventListener("click", () => {
-    pendingDeletePassword = "";
+  function closeDeleteDialog() {
+    if (deleteInFlight) return;
     if (deleteDialog?.open) deleteDialog.close();
-    $('[type="submit"]', deleteForm)?.focus();
+  }
+
+  deleteCancelBtn?.addEventListener("click", closeDeleteDialog);
+  deleteCloseBtn?.addEventListener("click", closeDeleteDialog);
+
+  deleteDialog?.addEventListener("click", (e) => {
+    if (e.target !== deleteDialog || deleteInFlight) return;
+    const r = deleteDialog.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+      closeDeleteDialog();
+    }
   });
 
-  deleteDialog?.addEventListener("cancel", () => {
+  deleteDialog?.addEventListener("cancel", (e) => {
+    if (deleteInFlight) {
+      e.preventDefault();
+      return;
+    }
     pendingDeletePassword = "";
+  });
+
+  deleteDialog?.addEventListener("close", () => {
+    pendingDeletePassword = "";
+    if (!deletionSucceeded) {
+      $('[type="submit"]', deleteForm)?.focus();
+    }
   });
 
   deleteConfirmBtn?.addEventListener("click", () => {
     executeAccountDeletion();
   });
 
-  // ── Notifications Mark-Read & Badge Sync ────────────────────────────────
+  // ── Notifications Mark-Read, Bounded Batch & Header localStorage Sync ───
+  const READ_STORAGE_KEY = "msi_read_notifications";
+  function syncReadStorage(ids) {
+    if (!Array.isArray(ids) || !ids.length) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem(READ_STORAGE_KEY) || "[]");
+      const merged = new Set(Array.isArray(existing) ? existing.map(String) : []);
+      ids.forEach((id) => {
+        if (id !== undefined && id !== null && String(id).trim()) {
+          merged.add(String(id).trim());
+        }
+      });
+      localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(Array.from(merged)));
+    } catch {}
+  }
+
+  // Initial sync of DB-read notifications into Surface 1 localStorage
+  const initialReadIds = $$('.notification-item[data-is-read="true"]')
+    .map((el) => el.dataset.notificationId)
+    .filter(Boolean);
+  if (initialReadIds.length) {
+    syncReadStorage(initialReadIds);
+  }
+
   function refreshNotificationCounters() {
     const unreadItems = $$('.notification-item[data-is-read="false"]');
     const count = unreadItems.length;
-    const badge = $("#ap-notif-badge");
-    if (badge) {
+    $$("#ap-notif-badge, [data-notif-badge]").forEach((badge) => {
       badge.textContent = String(count);
       badge.dataset.unreadCount = String(count);
       badge.hidden = count === 0;
-    }
+    });
     const kpiCount = $("#ap-kpi-unread");
     if (kpiCount) {
       kpiCount.textContent = String(count);
@@ -925,7 +1090,7 @@
     const statusBadge = $("[data-notif-state]", itemEl);
     if (statusBadge) {
       statusBadge.className = "status-badge is-muted";
-      statusBadge.textContent = isEn ? "Read" : "Okundu";
+      statusBadge.textContent = t("portal.notif_status_read", "Okundu", "Read");
     }
     $("[data-mark-read]", itemEl)?.remove();
   }
@@ -936,18 +1101,22 @@
       if (!id) return;
       btn.disabled = true;
       try {
-        const { res } = await apiFetch(`/api/v1/notifications/${encodeURIComponent(id)}/read`, {
+        const { res, payload } = await apiFetch(`/api/v1/notifications/${encodeURIComponent(id)}/read`, {
           method: "POST",
         });
-        if (!res.ok) throw new Error("mark_read_failed");
+        if (!res.ok || payload?.marked_read === false) throw new Error("mark_read_failed");
         applyItemReadUi(btn.closest(".notification-item"));
+        syncReadStorage([id]);
         refreshNotificationCounters();
-        showToast(t("portal.notif_read", "Bildirim okundu olarak işaretlendi.", "Notification marked as read."));
+        showToast(
+          t("portal.notif_read", "Bildirim okundu olarak işaretlendi.", "Notification marked as read."),
+          "success"
+        );
       } catch {
         btn.disabled = false;
         showToast(
           t("portal.notif_err", "Bildirim güncellenemedi.", "Could not update notification."),
-          true
+          "error"
         );
       }
     });
@@ -957,31 +1126,76 @@
     const btn = e.currentTarget;
     const unreadButtons = $$('.notification-item[data-is-read="false"] [data-mark-read]');
     if (!unreadButtons.length) return;
+    const originalLabel = btn.textContent;
     btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    btn.textContent = t("portal.processing", "İşleniyor…", "Processing…");
+    unreadButtons.forEach((b) => {
+      b.disabled = true;
+    });
+
+    const succeededIds = [];
+    let failedCount = 0;
+    const queue = unreadButtons.slice();
+    const concurrency = Math.min(3, queue.length);
+
     try {
-      await Promise.all(
-        unreadButtons.map(async (b) => {
-          const id = b.dataset.markRead;
-          if (!id) return;
-          const { res } = await apiFetch(`/api/v1/notifications/${encodeURIComponent(id)}/read`, {
-            method: "POST",
-          });
-          if (res.ok) {
-            applyItemReadUi(b.closest(".notification-item"));
+      const workers = Array.from({ length: concurrency }, async () => {
+        while (queue.length > 0) {
+          const itemBtn = queue.shift();
+          if (!itemBtn) break;
+          const id = itemBtn.dataset.markRead;
+          if (!id) continue;
+          try {
+            const { res, payload } = await apiFetch(
+              `/api/v1/notifications/${encodeURIComponent(id)}/read`,
+              { method: "POST" }
+            );
+            if (res.ok && payload?.marked_read !== false) {
+              succeededIds.push(id);
+              applyItemReadUi(itemBtn.closest(".notification-item"));
+            } else {
+              failedCount += 1;
+            }
+          } catch {
+            failedCount += 1;
           }
-        })
-      );
-      refreshNotificationCounters();
-      showToast(
-        t("portal.notif_all_read", "Tüm bildirimler okundu işaretlendi.", "All notifications marked as read.")
-      );
-    } catch {
-      showToast(
-        t("portal.notif_err", "Bildirimler güncellenemedi.", "Could not update notifications."),
-        true
-      );
+        }
+      });
+      await Promise.all(workers);
+
+      if (succeededIds.length > 0) {
+        syncReadStorage(succeededIds);
+        refreshNotificationCounters();
+      }
+      $$('.notification-item[data-is-read="false"] [data-mark-read]').forEach((b) => {
+        b.disabled = false;
+      });
+
+      if (succeededIds.length > 0 && failedCount === 0) {
+        showToast(
+          t("portal.notif_all_read", "Tüm bildirimler okundu işaretlendi.", "All notifications marked as read."),
+          "success"
+        );
+      } else if (succeededIds.length > 0 && failedCount > 0) {
+        showToast(
+          t(
+            "portal.notif_partial",
+            "Bazı bildirimler güncellenemedi. Lütfen tekrar deneyin.",
+            "Some notifications could not be updated. Please try again."
+          ),
+          "warning"
+        );
+      } else {
+        showToast(
+          t("portal.notif_err", "Bildirimler güncellenemedi.", "Could not update notifications."),
+          "error"
+        );
+      }
     } finally {
       btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+      btn.textContent = originalLabel;
     }
   });
 
@@ -994,7 +1208,7 @@
         if (!res.ok) throw new Error("logout_failed");
         try {
           localStorage.removeItem("msi_active_user");
-          localStorage.removeItem("msi_session_token");
+          // SECURITY FIX: Removed legacy msi_session_token cleanup — sessions are HttpOnly cookies only
         } catch {}
         window.location.href = "/hesabim";
       } catch {

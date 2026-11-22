@@ -358,7 +358,8 @@ export function registerTests(suite, ctx) {
             () => Boolean(document.querySelector("#design-preview")?.contentDocument?.body?.innerText?.trim()),
             { timeout: 15000 }
           );
-          await saRes.page.locator("details.editor-tools summary").click();
+          await saRes.page.locator("#studio-tools-btn").click();
+          await saRes.page.locator("#studio-tools-menu").waitFor({ state: "visible", timeout: 5000 });
           await saRes.page.locator("#restore-defaults").click();
           await saRes.page.locator("#studio-confirm-modal").waitFor({ state: "visible", timeout: 5000 });
 

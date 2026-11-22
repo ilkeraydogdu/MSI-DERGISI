@@ -1,0 +1,352 @@
+/* ==========================================================================
+   MSI Platform Shared Design Token & Interactive Primitive Contract (M1-M5)
+   Loaded before every surface stylesheet. No * reset, no @layer wrapper.
+   ========================================================================== */
+
+:root,
+html[data-theme="light"] {
+  /* 1. Typography */
+  --ui-font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ui-font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --ui-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --ui-text-xs: 0.75rem;
+  --ui-text-sm: 0.875rem;
+  --ui-text-base: 1rem;
+  --ui-text-lg: 1.125rem;
+  --ui-text-xl: 1.25rem;
+  --ui-text-2xl: 1.5rem;
+
+  /* 2. Spacing, Radii, Focus & Z-Index Scale */
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+  --ui-space-8: 32px;
+  --ui-space-10: 40px;
+
+  --ui-radius-xs: 2px;
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 10px;
+  --ui-radius-lg: 14px;
+  --ui-radius-xl: 18px;
+  --ui-radius-pill: 9999px;
+
+  --ui-focus-ring: 0 0 0 3px;
+
+  --ui-z-sticky: 40;
+  --ui-z-header: 60;
+  --ui-z-drawer: 200;
+  --ui-z-modal: 300;
+  --ui-z-confirm: 400;
+  --ui-z-toast: 500;
+
+  /* Shadows (Light) */
+  --ui-shadow-sm: 0 1px 2px rgba(30, 41, 59, 0.05), 0 1px 3px rgba(30, 41, 59, 0.03);
+  --ui-shadow-md: 0 6px 20px rgba(30, 41, 59, 0.07), 0 2px 6px rgba(30, 41, 59, 0.04);
+  --ui-shadow-lg: 0 18px 42px rgba(30, 41, 59, 0.12), 0 4px 12px rgba(30, 41, 59, 0.05);
+  --ui-shadow-modal: 0 22px 54px rgba(24, 20, 16, 0.16), 0 6px 18px rgba(24, 20, 16, 0.08);
+
+  /* 3. Semantic Feedback & QR Tokens (Light) */
+  --ui-success: #176b50;
+  --ui-warning: #8f4f12;
+  --ui-danger: #a83333;
+  --ui-info: #1d5fa3;
+  --ui-qr-bg: #f8fafc;
+  --ui-on-accent: #f8fafc;
+
+  /* 4a. Role A — Editorial & Member Brand (Surface 1 & Surface 2 /hesabim) */
+  --ui-brand-bg: #f6f3ee;
+  --ui-brand-surface: #fcfbf9;
+  --ui-brand-subtle: #efeae1;
+  --ui-brand-text: #1e2024;
+  --ui-brand-muted: #59534c;
+  --ui-brand-border: #ddd5c8;
+  --ui-brand-accent: #cb382a;
+  --ui-brand-accent-hover: #a31212;
+
+  /* 4b. Role B — Operator & Studio Workspace (Surfaces 3 /podmin, 4 /podmin/editor, 5 /podmin/tasarim) */
+  --ui-ops-bg: #f6f7f9;
+  --ui-ops-surface: #ffffff;
+  --ui-ops-elevated: #eef1f5;
+  --ui-ops-text: #1e293b;
+  --ui-ops-muted: #556275;
+  --ui-ops-border: #d8e0ea;
+  --ui-ops-accent: #3b66c4;
+  --ui-ops-accent-hover: #2d52a8;
+  --ui-ops-accent-btn: #3b66c4;
+}
+
+html[data-theme="dark"],
+[data-theme="dark"],
+body.admin-dark-mode {
+  /* Shadows (Dark) */
+  --ui-shadow-sm: 0 2px 6px rgba(8, 11, 16, 0.28);
+  --ui-shadow-md: 0 10px 24px rgba(8, 11, 16, 0.36);
+  --ui-shadow-lg: 0 20px 44px rgba(8, 11, 16, 0.46);
+  --ui-shadow-modal: 0 24px 56px rgba(8, 11, 16, 0.54);
+
+  /* Semantic Feedback & QR Tokens (Dark) */
+  --ui-success: #34d399;
+  --ui-warning: #fbbf24;
+  --ui-danger: #f87171;
+  --ui-info: #60a5fa;
+  --ui-qr-bg: #f8fafc;
+  --ui-on-accent: #f8fafc;
+
+  /* Role A — Editorial & Member Brand (Dark) */
+  --ui-brand-bg: #1d222c;
+  --ui-brand-surface: #262c38;
+  --ui-brand-subtle: #303846;
+  --ui-brand-text: #dadde4;
+  --ui-brand-muted: #b2bac8;
+  --ui-brand-border: #3f4a5c;
+  --ui-brand-accent: #d42020;
+  --ui-brand-accent-hover: #e03c3c;
+
+  /* Role B — Operator & Studio Workspace (Dark) */
+  --ui-ops-bg: #161b24;
+  --ui-ops-surface: #1e2532;
+  --ui-ops-elevated: #252e3e;
+  --ui-ops-text: #e5eaf2;
+  --ui-ops-muted: #9aa7bd;
+  --ui-ops-border: #313d52;
+  --ui-ops-accent: #7da4f2;
+  --ui-ops-accent-btn: #3b66c4;
+  --ui-ops-accent-hover: #96b7f7;
+}
+
+/* ==========================================================================
+   5. Shared Interactive Primitives (.ui-toast-region, .ui-dialog, .ui-btn)
+   ========================================================================== */
+
+.ui-toast-region {
+  position: fixed;
+  bottom: var(--ui-space-6);
+  right: var(--ui-space-6);
+  z-index: var(--ui-z-toast);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.ui-toast {
+  pointer-events: auto;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ui-space-3);
+  padding: 14px 16px;
+  background: var(--ui-brand-surface);
+  color: var(--ui-brand-text);
+  border: 1px solid var(--ui-brand-border);
+  border-left: 4px solid var(--ui-info);
+  border-radius: var(--ui-radius-sm);
+  box-shadow: var(--ui-shadow-lg);
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-sm);
+  line-height: 1.45;
+  animation: uiToastIn 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ui-toast--success {
+  border-left-color: var(--ui-success);
+}
+.ui-toast--error {
+  border-left-color: var(--ui-danger);
+}
+.ui-toast--warning {
+  border-left-color: var(--ui-warning);
+}
+.ui-toast--info {
+  border-left-color: var(--ui-info);
+}
+
+.ui-toast__icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ui-info);
+}
+
+.ui-toast--success .ui-toast__icon { color: var(--ui-success); }
+.ui-toast--error .ui-toast__icon { color: var(--ui-danger); }
+.ui-toast--warning .ui-toast__icon { color: var(--ui-warning); }
+
+.ui-toast__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ui-toast__close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px -4px auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--ui-radius-xs);
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ui-toast__close:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.14);
+}
+
+@media (max-width: 640px) {
+  .ui-toast-region {
+    bottom: var(--ui-space-4);
+    left: var(--ui-space-4);
+    right: var(--ui-space-4);
+    width: auto;
+    max-width: none;
+    align-items: stretch;
+  }
+}
+
+@keyframes uiToastIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Shared Accessible Modal / Dialog Geometry */
+.ui-dialog {
+  padding: var(--ui-space-6);
+  border: 1px solid var(--ui-brand-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-brand-surface);
+  color: var(--ui-brand-text);
+  width: min(580px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  box-shadow: var(--ui-shadow-modal);
+  overflow: auto;
+}
+
+.ui-dialog::backdrop {
+  background: rgba(18, 22, 32, 0.58);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.ui-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ui-space-4);
+  padding-bottom: var(--ui-space-4);
+  margin-bottom: var(--ui-space-4);
+  border-bottom: 1px solid var(--ui-brand-border);
+}
+
+.ui-dialog__body {
+  display: grid;
+  gap: var(--ui-space-4);
+}
+
+.ui-dialog__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ui-space-3);
+  padding-top: var(--ui-space-4);
+  margin-top: var(--ui-space-4);
+  border-top: 1px solid var(--ui-brand-border);
+}
+
+/* Shared Button Hierarchy */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-2);
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-xs);
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.ui-btn:focus-visible,
+.ui-toast__close:focus-visible {
+  outline: none;
+  box-shadow: var(--ui-focus-ring) rgba(203, 56, 42, 0.35);
+}
+
+.ui-btn--primary {
+  background: var(--ui-brand-accent);
+  border-color: var(--ui-brand-accent);
+  color: var(--ui-on-accent);
+}
+.ui-btn--primary:hover:not(:disabled) {
+  background: var(--ui-brand-accent-hover);
+  border-color: var(--ui-brand-accent-hover);
+}
+
+.ui-btn--secondary {
+  background: var(--ui-brand-surface);
+  border-color: var(--ui-brand-border);
+  color: var(--ui-brand-text);
+}
+.ui-btn--secondary:hover:not(:disabled) {
+  background: var(--ui-brand-subtle);
+}
+
+.ui-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ui-brand-text);
+}
+.ui-btn--ghost:hover:not(:disabled) {
+  background: var(--ui-brand-subtle);
+}
+
+.ui-btn--danger {
+  background: var(--ui-danger);
+  border-color: var(--ui-danger);
+  color: var(--ui-on-accent);
+}
+.ui-btn--danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast {
+    animation: none;
+  }
+  .ui-btn {
+    transition: none;
+  }
+}

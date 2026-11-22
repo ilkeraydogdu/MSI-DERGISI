@@ -144,62 +144,87 @@ pub async fn render_subscriptions_and_store(
     let mut body = render_page(page, &data);
 
     let tr = Some(&state.translations);
-    let cart_eyebrow = tr_text(
-        tr,
-        &lang,
-        "commerce.cart_catalog_eyebrow",
-        "DİJİTAL VE BASILI YAYIN SEPETİ",
-        "DIGITAL & PRINT PUBLICATIONS CART",
-    );
-    let cart_heading = tr_text(
-        tr,
-        &lang,
-        "commerce.cart_catalog_title",
-        "Çoklu Sipariş & Anında Dijital İndirme Kataloğu",
-        "Multi-Item Order & Instant Digital Download Catalogue",
-    );
-    let open_cart_lbl = tr_text(
-        tr,
-        &lang,
-        "commerce.open_cart",
-        "Sepeti Aç",
-        "Open Cart",
-    );
-    let add_to_cart_lbl = tr_text(
-        tr,
-        &lang,
-        "commerce.add_to_cart",
-        "Sepete Ekle",
-        "Add to Cart",
-    );
+    let has_products_section = page.sections.iter().any(|s| {
+        s.enabled && matches!(s.kind, crate::engine::design::config::SectionKind::Products)
+    });
+    if !has_products_section {
+        let cart_eyebrow = tr_text(
+            tr,
+            &lang,
+            "commerce.cart_catalog_eyebrow",
+            "DİJİTAL VE BASILI YAYIN SEPETİ",
+            "DIGITAL & PRINT PUBLICATIONS CART",
+        );
+        let cart_heading = tr_text(
+            tr,
+            &lang,
+            "commerce.cart_catalog_title",
+            "Çoklu Sipariş & Anında Dijital İndirme Kataloğu",
+            "Multi-Item Order & Instant Digital Download Catalogue",
+        );
+        let open_cart_lbl = tr_text(
+            tr,
+            &lang,
+            "commerce.open_cart",
+            "Sepeti Aç",
+            "Open Cart",
+        );
+        let add_to_cart_lbl = tr_text(
+            tr,
+            &lang,
+            "commerce.add_to_cart",
+            "Sepete Ekle",
+            "Add to Cart",
+        );
 
-    let product_cards: String = snap
-        .commerce_products
-        .iter()
-        .filter(|p| p.is_available)
-        .map(|p| {
-            let title = localized(&lang, &p.title_tr, &p.title_en);
-            let desc = localized(&lang, &p.description_tr, &p.description_en);
-            format!(
-                r#"<article class="plan-card"><div class="eyebrow">{ptype}</div><h3>{title}</h3><p>{desc}</p><div class="plan-price">₺{price:.0}</div><button type="button" class="button primary" data-add-to-cart data-item-type="product" data-item-code="{sku}" data-item-title="{title}" data-item-price="{price:.2}">{btn}</button></article>"#,
-                ptype = esc(&p.product_type),
-                title = esc(title),
-                desc = esc(desc),
-                price = p.price_try,
-                sku = esc(&p.sku),
-                btn = esc(&add_to_cart_lbl),
-            )
-        })
-        .collect();
+        let product_cards: String = snap
+            .commerce_products
+            .iter()
+            .filter(|p| p.is_available)
+            .map(|p| {
+                let title = localized(&lang, &p.title_tr, &p.title_en);
+                let desc = localized(&lang, &p.description_tr, &p.description_en);
+                let ptype = match p.product_type.trim().to_ascii_lowercase().as_str() {
+                    "book" | "print_book" | "kitap" => {
+                        if lang == "en" { "PRINT BOOK" } else { "BASILI KİTAP" }
+                    }
+                    "almanac" | "almanak" => {
+                        if lang == "en" { "ALMANAC" } else { "ALMANAK" }
+                    }
+                    "digital_dossier" | "dossier" | "digital" => {
+                        if lang == "en" { "DIGITAL DOSSIER" } else { "DİJİTAL DOSYA" }
+                    }
+                    "photo_license" | "photo" => {
+                        if lang == "en" { "PHOTO LICENCE" } else { "FOTOĞRAF LİSANSI" }
+                    }
+                    "magazine" | "issue" => {
+                        if lang == "en" { "SPECIAL EDITION" } else { "ÖZEL YAYIN" }
+                    }
+                    _ => {
+                        if lang == "en" { "PUBLICATION" } else { "YAYIN" }
+                    }
+                };
+                format!(
+                    r#"<article class="plan-card"><div class="eyebrow">{ptype}</div><h3>{title}</h3><p>{desc}</p><div class="plan-price">₺{price:.0}</div><button type="button" class="button primary" data-add-to-cart data-item-type="product" data-item-code="{sku}" data-item-title="{title}" data-item-price="{price:.2}">{btn}</button></article>"#,
+                    ptype = ptype,
+                    title = esc(title),
+                    desc = esc(desc),
+                    price = p.price_try,
+                    sku = esc(&p.sku),
+                    btn = esc(&add_to_cart_lbl),
+                )
+            })
+            .collect();
 
-    if !product_cards.is_empty() {
-        body.push_str(&format!(
-            r#"<section class="container section-space" id="commerce-cart-catalog"><div class="section-heading"><div><div class="eyebrow">{eyebrow}</div><h2>{heading}</h2></div><button type="button" class="button secondary" data-cart-toggle>{open_cart}</button></div><div class="plans-grid">{cards}</div></section>"#,
-            eyebrow = esc(&cart_eyebrow),
-            heading = esc(&cart_heading),
-            open_cart = esc(&open_cart_lbl),
-            cards = product_cards,
-        ));
+        if !product_cards.is_empty() {
+            body.push_str(&format!(
+                r#"<section class="container section-space" id="commerce-cart-catalog"><div class="section-heading"><div><div class="eyebrow">{eyebrow}</div><h2>{heading}</h2></div><button type="button" class="button secondary" data-cart-toggle>{open_cart}</button></div><div class="plans-grid">{cards}</div></section>"#,
+                eyebrow = esc(&cart_eyebrow),
+                heading = esc(&cart_heading),
+                open_cart = esc(&open_cart_lbl),
+                cards = product_cards,
+            ));
+        }
     }
 
     body.push_str(&render_newsletter_trigger_band(&lang, tr));

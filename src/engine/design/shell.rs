@@ -235,8 +235,8 @@ pub fn render_full(
                     );
                 }
                 // Bootstrap CSS intentionally eliminated; pure MSI editorial design system only
-                head.link_css("/css/msi-design-system.css?v=35");
                 head.link_css("/css/design-tokens.css");
+                head.link_css("/css/msi-design-system.css?v=35");
                 head.script_inline(
                     crate::engine::design::theme_boot::UNIFIED_THEME_PREHYDRATE_JS,
                     nonce,
@@ -327,7 +327,7 @@ pub fn render_full(
 
                     bd.el(
                         "div",
-                        &[("class", "toast-region"), ("aria-live", "polite"), ("aria-atomic", "true")],
+                        &[("class", "toast-region"), ("aria-live", "polite"), ("aria-atomic", "false")],
                         |_| {},
                     );
 
@@ -359,6 +359,7 @@ fn write_header(
     let search_aria = tr_text(tr, lang, "nav.search", "Ara", "Search");
     let notif_aria = tr_text(tr, lang, "shell.notifications", "Bildirimler", "Notifications");
     let theme_aria = tr_text(tr, lang, "shell.toggle_theme", "Tema değiştir", "Toggle theme");
+    let cart_aria = tr_text(tr, lang, "commerce.open_cart", "Sepet", "Cart");
     let account_aria = tr_text(tr, lang, "nav.account", "Hesabım", "My Account");
     let menu_aria = tr_text(tr, lang, "shell.menu", "Menü", "Menu");
     let notif_count_str = notification_count.to_string();
@@ -418,6 +419,31 @@ fn write_header(
                         ],
                         |btn| {
                             btn.raw(&icon("moon"));
+                        },
+                    );
+                    acts.el(
+                        "button",
+                        &[
+                            ("type", "button"),
+                            ("class", "icon-button cart-toggle-btn"),
+                            ("data-cart-toggle", ""),
+                            ("aria-label", &cart_aria),
+                            ("title", &cart_aria),
+                        ],
+                        |btn| {
+                            btn.raw(&icon("cart"));
+                            btn.el_with(
+                                "span",
+                                |attrs| {
+                                    attrs
+                                        .attr("class", "notification-count cart-count")
+                                        .attr("data-cart-count", "")
+                                        .bool_attr("hidden", true);
+                                },
+                                |sp| {
+                                    sp.text("0");
+                                },
+                            );
                         },
                     );
                     acts.el(

@@ -338,15 +338,21 @@ impl CentralSecurityFilter {
     /// Hardened CSP: removes `'unsafe-inline'` from `default-src` and enforces
     /// `object-src 'none'; base-uri 'self'; form-action 'self';`.
     pub fn security_headers_list(exec_us: u128, nonce: Option<&str>) -> Vec<(&'static str, String)> {
+        // SECURITY FIX: Removed 'unsafe-inline' fallback entirely. If no nonce is available,
+        // we still enforce a strict CSP without inline script/style execution.
+        // Also narrowed default-src from 'self' https: data: blob: to just 'self'.
         let csp = if let Some(n) = nonce {
             format!(
-                "default-src 'self' https: data: blob:; script-src 'self' 'nonce-{}' 'wasm-unsafe-eval'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';",
-                n
+                "default-src 'self'; script-src 'self' 'nonce-{}' 'wasm-unsafe-eval'; style-src 'self' 'nonce-{}'; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self' https:; media-src 'self' https:; worker-src 'self' blob:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';",
+                n, n
             )
         } else {
-            "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';".to_string()
+            // No nonce available — block inline scripts/styles entirely rather than falling back to unsafe-inline.
+            // This may break pages rendered without WAF middleware; all production paths should provide a nonce.
+            tracing::warn!("CSP rendered WITHOUT nonce — inline scripts and styles will be blocked");
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self' https:; media-src 'self' https:; worker-src 'self' blob:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';".to_string()
         };
-        vec![
+        let mut headers = vec![
             ("X-Content-Type-Options", "nosniff".to_string()),
             ("X-Frame-Options", "SAMEORIGIN".to_string()),
             (
@@ -362,8 +368,13 @@ impl CentralSecurityFilter {
                 "geolocation=(), microphone=(), camera=()".to_string(),
             ),
             ("Content-Security-Policy", csp),
-            ("X-Engine-Latency-Us", exec_us.to_string()),
-        ]
+        ];
+        // SECURITY FIX: Only expose engine latency in non-production environments
+        // to prevent timing side-channel information disclosure.
+        if cfg!(debug_assertions) {
+            headers.push(("X-Engine-Latency-Us", exec_us.to_string()));
+        }
+        headers
     }
 }
 

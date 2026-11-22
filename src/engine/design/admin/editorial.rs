@@ -3,8 +3,8 @@
 
 use super::ui::{
     action_btn, admin_card, admin_drawer, check_matrix, check_matrix_with_attrs, check_pill,
-    details_box, form_group, icon, input_ctrl, lang_tabs, ops_table, select_ctrl, subtab_bar,
-    subtab_pane, tab_pane, textarea_ctrl, upload_field,
+    details_box, form_group, form_panel_header, icon, input_ctrl, lang_tabs, ops_table,
+    select_ctrl, subtab_bar, subtab_pane, tab_pane, textarea_ctrl, upload_field,
 };
 use super::{institution_tags, placement_tags, ssb_tags, tr_admin};
 use crate::engine::design::html_dsl::HtmlBuf;
@@ -125,7 +125,7 @@ fn render_tab_contents(buf: &mut HtmlBuf, seg: &str, tr: &TranslationCache, lang
                         (&col_placement, ""),
                         (&col_access, ""),
                         (&col_engagement, "text-right"),
-                        (&col_action, ""),
+                        (&col_action, "col-action"),
                     ],
                     "tbody-contents",
                     Some(&loading),
@@ -378,7 +378,7 @@ fn render_tab_issues(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         (&col_cover_title, ""),
                         (&col_scope, ""),
                         (&col_epdf, ""),
-                        (&col_action, ""),
+                        (&col_action, "col-action"),
                     ],
                     "tbody-admin-issues",
                     Some(&loading),
@@ -488,6 +488,8 @@ fn render_tab_media_seo(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
     let lbl_tags = tr_admin(tr, lang, "admin.editorial.media_tags", "Etiketler", "Tags");
     let save_meta = tr_admin(tr, lang, "admin.editorial.media_save_meta", "Bilgileri Kaydet", "Save Metadata");
     let cancel_meta = tr_admin(tr, lang, "admin.form.cancel", "Vazgeç", "Cancel");
+    let edit_meta_title = tr_admin(tr, lang, "admin.editorial.media_edit_title", "Medya SEO & Alt Metin Düzenle", "Edit Media SEO & Alt Text");
+    let close_lbl = tr_admin(tr, lang, "admin.form.close", "Kapat", "Close");
     let media_loading = tr_admin(tr, lang, "admin.editorial.media_loading", "Medya kütüphanesi yükleniyor...", "Loading media library...");
     let seo_title = tr_admin(tr, lang, "admin.editorial.seo_title", "Canlı Arama & Sosyal Medya Önizlemesi", "Live Search & Social Media Preview");
     let seo_desc = tr_admin(tr, lang, "admin.editorial.seo_desc", "Seçilen yayının Google SERP, Open Graph ve Schema.org çıktısı.", "Google SERP, Open Graph and Schema.org output for the selected publication.");
@@ -538,6 +540,7 @@ fn render_tab_media_seo(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                 },
                 |card| {
                     card.el("div", &[("id", "media-edit-panel"), ("class", "hidden form-container-elevated")], |ep| {
+                        form_panel_header(ep, "media-edit-panel-title", "fa-pencil-square-o", &edit_meta_title, "cancel-media-meta", &close_lbl);
                         ep.void_el("input", &[("type", "hidden"), ("id", "media-edit-id"), ("value", "0")]);
                         ep.el("div", &[("class", "form-row-3 mb-2")], |r| {
                             form_group(r, Some("media-edit-alt-tr"), &lbl_alt_tr, |g| input_ctrl(g, "text", "media-edit-alt-tr", "", "", &ph_alt_tr, &[]));
@@ -685,8 +688,8 @@ fn render_tab_media_seo(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
         ];
         admin_card(
             tab,
-            "mt-4",
-            Some("media-spec-guide-card"),
+            "mt-4 media-spec-guide-card",
+            None,
             "fa-sliders",
             &guide_title,
             Some(&guide_desc),
@@ -809,15 +812,18 @@ fn render_tab_taxonomy(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         form_group(r, Some("cat-sort-order"), &lbl_cat_sort, |g| input_ctrl(g, "number", "cat-sort-order", "", "25", "", &[]));
                     });
                     form_group(f, Some("cat-desc-tr"), &lbl_cat_desc, |g| input_ctrl(g, "text", "cat-desc-tr", "", "", &ph_cat_desc, &[]));
-                    f.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-primary")], |b| {
-                        icon(b, "fa-plus");
-                        b.raw(" ");
-                        b.text(&cat_save_btn);
+                    f.el("div", &[("class", "flex gap-2 flex-wrap")], |btns| {
+                        btns.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-primary")], |b| {
+                            icon(b, "fa-plus");
+                            b.raw(" ");
+                            b.text(&cat_save_btn);
+                        });
+                        action_btn(btns, "btn-cmd", "reset-category-form", None, Some("fa-eraser"), &rec_clear_btn);
                     });
                 });
             });
             admin_card(pane, "", None, "fa-sitemap", &cat_card_title, Some(&cat_card_desc), |_| {}, |card| {
-                ops_table(card, "", None, &[(&col_permalink, ""), (&col_cat_name, ""), (&col_section_group, ""), (&col_structure, ""), (&col_action, "")], "tbody-categories", Some(&cats_loading), None);
+                ops_table(card, "", None, &[(&col_permalink, ""), (&col_cat_name, ""), (&col_section_group, ""), (&col_structure, ""), (&col_action, "col-action")], "tbody-categories", Some(&cats_loading), None);
             });
         });
 
@@ -834,15 +840,18 @@ fn render_tab_taxonomy(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         form_group(r, Some("ssb-group"), &lbl_ssb_group, |g| input_ctrl(g, "text", "ssb-group", "", "", &ph_ssb_group, &[]));
                         form_group(r, Some("ssb-sort"), &lbl_ssb_sort, |g| input_ctrl(g, "number", "ssb-sort", "", "15", "", &[]));
                     });
-                    f.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-success")], |b| {
-                        icon(b, "fa-tags");
-                        b.raw(" ");
-                        b.text(&ssb_save_btn);
+                    f.el("div", &[("class", "flex gap-2 flex-wrap")], |btns| {
+                        btns.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-success")], |b| {
+                            icon(b, "fa-tags");
+                            b.raw(" ");
+                            b.text(&ssb_save_btn);
+                        });
+                        action_btn(btns, "btn-cmd", "reset-ssb-form", None, Some("fa-eraser"), &rec_clear_btn);
                     });
                 });
             });
             admin_card(pane, "", None, "fa-tasks", &ssb_card_title, Some(&ssb_card_desc), |_| {}, |card| {
-                ops_table(card, "", None, &[(&col_catalog_code, ""), (&col_interest, ""), (&col_parent_group, ""), (&col_sort, ""), (&col_action, "")], "tbody-ssb-tags", Some(&ssb_loading), None);
+                ops_table(card, "", None, &[(&col_catalog_code, ""), (&col_interest, ""), (&col_parent_group, ""), (&col_sort, ""), (&col_action, "col-action")], "tbody-ssb-tags", Some(&ssb_loading), None);
             });
         });
 
@@ -886,7 +895,7 @@ fn render_tab_taxonomy(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                             (&rec_col_slug, ""),
                             (&rec_prio_lbl, "text-right"),
                             (&rec_col_status, ""),
-                            (&col_action, ""),
+                            (&col_action, "col-action"),
                         ],
                         "tbody-recommendation-rules",
                         Some(&rec_loading),

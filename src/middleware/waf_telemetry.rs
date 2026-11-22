@@ -201,6 +201,7 @@ pub async fn central_waf_and_telemetry_middleware(
         && (path.starts_with("/api/v1/account/")
             || path.starts_with("/api/v1/auth/totp/")
             || path == "/api/v1/auth/logout"
+            || path == "/api/v1/auth/reset-password"
             || path == "/api/v1/subscriptions/checkout"
             || path == "/api/v1/commerce/cart-checkout"
             || path == "/api/v1/email-preferences"

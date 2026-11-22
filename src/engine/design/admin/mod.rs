@@ -11,6 +11,7 @@ pub mod analytics;
 pub mod commercial;
 pub mod editorial;
 pub mod login;
+pub mod login_stage;
 pub mod shell;
 pub mod system;
 pub mod ui;

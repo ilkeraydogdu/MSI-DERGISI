@@ -147,7 +147,7 @@ async fn default_podmin_admin_gateway_mounts_without_panic_and_disables_legacy_s
     assert_eq!(st, StatusCode::OK);
     assert!(login_html.contains(r#"data-admin-path="/podmin""#));
     assert!(login_html.contains(r#"id="login-form""#));
-    assert!(login_html.contains(r#"login-showcase"#));
+    assert!(login_html.contains(r#"id="login-stage""#));
 
     // 2. /msi-komuta is no longer mounted when admin_path_secret == "podmin"
     let (st_old, _, _) = get_resp(&app, "/msi-komuta").await;
@@ -207,7 +207,8 @@ async fn default_podmin_gateway_serves_podmin_and_studio_while_blocking_legacy_s
     assert_eq!(st, StatusCode::OK);
     assert!(login_html.contains("data-admin-path=\"/podmin\""));
     assert!(login_html.contains("id=\"login-form\""));
-    assert!(login_html.contains("podmin-fighter-vertical.webp"));
+    assert!(login_html.contains(r#"id="login-stage""#));
+    assert!(login_html.contains("/images/admin/stage/01-f4e"));
 
     // 2. Legacy /msi-komuta must return 404 when ADMIN_PATH_SECRET=podmin
     let (st_old, _, _) = get_resp(&app, "/msi-komuta").await;

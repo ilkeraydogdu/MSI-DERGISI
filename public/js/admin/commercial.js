@@ -247,9 +247,17 @@
       if (!list.length) renderTableState(tbody, "empty", { colCount: 6, emptyMsg: t("admin.state.no_invoices", "Kayıtlı sipariş veya fatura bulunmuyor.") });
       else {
         const canWrite = ctx.hasPerm("invoices:write|commerce:manage");
+        const invStatusLabel = (raw) => {
+          const k = String(raw || "pending").trim().toLowerCase();
+          const trMap = { paid: "Ödendi", pending: "Bekliyor", failed: "Başarısız", cancelled: "İptal Edildi", refunded: "İade Edildi" };
+          const enMap = { paid: "Paid", pending: "Pending", failed: "Failed", cancelled: "Cancelled", refunded: "Refunded" };
+          return t("admin.status.invoice_" + k, trMap[k] || raw, enMap[k] || raw);
+        };
         tbody.innerHTML = list.map((inv) => {
           const paid = String(inv.payment_status || "").toLowerCase() === "paid";
-          const st = paid ? `<span class="badge-tag badge-paywall-0">${esc(t("admin.status.paid", "Ödendi"))}</span>` : `<span class="badge-tag badge-paywall-2">${esc(inv.payment_status)}</span>`;
+          const st = paid
+            ? `<span class="badge-tag badge-paywall-0">${esc(t("admin.status.paid", "Ödendi", "Paid"))}</span>`
+            : `<span class="badge-tag badge-paywall-2">${esc(invStatusLabel(inv.payment_status))}</span>`;
           const act = paid ? `<span class="text-xs text-muted">${esc(t("admin.status.completed", "Tamamlandı"))}</span>`
             : canWrite ? `<button type="button" class="btn-cmd btn-cmd-sm btn-cmd-primary" data-admin-action="mark-paid" data-id="${esc(inv.id)}">${svgIcon("check")} ${esc(t("admin.action.mark_paid", "Ödendi İşaretle"))}</button>`
             : `<span class="text-xs text-muted">${esc(t("admin.status.pending_invoice", "Bekliyor"))}</span>`;
@@ -358,6 +366,11 @@
       if (r.ok) { showToast(t("admin.toast.ad_deleted", "Kampanya #${id} silindi.").replace("${id}", id)); await loadAds(); } else showToast(r.errorMessage, true);
     },
     "load-revenue-summary": loadRevenueSummary,
+    "reset-sub-plan-form": () => {
+      byId("form-sub-plan")?.reset();
+      setVal("sp-sort", "10");
+      if (byId("sp-featured")) byId("sp-featured").checked = false;
+    },
     "edit-plan": (el) => {
       const p = state.plans.find((x) => x.code === el.getAttribute("data-code"));
       if (!p) return;
@@ -368,14 +381,20 @@
       setVal("sp-features-tr", (p.features_tr || []).join("\n")); setVal("sp-features-en", (p.features_en || []).join("\n"));
       if (byId("sp-featured")) byId("sp-featured").checked = !!p.is_featured;
       setVal("sp-sort", p.sort_order ?? 10);
+      det?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       byId("sp-name-tr")?.focus();
-      showToast(t("admin.toast.plan_editing", "\"${name}\" planı düzenlemeye alındı.").replace("${name}", p.name_tr));
+      showToast(t("admin.toast.plan_editing", "\"${name}\" planı düzenlemeye alındı.", "Plan \"${name}\" loaded for editing.").replace("${name}", p.name_tr));
     },
     "delete-plan": async (el) => {
       const code = el.getAttribute("data-code");
       if (!(await confirmDialog(t("admin.confirm.delete_plan", "\"${code}\" planı silinsin mi?").replace("${code}", code)))) return;
       const r = await apiRequest(`/api/v1/admin/subscription-plans/${encodeURIComponent(code)}`, { method: "DELETE" });
       if (r.ok) { showToast(t("admin.toast.plan_deleted", "Plan \"${code}\" silindi.").replace("${code}", code)); await loadPlans(); } else showToast(r.errorMessage, true);
+    },
+    "reset-commerce-product-form": () => {
+      byId("form-commerce-product")?.reset();
+      setVal("cp-id", "0");
+      if (byId("cp-available")) byId("cp-available").checked = true;
     },
     "edit-product": (el) => {
       const pr = state.products.find((x) => Number(x.id) === Number(el.getAttribute("data-id")));
@@ -387,8 +406,9 @@
       setVal("cp-price", pr.price_try ?? 0); setVal("cp-res", pr.file_resolution_or_pages); setVal("cp-cover", pr.cover_image);
       setVal("cp-desc-tr", pr.description_tr); setVal("cp-desc-en", pr.description_en);
       if (byId("cp-available")) byId("cp-available").checked = !!pr.is_available;
+      det?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
       byId("cp-title-tr")?.focus();
-      showToast(t("admin.toast.product_editing", "\"${name}\" düzenlemeye alındı.").replace("${name}", pr.title_tr));
+      showToast(t("admin.toast.product_editing", "\"${name}\" düzenlemeye alındı.", "\"${name}\" loaded for editing.").replace("${name}", pr.title_tr));
     },
     "delete-product": async (el) => {
       const id = el.getAttribute("data-id");

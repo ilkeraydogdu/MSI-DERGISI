@@ -15,6 +15,18 @@ const __dirname = path.dirname(__filename);
 const SUITES_DIR = path.join(__dirname, "suites");
 
 function parseArgs(argv) {
+  const envBaseUrl = (process.env.E2E_BASE_URL || process.env.BASE_URL || "").trim();
+  const envAdminPath =
+    process.env.E2E_ADMIN_PATH !== undefined
+      ? process.env.E2E_ADMIN_PATH
+      : process.env.ADMIN_ROOT !== undefined
+        ? process.env.ADMIN_ROOT
+        : undefined;
+  const envScreenshotDir = (process.env.E2E_SCREENSHOT_DIR || "").trim();
+  const defaultScreenshotDir =
+    envScreenshotDir ||
+    (process.env.E2E_CAPTURE_SCREENSHOTS === "1" ? "/tmp/msi_e2e_screenshots" : null);
+
   const opts = {
     tiers: null,
     suites: [],
@@ -24,9 +36,9 @@ function parseArgs(argv) {
     build: false,
     perSuite: false,
     list: false,
-    baseUrl: process.env.BASE_URL ? process.env.BASE_URL.trim() : null,
-    adminPath: process.env.ADMIN_ROOT !== undefined ? process.env.ADMIN_ROOT : undefined,
-    screenshotDir: null,
+    baseUrl: envBaseUrl || null,
+    adminPath: envAdminPath,
+    screenshotDir: defaultScreenshotDir,
     allowMutating: false,
     help: false,
   };
@@ -213,6 +225,13 @@ function buildExternalTargetDescriptor(opts) {
         email: process.env.E2E_SUPERADMIN_EMAIL || process.env.E2E_ADMIN_EMAIL || "",
         password: process.env.E2E_SUPERADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD || "",
         role: "super_admin",
+      },
+      readerEmail: process.env.E2E_READER_EMAIL || "",
+      readerPassword: process.env.E2E_READER_PASSWORD || "",
+      reader: {
+        email: process.env.E2E_READER_EMAIL || "",
+        password: process.env.E2E_READER_PASSWORD || "",
+        role: "registered",
       },
     },
     readLogTail: () => "(external target: no local server log)",

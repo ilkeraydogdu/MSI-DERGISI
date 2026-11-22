@@ -117,7 +117,7 @@ fn render_tab_ads(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         (&col_campaign, ""),
                         (&col_targeting, ""),
                         (&col_impressions, "text-right"),
-                        (&col_action, ""),
+                        (&col_action, "col-action"),
                     ],
                     "tbody-ads",
                     Some(&loading),
@@ -294,6 +294,7 @@ fn render_ad_conflict_modal(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str
             ("class", "modal-overlay hidden"),
             ("role", "dialog"),
             ("aria-modal", "true"),
+            ("aria-hidden", "true"),
             ("aria-labelledby", "ad-conflict-modal-title"),
         ],
         |ov| {
@@ -383,6 +384,7 @@ fn render_tab_commerce(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
     let lbl_features_en = tr_admin(tr, lang, "admin.commercial.lbl_features_en", "Features (EN — One per line)", "Features (EN — One per line)");
     let chk_featured_plan = tr_admin(tr, lang, "admin.commercial.chk_featured_plan", "Önerilen / Öne Çıkan Plan", "Recommended / Featured Plan");
     let save_plan_btn = tr_admin(tr, lang, "admin.commercial.save_plan", "Planı Kaydet", "Save Plan");
+    let clear_btn = tr_admin(tr, lang, "admin.form.clear", "Temizle", "Clear");
     let plans_card_title = tr_admin(tr, lang, "admin.commercial.plans_card_title", "Aktif Abonelik Paketleri", "Active Subscription Packages");
     let plans_card_desc = tr_admin(tr, lang, "admin.commercial.plans_card_desc", "Okuyucu abonelik sayfasında sunulan bireysel ve kurumsal katmanlar.", "Individual and corporate tiers offered on the reader subscription page.");
     let col_plan_code = tr_admin(tr, lang, "admin.commercial.col_plan_code", "Plan Kodu", "Plan Code");
@@ -499,18 +501,21 @@ fn render_tab_commerce(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         form_group(r, Some("sp-features-tr"), &lbl_features_tr, |g| textarea_ctrl(g, "sp-features-tr", "textarea-sm", "12 Basılı Sayı\nTam Dijital Arşiv", &[]));
                         form_group(r, Some("sp-features-en"), &lbl_features_en, |g| textarea_ctrl(g, "sp-features-en", "textarea-sm", "12 Print Issues\nFull Digital Archive", &[]));
                     });
-                    f.el("div", &[("class", "flex justify-between items-center")], |fl| {
+                    f.el("div", &[("class", "flex justify-between items-center flex-wrap gap-2")], |fl| {
                         check_pill(fl, Some("sp-featured"), None, None, false, "", &chk_featured_plan);
-                        fl.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-primary btn-cmd-sm")], |b| {
-                            icon(b, "fa-floppy-o");
-                            b.raw(" ");
-                            b.text(&save_plan_btn);
+                        fl.el("div", &[("class", "flex gap-2 flex-wrap")], |btns| {
+                            btns.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-primary btn-cmd-sm")], |b| {
+                                icon(b, "fa-floppy-o");
+                                b.raw(" ");
+                                b.text(&save_plan_btn);
+                            });
+                            action_btn(btns, "btn-cmd btn-cmd-sm", "reset-sub-plan-form", None, Some("fa-eraser"), &clear_btn);
                         });
                     });
                 });
             });
             admin_card(pane, "", None, "fa-star", &plans_card_title, Some(&plans_card_desc), |_| {}, |card| {
-                ops_table(card, "", None, &[(&col_plan_code, ""), (&col_plan_name, ""), (&col_price, "text-right"), (&col_period_scope, ""), (&col_action, "")], "tbody-sub-plans", Some(&plans_loading), None);
+                ops_table(card, "", None, &[(&col_plan_code, ""), (&col_plan_name, ""), (&col_price, "text-right"), (&col_period_scope, ""), (&col_action, "col-action")], "tbody-sub-plans", Some(&plans_loading), None);
             });
         });
 
@@ -538,24 +543,27 @@ fn render_tab_commerce(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         form_group(r, Some("cp-desc-tr"), &lbl_desc_tr, |g| input_ctrl(g, "text", "cp-desc-tr", "", "", &ph_desc_tr, &[]));
                         form_group(r, Some("cp-desc-en"), &lbl_desc_en, |g| input_ctrl(g, "text", "cp-desc-en", "", "", &ph_desc_en, &[]));
                     });
-                    f.el("div", &[("class", "flex justify-between items-center")], |fl| {
+                    f.el("div", &[("class", "flex justify-between items-center flex-wrap gap-2")], |fl| {
                         check_pill(fl, Some("cp-available"), None, None, true, "", &chk_available);
-                        fl.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-primary btn-cmd-sm")], |b| {
-                            icon(b, "fa-floppy-o");
-                            b.raw(" ");
-                            b.text(&save_product_btn);
+                        fl.el("div", &[("class", "flex gap-2 flex-wrap")], |btns| {
+                            btns.el("button", &[("type", "submit"), ("class", "btn-cmd btn-cmd-primary btn-cmd-sm")], |b| {
+                                icon(b, "fa-floppy-o");
+                                b.raw(" ");
+                                b.text(&save_product_btn);
+                            });
+                            action_btn(btns, "btn-cmd btn-cmd-sm", "reset-commerce-product-form", None, Some("fa-eraser"), &clear_btn);
                         });
                     });
                 });
             });
             admin_card(pane, "", None, "fa-cube", &products_card_title, Some(&products_card_desc), |_| {}, |card| {
-                ops_table(card, "", None, &[(&col_sku, ""), (&col_category, ""), (&col_work_source, ""), (&col_unit_price, "text-right"), (&col_action, "")], "tbody-commerce-products", Some(&products_loading), None);
+                ops_table(card, "", None, &[(&col_sku, ""), (&col_category, ""), (&col_work_source, ""), (&col_unit_price, "text-right"), (&col_action, "col-action")], "tbody-commerce-products", Some(&products_loading), None);
             });
         });
 
         subtab_pane(tab, "tab14-invoices", false, Some("invoices:read|commerce:read"), |pane| {
             admin_card(pane, "", None, "fa-file-text-o", &invoices_card_title, Some(&invoices_card_desc), |_| {}, |card| {
-                ops_table(card, "", None, &[(&col_invoice_date, ""), (&col_customer, ""), (&col_item, ""), (&col_amount, "text-right"), (&col_payment_status, ""), (&col_action, "")], "tbody-invoices", Some(&invoices_loading), Some("pagination-invoices"));
+                ops_table(card, "", None, &[(&col_invoice_date, ""), (&col_customer, ""), (&col_item, ""), (&col_amount, "text-right"), (&col_payment_status, ""), (&col_action, "col-action")], "tbody-invoices", Some(&invoices_loading), Some("pagination-invoices"));
             });
         });
     });
@@ -605,7 +613,7 @@ fn render_tab_corporate(buf: &mut HtmlBuf, tr: &TranslationCache, lang: &str) {
                         (&col_institution, ""),
                         (&col_note, ""),
                         (&col_status, ""),
-                        (&col_decision, ""),
+                        (&col_decision, "col-action"),
                     ],
                     "tbody-corporate-requests",
                     Some(&loading),

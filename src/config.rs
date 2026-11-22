@@ -312,6 +312,22 @@ impl AppConfig {
         if std::env::var("ADMIN_DEFAULT_PASS").is_err() {
             missing.push("ADMIN_DEFAULT_PASS");
         }
+        // SECURITY FIX: Also validate LEGACY_SEED_SECRET and BACKUP_ENCRYPTION_KEY in production
+        if std::env::var("LEGACY_SEED_SECRET").is_err() {
+            missing.push("LEGACY_SEED_SECRET");
+        }
+        if std::env::var("BACKUP_ENCRYPTION_KEY").is_err() {
+            missing.push("BACKUP_ENCRYPTION_KEY");
+        }
+        // SECURITY FIX: Warn if SESSION_SECRET and LEGACY_SEED_SECRET are identical
+        if let (Ok(ss), Ok(ls)) = (std::env::var("SESSION_SECRET"), std::env::var("LEGACY_SEED_SECRET")) {
+            if ss == ls {
+                tracing::warn!(
+                    "SECURITY WARNING: SESSION_SECRET and LEGACY_SEED_SECRET have the same value. \
+                     Use independent high-entropy secrets for each purpose."
+                );
+            }
+        }
 
         if !missing.is_empty() {
             panic!(

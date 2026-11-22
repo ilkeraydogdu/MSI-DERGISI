@@ -10,7 +10,7 @@ pub fn seed_user_roles(db: &crate::db::Database) -> Result<(), String> {
             "admin",
             "Yönetici",
             "Administrator",
-            r#"["contents:manage","categories:manage","media:manage","issues:manage","approvals:manage","ads:manage","commerce:manage","subscriptions:manage","invoices:manage","users:read","users:write","users:verify","users:manage","corporate_requests:manage","newsletters:manage","email_groups:manage","notifications:manage","redirects:manage","translations:manage","glossary:manage","locales:manage","analytics:read","revenue:read","audit:read","audit:write","settings:manage","monitoring:read","roles:manage","backup:manage"]"#,
+            r#"["contents:manage","categories:manage","media:manage","issues:manage","approvals:manage","ads:manage","commerce:manage","subscriptions:manage","invoices:manage","users:read","users:write","users:verify","users:manage","corporate_requests:manage","newsletters:manage","email_groups:manage","notifications:manage","redirects:manage","translations:manage","glossary:manage","locales:manage","analytics:read","analytics:export","revenue:read","audit:read","audit:write","settings:manage","monitoring:read","roles:manage","backup:manage"]"#,
             1,
         ),
         (

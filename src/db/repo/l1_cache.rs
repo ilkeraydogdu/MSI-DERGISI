@@ -162,7 +162,7 @@ impl Database {
         }
 
         // Invalidate L2 content query cache when contents change
-        if sections.iter().any(|s| *s == "contents") {
+        if sections.contains(&"contents") {
             crate::engine::content_query_engine::CentralContentQueryEngine::invalidate_cache();
         }
     }

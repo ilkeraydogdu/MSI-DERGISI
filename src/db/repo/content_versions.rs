@@ -99,13 +99,19 @@ impl Database {
             "auto_draft" => "auto_draft",
             _ => "none",
         };
+        let clean_title_tr = crate::engine::validation_engine::sanitize_plain_text(title_tr);
+        let clean_title_en = crate::engine::validation_engine::sanitize_plain_text(title_en);
+        let clean_body_tr = crate::engine::validation_engine::sanitize_html(body_tr);
+        let clean_body_en = crate::engine::validation_engine::sanitize_html(body_en);
+        let clean_summary_tr = crate::engine::validation_engine::sanitize_plain_text(summary_tr);
+        let clean_summary_en = crate::engine::validation_engine::sanitize_plain_text(summary_en);
         conn.execute(
             "INSERT INTO content_versions (
                 content_id, version, title_tr, title_en, body_tr, body_en, summary_tr, summary_en,
                 changed_by, change_note, created_at, en_status, previous_en_status, source_action, review_note
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             rusqlite::params![
-                content_id, max_ver + 1, title_tr, title_en, body_tr, body_en, summary_tr, summary_en,
+                content_id, max_ver + 1, clean_title_tr, clean_title_en, clean_body_tr, clean_body_en, clean_summary_tr, clean_summary_en,
                 changed_by, change_note, now, norm_en, previous_en_status, source_action, review_note
             ])?;
         Ok(conn.last_insert_rowid())
@@ -129,7 +135,14 @@ impl Database {
             )
             .unwrap_or_else(|_| "none".to_string());
 
-        let restored_tr_hash = Self::compute_tr_source_hash(&row.0, &row.2, &row.4);
+        let clean_title_tr = crate::engine::validation_engine::sanitize_plain_text(&row.0);
+        let clean_title_en = crate::engine::validation_engine::sanitize_plain_text(&row.1);
+        let clean_summary_tr = crate::engine::validation_engine::sanitize_plain_text(&row.2);
+        let clean_summary_en = crate::engine::validation_engine::sanitize_plain_text(&row.3);
+        let clean_body_tr = crate::engine::validation_engine::sanitize_html(&row.4);
+        let clean_body_en = crate::engine::validation_engine::sanitize_html(&row.5);
+
+        let restored_tr_hash = Self::compute_tr_source_hash(&clean_title_tr, &clean_summary_tr, &clean_body_tr);
         // Symmetrical TR + EN + en_status rollback (never keeps newer EN over an older TR snapshot)
         let affected = conn.execute(
             "UPDATE contents SET
@@ -142,12 +155,22 @@ impl Database {
                 en_status = ?7,
                 tr_source_hash = ?8
              WHERE id = ?9",
-            rusqlite::params![row.0, row.1, row.2, row.3, row.4, row.5, row.6, restored_tr_hash, content_id],
+            rusqlite::params![
+                clean_title_tr,
+                clean_title_en,
+                clean_summary_tr,
+                clean_summary_en,
+                clean_body_tr,
+                clean_body_en,
+                row.6,
+                restored_tr_hash,
+                content_id
+            ],
         ).map_err(|e| e.to_string())?;
         drop(conn);
         if affected > 0 {
             let _ = self.insert_content_version_full(
-                content_id, &row.0, &row.1, &row.4, &row.5, &row.2, &row.3,
+                content_id, &clean_title_tr, &clean_title_en, &clean_body_tr, &clean_body_en, &clean_summary_tr, &clean_summary_en,
                 &row.6, &prev_en_status, "restore", "",
                 actor_email, &format!("v{} sürümünden geri yüklendi", version),
             );

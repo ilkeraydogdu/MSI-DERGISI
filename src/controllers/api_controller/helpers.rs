@@ -182,5 +182,12 @@ pub(super) fn not_found_error() -> Response {
     .into_response()
 }
 
+pub(super) fn is_privileged_content_status(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "" | "published" | "publish" | "scheduled" | "future" | "archived" | "archive"
+    )
+}
+
 // ============================================================================
 // PUBLIC REST API (/api/v1/*)

@@ -11,6 +11,13 @@ pub async fn submit_content_for_review(
     if let Err(resp) = require_perm(&operator, "contents:write") {
         return resp;
     }
+    if let Some(db_status) = state.db.get_content_status_by_id(content_id) {
+        if is_privileged_content_status(&db_status) {
+            if let Err(resp) = require_perm(&operator, "contents:publish") {
+                return resp;
+            }
+        }
+    }
     match state.db.create_approval_request(content_id, operator.user_id) {
         Ok(approval_id) => {
             CentralContentQueryEngine::invalidate_cache();

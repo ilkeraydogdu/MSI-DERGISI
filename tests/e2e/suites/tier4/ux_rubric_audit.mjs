@@ -193,23 +193,23 @@ export async function evaluatePageUxRubric(pageRes, meta = {}) {
           a,
         };
       });
-      const stops = [...rgbStops, ...srgbStops];
+      const stops = [...rgbStops, ...srgbStops].filter((s) => s.a > 0);
       if (stops.length === 0) return null;
       let r = 0;
       let g = 0;
       let b = 0;
-      let a = 0;
+      let aSum = 0;
       for (const s of stops) {
-        r += s.r;
-        g += s.g;
-        b += s.b;
-        a += s.a;
+        r += s.r * s.a;
+        g += s.g * s.a;
+        b += s.b * s.a;
+        aSum += s.a;
       }
       return {
-        r: Math.round(r / stops.length),
-        g: Math.round(g / stops.length),
-        b: Math.round(b / stops.length),
-        a: a / stops.length,
+        r: Math.round(r / aSum),
+        g: Math.round(g / aSum),
+        b: Math.round(b / aSum),
+        a: aSum / stops.length,
       };
     }
 

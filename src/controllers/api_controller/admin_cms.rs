@@ -139,13 +139,6 @@ pub async fn list_admin_contents(
     .into_response()
 }
 
-fn is_privileged_content_status(status: &str) -> bool {
-    matches!(
-        status.trim().to_ascii_lowercase().as_str(),
-        "" | "published" | "publish" | "scheduled" | "future" | "archived" | "archive"
-    )
-}
-
 pub async fn admin_upsert_content(
     operator: OperatorUser,
     headers: HeaderMap,

@@ -105,6 +105,22 @@ pub fn sanitize_html(raw: &str) -> String {
     CentralSecurityFilter::sanitize_rich_html(raw)
 }
 
+/// Strips all HTML tags/scripts from plain-text fields (e.g. titles, summaries)
+/// without double-encoding `&` characters when no `<`/`>` markup is present.
+pub fn sanitize_plain_text(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if !trimmed.contains('<') && !trimmed.contains('>') {
+        return trimmed.to_string();
+    }
+    ammonia::Builder::new()
+        .tags(std::collections::HashSet::new())
+        .clean(trimmed)
+        .to_string()
+        .replace("&amp;", "&")
+        .trim()
+        .to_string()
+}
+
 /// Escapes untrusted strings into XSS-safe HTML entities.
 pub fn escape_html(input: &str) -> String {
     CentralSecurityFilter::escape_html(input)
@@ -239,48 +255,111 @@ pub fn validate_search_query(raw: &str) -> Option<String> {
 
 // ── SVG Content Sanitization ─────────────────────────────────────────────────
 
-/// Dangerous patterns that must be blocked inside uploaded SVG content.
-/// All comparisons are performed on the lowercased SVG source.
-const SVG_BLOCKED_PATTERNS: &[&str] = &[
-    "<script",
-    "<foreignobject",
-    "<iframe",
-    "<object",
-    "<embed",
-    "<animate",
-    "<set ",
-    "<set\t",
-    "<set\n",
-    "<set\r",
-    "<set>",
-    "<set/",
-    "<?xml-stylesheet",
-    "javascript:",
-    "vbscript:",
-    "data:text/html",
-    "&#",
-    "&colon;",
-    "&tab;",
-    "&newline;",
+/// Blocked SVG/XHTML element local names (case-insensitive, after stripping `prefix:` XML namespaces).
+const SVG_BLOCKED_ELEMENTS: &[&str] = &[
+    "script",
+    "foreignobject",
+    "iframe",
+    "object",
+    "embed",
+    "animate",
+    "animatemotion",
+    "animatetransform",
+    "set",
+    "handler",
+    "listener",
+    "style",
+    "link",
+    "meta",
+    "base",
+    "applet",
+    "frame",
+    "frameset",
 ];
 
-/// Regex-free check for inline event-handler attributes (`on*=`, e.g. `onclick=`, `onload=`).
+/// Safe raster image `data:` URI prefixes allowed inside SVG attributes.
+const SVG_ALLOWED_DATA_IMAGE_PREFIXES: &[&str] = &[
+    "data:image/png;",
+    "data:image/png,",
+    "data:image/jpeg;",
+    "data:image/jpeg,",
+    "data:image/jpg;",
+    "data:image/jpg,",
+    "data:image/webp;",
+    "data:image/webp,",
+    "data:image/gif;",
+    "data:image/gif,",
+];
+
+fn is_xml_sep(b: u8) -> bool {
+    b.is_ascii_whitespace() || b.is_ascii_control()
+}
+
+fn decode_basic_xml_entities(input: &str) -> String {
+    input
+        .replace("&amp;", "&")
+        .replace("&AMP;", "&")
+        .replace("&lt;", "<")
+        .replace("&LT;", "<")
+        .replace("&gt;", ">")
+        .replace("&GT;", ">")
+        .replace("&quot;", "\"")
+        .replace("&QUOT;", "\"")
+        .replace("&apos;", "'")
+        .replace("&APOS;", "'")
+}
+
+fn check_svg_attribute_value_safe(raw_val: &str) -> Result<(), String> {
+    let decoded = decode_basic_xml_entities(raw_val);
+    let compact: String = decoded
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace() && !c.is_control())
+        .flat_map(|c| c.to_lowercase())
+        .collect();
+
+    for scheme in ["javascript:", "vbscript:"] {
+        if compact.contains(scheme) {
+            return Err(format!(
+                "SVG content contains blocked URI scheme: {}",
+                scheme
+            ));
+        }
+    }
+    if compact.contains("@import") || compact.contains("expression(") {
+        return Err("SVG content contains blocked CSS directive".to_string());
+    }
+
+    let mut search_from = 0usize;
+    while let Some(rel) = compact[search_from..].find("data:") {
+        let idx = search_from + rel;
+        let rest = &compact[idx..];
+        let allowed = SVG_ALLOWED_DATA_IMAGE_PREFIXES
+            .iter()
+            .any(|p| rest.starts_with(p));
+        if !allowed {
+            return Err("SVG content contains blocked data: URI scheme".to_string());
+        }
+        search_from = idx + 5;
+    }
+
+    Ok(())
+}
+
+/// Regex-free defense-in-depth check for inline event-handler attributes (`on*=`).
 fn contains_inline_event_attr(lower: &str) -> bool {
     let bytes = lower.as_bytes();
     let len = bytes.len();
     let mut i = 0;
     while i + 3 < len {
         let prev_sep = i == 0
-            || matches!(
-                bytes[i - 1],
-                b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'"' | b'\''
-            );
+            || is_xml_sep(bytes[i - 1])
+            || matches!(bytes[i - 1], b'/' | b'"' | b'\'' | b':' | b'<');
         if prev_sep && bytes[i] == b'o' && bytes[i + 1] == b'n' && bytes[i + 2].is_ascii_alphabetic() {
             let mut j = i + 2;
             while j < len && bytes[j].is_ascii_alphabetic() {
                 j += 1;
             }
-            while j < len && matches!(bytes[j], b' ' | b'\t' | b'\n' | b'\r') {
+            while j < len && is_xml_sep(bytes[j]) {
                 j += 1;
             }
             if j < len && bytes[j] == b'=' {
@@ -294,34 +373,204 @@ fn contains_inline_event_attr(lower: &str) -> bool {
     false
 }
 
-/// Validates 100% of an uploaded or fetched SVG byte buffer against XSS vectors.
+fn validate_svg_tag_attributes(attrs_slice: &str) -> Result<(), String> {
+    let bytes = attrs_slice.as_bytes();
+    let len = bytes.len();
+    let mut pos = 0usize;
+
+    while pos < len {
+        while pos < len && (is_xml_sep(bytes[pos]) || bytes[pos] == b'/') {
+            pos += 1;
+        }
+        if pos >= len {
+            break;
+        }
+
+        let name_start = pos;
+        while pos < len && !is_xml_sep(bytes[pos]) && bytes[pos] != b'=' && bytes[pos] != b'/' {
+            pos += 1;
+        }
+        if pos == name_start {
+            return Err("Malformed attribute in SVG tag".to_string());
+        }
+        let attr_qname = &attrs_slice[name_start..pos];
+        let local_attr = attr_qname
+            .rsplit(':')
+            .next()
+            .unwrap_or(attr_qname)
+            .to_ascii_lowercase();
+
+        if local_attr.starts_with("on") {
+            return Err("SVG content contains inline event handler attribute".to_string());
+        }
+
+        while pos < len && is_xml_sep(bytes[pos]) {
+            pos += 1;
+        }
+        if pos < len && bytes[pos] == b'=' {
+            pos += 1;
+            while pos < len && is_xml_sep(bytes[pos]) {
+                pos += 1;
+            }
+            if pos >= len {
+                return Err("Malformed attribute value in SVG tag".to_string());
+            }
+            let raw_val = if bytes[pos] == b'"' || bytes[pos] == b'\'' {
+                let quote = bytes[pos];
+                pos += 1;
+                let val_start = pos;
+                while pos < len && bytes[pos] != quote {
+                    pos += 1;
+                }
+                if pos >= len {
+                    return Err("Unclosed quoted attribute value in SVG tag".to_string());
+                }
+                let val = &attrs_slice[val_start..pos];
+                pos += 1;
+                val
+            } else {
+                let val_start = pos;
+                while pos < len && !is_xml_sep(bytes[pos]) && bytes[pos] != b'/' {
+                    pos += 1;
+                }
+                &attrs_slice[val_start..pos]
+            };
+            check_svg_attribute_value_safe(raw_val)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Validates 100% of an uploaded or fetched SVG byte buffer structurally against XML/SVG XSS vectors.
 pub fn validate_svg_safe(raw: &[u8]) -> Result<(), String> {
     let svg_str = std::str::from_utf8(raw)
         .map_err(|e| format!("SVG content is not valid UTF-8: {}", e))?;
 
-    let trimmed = svg_str.trim_start_matches('\u{feff}').trim_start();
-    let lower = trimmed.to_ascii_lowercase();
-    let valid_header =
-        lower.starts_with("<svg") || (lower.starts_with("<?xml") && lower.contains("<svg"));
-    if !valid_header {
+    let mut rest = svg_str.trim_start_matches('\u{feff}').trim_start();
+    if rest.starts_with("<?") {
+        let is_xml_decl = rest.len() >= 5
+            && rest[..5].eq_ignore_ascii_case("<?xml")
+            && rest
+                .as_bytes()
+                .get(5)
+                .is_some_and(|b| is_xml_sep(*b) || *b == b'?');
+        if !is_xml_decl {
+            return Err("SVG content contains disallowed XML processing instruction".to_string());
+        }
+        let end_pi = rest
+            .find("?>")
+            .ok_or_else(|| "Malformed <?xml declaration in SVG".to_string())?;
+        rest = rest[end_pi + 2..].trim_start();
+    }
+
+    if !rest.starts_with('<') {
         return Err("SVG content must begin with <svg or <?xml ... <svg".to_string());
     }
 
-    for pattern in SVG_BLOCKED_PATTERNS {
-        if lower.contains(pattern) {
+    let lower = rest.to_ascii_lowercase();
+    if lower.contains("<!") {
+        return Err("SVG content contains disallowed <! declaration or comment".to_string());
+    }
+    if lower.contains("<?") {
+        return Err("SVG content contains disallowed processing instruction".to_string());
+    }
+    for entity_pat in ["&#", "&colon;", "&tab;", "&newline;"] {
+        if lower.contains(entity_pat) {
             return Err(format!(
-                "SVG content contains blocked pattern: {}",
-                pattern
+                "SVG content contains blocked entity pattern: {}",
+                entity_pat
             ));
         }
     }
 
-    let compact: String = lower
+    let bytes = rest.as_bytes();
+    let len = bytes.len();
+    let mut i = 0usize;
+    let mut seen_root_svg = false;
+
+    while i < len {
+        if bytes[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        let tag_start = i + 1;
+        let mut cursor = tag_start;
+        let mut quote: Option<u8> = None;
+        while cursor < len {
+            let b = bytes[cursor];
+            if let Some(q) = quote {
+                if b == q {
+                    quote = None;
+                }
+            } else if b == b'"' || b == b'\'' {
+                quote = Some(b);
+            } else if b == b'<' {
+                return Err("Malformed nested '<' inside SVG tag".to_string());
+            } else if b == b'>' {
+                break;
+            }
+            cursor += 1;
+        }
+        if quote.is_some() || cursor >= len {
+            return Err("Malformed unclosed tag or quote in SVG".to_string());
+        }
+
+        let tag_inner = &rest[tag_start..cursor];
+        let is_closing = tag_inner.starts_with('/');
+        let after_slash = if is_closing {
+            &tag_inner[1..]
+        } else {
+            tag_inner
+        };
+        if after_slash.is_empty()
+            || is_xml_sep(after_slash.as_bytes()[0])
+            || after_slash.starts_with('!')
+            || after_slash.starts_with('?')
+        {
+            return Err("Malformed XML tag in SVG".to_string());
+        }
+
+        let name_end = after_slash
+            .as_bytes()
+            .iter()
+            .position(|b| is_xml_sep(*b) || *b == b'/')
+            .unwrap_or(after_slash.len());
+        let qname = &after_slash[..name_end];
+        let local_tag = qname.rsplit(':').next().unwrap_or(qname).to_ascii_lowercase();
+
+        if !seen_root_svg {
+            if is_closing || local_tag != "svg" {
+                return Err("SVG content root element must be <svg>".to_string());
+            }
+            seen_root_svg = true;
+        }
+
+        if SVG_BLOCKED_ELEMENTS.contains(&local_tag.as_str()) {
+            return Err(format!(
+                "SVG content contains blocked element: <{}>",
+                local_tag
+            ));
+        }
+
+        if !is_closing {
+            let attrs_slice = &after_slash[name_end..];
+            validate_svg_tag_attributes(attrs_slice)?;
+        }
+
+        i = cursor + 1;
+    }
+
+    if !seen_root_svg {
+        return Err("SVG content must contain a root <svg> element".to_string());
+    }
+
+    let compact_doc: String = lower
         .chars()
         .filter(|c| !c.is_ascii_whitespace() && !c.is_control())
         .collect();
-    for compact_pat in ["javascript:", "vbscript:", "data:text/html"] {
-        if compact.contains(compact_pat) {
+    for compact_pat in ["javascript:", "vbscript:"] {
+        if compact_doc.contains(compact_pat) {
             return Err(format!(
                 "SVG content contains blocked URI scheme: {}",
                 compact_pat
@@ -576,5 +825,33 @@ mod tests {
     fn svg_case_insensitive_blocking() {
         let svg = b"<svg><SCRIPT>alert(1)</SCRIPT></svg>";
         assert!(sanitize_svg_content(svg).is_err());
+    }
+
+    #[test]
+    fn svg_blocks_namespace_prefixed_elements_and_unsafe_data_uris() {
+        let vectors: &[&[u8]] = &[
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:s=\"http://www.w3.org/2000/svg\"><s:script>alert(1)</s:script></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:h=\"http://www.w3.org/1999/xhtml\"><h:script>alert(1)</h:script></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:s=\"http://www.w3.org/2000/svg\"><s:foreignObject><div>x</div></s:foreignObject></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:s=\"http://www.w3.org/2000/svg\"><s:set attributeName=\"href\" to=\"javascript:alert(1)\"/></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"><use href=\"data:image/svg+xml;base64,PHN2Zy8+\"/></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"><a href=\"data:application/xhtml+xml,<script>alert(1)</script>\"><rect width=\"1\" height=\"1\"/></a></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@import url(\"https://evil.example/x.css\");</style></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect\x0bonload=\"alert(1)\" width=\"1\" height=\"1\"/></svg>",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect\x0conload=\"alert(1)\" width=\"1\" height=\"1\"/></svg>",
+            b"<?xml version=\"1.0\"?><?xml-stylesheet type=\"text/xsl\" href=\"evil.xsl\"?><svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+            b"<?xml version=\"1.0\"?><!DOCTYPE svg [<!ENTITY xxe \"boom\">]><svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+            b"<?xml version=\"1.0\"?><html xmlns=\"http://www.w3.org/1999/xhtml\"><svg/></html>",
+        ];
+        for v in vectors {
+            assert!(
+                validate_svg_safe(v).is_err(),
+                "Expected vector to be rejected: {}",
+                String::from_utf8_lossy(v)
+            );
+        }
+
+        let safe_with_xml_and_png = b"\xef\xbb\xbf<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns=\"http://www.w3.org/2000/svg\"><image href=\"data:image/png;base64,iVBORw0KGgo=\" width=\"10\" height=\"10\"/></svg>";
+        assert!(validate_svg_safe(safe_with_xml_and_png).is_ok());
     }
 }

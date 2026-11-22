@@ -134,6 +134,7 @@ pub async fn admin_list_content_versions(
 
 #[derive(Deserialize)]
 pub struct ContentVersionPayload {
+    #[serde(default)]
     pub content_id: i64,
     pub title_tr: String,
     pub body_tr: String,
@@ -145,30 +146,44 @@ pub async fn admin_create_content_version(
     operator: OperatorUser,
     headers: HeaderMap,
     State(state): State<AppState>,
+    Path(id): Path<i64>,
     Json(payload): Json<ContentVersionPayload>,
 ) -> Response {
     if let Err(resp) = require_perm(&operator, "contents:write") {
         return resp;
     }
+    if id <= 0 || (payload.content_id > 0 && payload.content_id != id) {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+    if let Some(db_status) = state.db.get_content_status_by_id(id) {
+        if is_privileged_content_status(&db_status) {
+            if let Err(resp) = require_perm(&operator, "contents:publish") {
+                return resp;
+            }
+        }
+    }
+    let clean_title_tr = validation_engine::sanitize_plain_text(&payload.title_tr);
+    let clean_summary_tr = validation_engine::sanitize_plain_text(&payload.summary_tr);
+    let clean_body_tr = validation_engine::sanitize_html(&payload.body_tr);
     match state.db.insert_content_version(
-        payload.content_id,
-        &payload.title_tr,
-        &payload.body_tr,
-        &payload.summary_tr,
+        id,
+        &clean_title_tr,
+        &clean_body_tr,
+        &clean_summary_tr,
         &operator.email,
         &payload.change_note.unwrap_or_default(),
     ) {
-        Ok(id) => {
+        Ok(version_id) => {
             let client_ip = extract_client_ip(&headers);
             let _ = state.db.insert_audit_log(
                 &operator.email,
                 "create_version",
                 "content",
-                Some(payload.content_id),
-                &json!({ "version_id": id }).to_string(),
+                Some(id),
+                &json!({ "version_id": version_id }).to_string(),
                 &client_ip,
             );
-            ApiResponse::ok(json!({ "status": "created", "version_id": id })).into_response()
+            ApiResponse::ok(json!({ "status": "created", "version_id": version_id })).into_response()
         }
         Err(e) => ApiResponse::server_error(
             &state.translations,
@@ -188,6 +203,13 @@ pub async fn admin_restore_content_version(
 ) -> Response {
     if let Err(resp) = require_perm(&operator, "contents:write") {
         return resp;
+    }
+    if let Some(db_status) = state.db.get_content_status_by_id(id) {
+        if is_privileged_content_status(&db_status) {
+            if let Err(resp) = require_perm(&operator, "contents:publish") {
+                return resp;
+            }
+        }
     }
     match state
         .db

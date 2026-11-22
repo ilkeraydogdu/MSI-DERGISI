@@ -2803,3 +2803,382 @@ fn t5_article_revision_i64_and_scheduled_publish_reverted_draft_guard() {
 
     cleanup_test_db(&db_path);
 }
+
+#[tokio::test]
+async fn t5_content_version_rbac_and_html_sanitization() {
+    let (state, db_path) = build_test_state("t5_p2_ver_rbac_xss");
+    let app = build_test_router(&state);
+
+    let mut pub_item = fixture_content(7501);
+    pub_item.id = 0;
+    pub_item.slug = "t5-p2-ver-pub-article".into();
+    pub_item.title_tr = "Orijinal Yayin Basligi".into();
+    pub_item.summary_tr = "Orijinal ozet".into();
+    pub_item.body_tr = "<p>Guvenli yayin govdesi</p>".into();
+    pub_item.status = "published".into();
+    pub_item.visibility_level = 0;
+    pub_item.published_at = "2099-01-01 10:00:00".into();
+    let pub_id = state.db.upsert_content(&pub_item).unwrap();
+    state
+        .db
+        .insert_content_version(
+            pub_id,
+            "Orijinal Yayin Basligi",
+            "<p>Guvenli yayin govdesi</p>",
+            "Orijinal ozet",
+            "sa@msidergisi.com",
+            "v1",
+        )
+        .unwrap();
+
+    let mut draft_item = fixture_content(7502);
+    draft_item.id = 0;
+    draft_item.slug = "t5-p2-ver-draft-article".into();
+    draft_item.title_tr = "Taslak Baslik".into();
+    draft_item.body_tr = "<p>Taslak govde</p>".into();
+    draft_item.status = "draft".into();
+    let draft_id = state.db.upsert_content(&draft_item).unwrap();
+
+    let (_, ce_cookie) = create_user_with_session(
+        &state,
+        "ce_t5_ver@msidergisi.com",
+        "StaffPass!2026",
+        "Version CE",
+        "content_editor",
+        "Medya",
+        "MSI",
+        false,
+        "",
+    );
+    let (_, eic_cookie) = create_user_with_session(
+        &state,
+        "eic_t5_ver@msidergisi.com",
+        "StaffPass!2026",
+        "Version EIC",
+        "editor_in_chief",
+        "Medya",
+        "MSI",
+        false,
+        "",
+    );
+
+    // 1. content_editor MUST be blocked (403) from creating/restoring versions or submit-review on published content
+    let (st_ce_create, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/versions", pub_id),
+        Some(&ce_cookie),
+        Some(json!({
+            "content_id": pub_id,
+            "title_tr": "HIJACKED_TITLE",
+            "body_tr": "<p>Evil</p><script>alert(1)</script>",
+            "summary_tr": "Evil summary",
+            "change_note": "attempt"
+        })),
+    )
+    .await;
+    assert_eq!(st_ce_create, StatusCode::FORBIDDEN);
+
+    let (st_ce_restore, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/versions/1/restore", pub_id),
+        Some(&ce_cookie),
+        None,
+    )
+    .await;
+    assert_eq!(st_ce_restore, StatusCode::FORBIDDEN);
+
+    let (st_ce_submit, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/submit-review", pub_id),
+        Some(&ce_cookie),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(st_ce_submit, StatusCode::FORBIDDEN);
+
+    // 2. Path(id) vs payload.content_id mismatch MUST be rejected (400) even on draft
+    let (st_mismatch, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/versions", draft_id),
+        Some(&ce_cookie),
+        Some(json!({
+            "content_id": pub_id,
+            "title_tr": "Cross-ID Injection",
+            "body_tr": "<p>Test</p>",
+            "summary_tr": "Test"
+        })),
+    )
+    .await;
+    assert_eq!(st_mismatch, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        state.db.get_content_versions(pub_id).len(),
+        1,
+        "Published article versions must remain untouched"
+    );
+
+    // 3. content_editor CAN create & restore versions on draft, and HTML/script payloads are sanitized
+    let (st_draft_create, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/versions", draft_id),
+        Some(&ce_cookie),
+        Some(json!({
+            "content_id": draft_id,
+            "title_tr": "<script>alert(9)</script>Temiz Taslak Baslik",
+            "body_tr": "<p>Guvenli metin</p><script>alert(1)</script><a href=\"javascript:alert(2)\">x</a>",
+            "summary_tr": "<img src=x onerror=alert(3)>Temiz ozet"
+        })),
+    )
+    .await;
+    assert_eq!(st_draft_create, StatusCode::OK);
+
+    let draft_vers = state.db.get_content_versions(draft_id);
+    assert_eq!(draft_vers.len(), 1);
+    let ver_num = draft_vers[0]["version"].as_i64().unwrap();
+    let stored_body = draft_vers[0]["body_tr"].as_str().unwrap();
+    assert!(stored_body.contains("<p>Guvenli metin</p>"));
+    assert!(!stored_body.contains("<script"));
+    assert!(!stored_body.contains("javascript:"));
+    assert_eq!(draft_vers[0]["title_tr"].as_str(), Some("Temiz Taslak Baslik"));
+    assert_eq!(draft_vers[0]["summary_tr"].as_str(), Some("Temiz ozet"));
+
+    // Insert a legacy unsanitized version row directly in DB and confirm restore sanitizes before writing to contents
+    {
+        let conn = state.db.open_conn().unwrap();
+        conn.execute(
+            "INSERT INTO content_versions (
+                content_id, version, title_tr, title_en, body_tr, body_en,
+                summary_tr, summary_en, changed_by, change_note, created_at, en_status
+             ) VALUES (?1, 99, '<script>bad</script>Legacy Title', '', '<p>Legacy</p><script>alert(77)</script><img src=x onerror=alert(88)>', '', 'Legacy Summary', '', 'legacy@msidergisi.com', 'legacy', '2026-11-22T00:00:00Z', 'none')",
+            rusqlite::params![draft_id],
+        )
+        .unwrap();
+    }
+    let (st_draft_restore, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/versions/99/restore", draft_id),
+        Some(&ce_cookie),
+        None,
+    )
+    .await;
+    assert_eq!(st_draft_restore, StatusCode::OK);
+
+    let updated_draft = state
+        .db
+        .get_all_contents()
+        .into_iter()
+        .find(|c| c.id == draft_id)
+        .unwrap();
+    assert_eq!(updated_draft.title_tr, "Legacy Title");
+    assert!(updated_draft.body_tr.contains("<p>Legacy</p>"));
+    assert!(!updated_draft.body_tr.contains("<script"));
+    assert!(!updated_draft.body_tr.contains("onerror"));
+
+    // 4. editor_in_chief (with contents:publish) can snapshot/restore published content cleanly (and HTML is sanitized in /feed.json)
+    let (st_eic_create, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/versions", pub_id),
+        Some(&eic_cookie),
+        Some(json!({
+            "content_id": pub_id,
+            "title_tr": "Yayinci Surumu",
+            "body_tr": "<p>Yayin temiz</p><script>alert(1)</script><a href=\"javascript:alert(2)\">link</a>",
+            "summary_tr": "Yayinci ozet",
+            "change_note": "EIC rev"
+        })),
+    )
+    .await;
+    assert_eq!(st_eic_create, StatusCode::OK);
+    let pub_vers = state.db.get_content_versions(pub_id);
+    let latest_pub_ver = pub_vers[0]["version"].as_i64().unwrap();
+    assert_ne!(latest_pub_ver, 1);
+
+    let (st_eic_restore, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!(
+            "/api/v1/admin/contents/{}/versions/{}/restore",
+            pub_id, latest_pub_ver
+        ),
+        Some(&eic_cookie),
+        None,
+    )
+    .await;
+    assert_eq!(st_eic_restore, StatusCode::OK);
+    assert_eq!(ver_num, 1);
+
+    let (_, _, feed_bytes) = req_raw(&app, "GET", "/feed.json", None, &[], None).await;
+    let feed_str = String::from_utf8_lossy(&feed_bytes);
+    assert!(feed_str.contains("Yayinci Surumu"));
+    assert!(!feed_str.contains("<script>alert(1)</script>"));
+    assert!(!feed_str.contains("javascript:alert(2)"));
+
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_svg_namespace_uri_style_bypass_and_static_headers() {
+    let (mut state, db_path) = build_test_state("t5_p2_svg_ns_bypass");
+    let temp_static = format!("{}_static", db_path);
+    let mut cfg = (*state.config).clone();
+    cfg.static_dir = temp_static.clone();
+    state.config = std::sync::Arc::new(cfg);
+    let app = build_test_router(&state);
+
+    let (_, editor_cookie) = create_user_with_session(
+        &state,
+        "ce_t5_svg_ns@msidergisi.com",
+        "StaffPass!2026",
+        "SVG NS Tester",
+        "content_editor",
+        "Medya",
+        "MSI",
+        false,
+        "",
+    );
+
+    let malicious_svgs: &[(&str, &str)] = &[
+        (
+            "ns_s_script.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:s=\"http://www.w3.org/2000/svg\"><s:script>alert(1)</s:script></svg>",
+        ),
+        (
+            "ns_h_script.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:h=\"http://www.w3.org/1999/xhtml\"><h:script>alert(1)</h:script></svg>",
+        ),
+        (
+            "ns_foreignobj.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:s=\"http://www.w3.org/2000/svg\"><s:foreignObject><div xmlns=\"http://www.w3.org/1999/xhtml\">x</div></s:foreignObject></svg>",
+        ),
+        (
+            "ns_set.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:s=\"http://www.w3.org/2000/svg\"><s:a href=\"x\"><s:set attributeName=\"href\" to=\"javascript:alert(1)\"/></s:a></svg>",
+        ),
+        (
+            "ns_animate.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:s=\"http://www.w3.org/2000/svg\"><s:animate attributeName=\"href\" values=\"javascript:alert(1)\"/></svg>",
+        ),
+        (
+            "use_data_svg.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><use href=\"data:image/svg+xml;base64,PHN2Zy8+\"/></svg>",
+        ),
+        (
+            "a_data_svg.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><a href=\"data:image/svg+xml;base64,PHN2Zy8+\"><rect width=\"5\" height=\"5\"/></a></svg>",
+        ),
+        (
+            "style_import.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@import url(\"https://evil.example/x.css\");</style><circle r=\"5\"/></svg>",
+        ),
+        (
+            "ctrl_vtab_onload.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect\x0bonload=\"alert(1)\" width=\"5\" height=\"5\"/></svg>",
+        ),
+        (
+            "ctrl_ff_onload.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect\x0conload=\"alert(1)\" width=\"5\" height=\"5\"/></svg>",
+        ),
+    ];
+
+    for (endpoint, field_name) in [
+        ("/api/v1/admin/editorial/upload", "image"),
+        ("/api/v1/admin/upload", "file"),
+    ] {
+        for (fname, svg_body) in malicious_svgs {
+            let csrf = security_engine::generate_csrf_token(&state.config.session_secret);
+            let boundary = "----MSI_T5_BOUNDARY_SVG_NS";
+            let multipart_body = format!(
+                "--{b}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{fname}\"\r\nContent-Type: image/svg+xml\r\n\r\n{svg}\r\n--{b}--\r\n",
+                b = boundary,
+                field = field_name,
+                fname = fname,
+                svg = svg_body
+            );
+            let req = Request::builder()
+                .method("POST")
+                .uri(endpoint)
+                .header(header::COOKIE, format!("{}; csrf_token={}", editor_cookie, csrf))
+                .header("x-csrf-token", &csrf)
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
+                .body(Body::from(multipart_body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::BAD_REQUEST,
+                "Bypass vector '{}' MUST return 400 on {}",
+                fname,
+                endpoint
+            );
+        }
+    }
+
+    // Valid SVG (with safe raster data:image/png) succeeds on both endpoints and is served with sandboxed CSP + nosniff
+    let clean_svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><image href=\"data:image/png;base64,iVBORw0KGgo=\" width=\"10\" height=\"10\"/><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>";
+    for (endpoint, field_name, expected_prefix) in [
+        ("/api/v1/admin/editorial/upload", "image", "/uploads/editorial/"),
+        ("/api/v1/admin/upload", "file", "images/uploads/"),
+    ] {
+        let csrf = security_engine::generate_csrf_token(&state.config.session_secret);
+        let boundary = "----MSI_T5_BOUNDARY_SVG_CLEAN";
+        let multipart_body = format!(
+            "--{b}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"clean-badge.svg\"\r\nContent-Type: image/svg+xml\r\n\r\n{svg}\r\n--{b}--\r\n",
+            b = boundary,
+            field = field_name,
+            svg = clean_svg
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(endpoint)
+            .header(header::COOKIE, format!("{}; csrf_token={}", editor_cookie, csrf))
+            .header("x-csrf-token", &csrf)
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(multipart_body))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "Clean SVG failed on {}", endpoint);
+        let bytes = to_bytes(resp.into_body(), 1024 * 1024).await.unwrap();
+        let body_json: Value = serde_json::from_slice(&bytes).unwrap();
+        let uploaded_url = body_json["url"].as_str().unwrap();
+        assert!(uploaded_url.starts_with(expected_prefix), "Unexpected URL: {}", uploaded_url);
+
+        let get_path = if uploaded_url.starts_with('/') {
+            uploaded_url.to_string()
+        } else {
+            format!("/{}", uploaded_url)
+        };
+        let (st_get, hdrs_get, _) = req_raw(&app, "GET", &get_path, None, &[], None).await;
+        assert_eq!(st_get, StatusCode::OK);
+        assert_eq!(
+            hdrs_get.get("x-content-type-options").and_then(|v| v.to_str().ok()),
+            Some("nosniff")
+        );
+        assert_eq!(
+            hdrs_get.get("content-security-policy").and_then(|v| v.to_str().ok()),
+            Some("sandbox; default-src 'none'")
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&temp_static);
+    cleanup_test_db(&db_path);
+}

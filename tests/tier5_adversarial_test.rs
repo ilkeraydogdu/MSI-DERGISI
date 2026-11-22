@@ -3221,14 +3221,53 @@ async fn t5_svg_namespace_uri_style_bypass_and_static_headers() {
             format!("/{}", uploaded_url)
         };
         let stem_path = get_path.strip_suffix(".svg").expect("uploaded SVG path ends with .svg");
-        for probe_path in [
+        let mut ok_probes = vec![
             get_path.clone(),
             format!("{}.%73vg", stem_path),
             format!("{}%2esvg", stem_path),
             format!("{}%2e%73%76%67", stem_path),
-        ] {
+        ];
+        let mut header_probes: Vec<String> = Vec::new();
+        if let Some(file_part) = get_path.strip_prefix("/images/uploads/") {
+            let stem_file = file_part.strip_suffix(".svg").unwrap();
+            ok_probes.push(format!("/images//uploads/{}", file_part));
+            ok_probes.push(format!("/images/./uploads/{}", file_part));
+            ok_probes.push(format!("/images//uploads/{}.%73vg", stem_file));
+            ok_probes.push(format!("/images/%75ploads/{}", file_part));
+            ok_probes.push(format!("/images/%2e/uploads/{}", file_part));
+        } else if let Some(file_part) = get_path.strip_prefix("/uploads/editorial/") {
+            let stem_file = file_part.strip_suffix(".svg").unwrap();
+            ok_probes.push(format!("/uploads/editorial//{}", file_part));
+            ok_probes.push(format!("/uploads/editorial/./{}", file_part));
+            header_probes.push(format!("/uploads//editorial/{}", file_part));
+            header_probes.push(format!("/uploads/./editorial/{}", file_part));
+            header_probes.push(format!("/uploads//editorial/{}.%73vg", stem_file));
+        }
+
+        for probe_path in ok_probes {
             let (st_get, hdrs_get, _) = req_raw(&app, "GET", &probe_path, None, &[], None).await;
             assert_eq!(st_get, StatusCode::OK, "Expected 200 OK for {}", probe_path);
+            assert_eq!(
+                hdrs_get.get("x-content-type-options").and_then(|v| v.to_str().ok()),
+                Some("nosniff"),
+                "Missing nosniff on {}",
+                probe_path
+            );
+            assert_eq!(
+                hdrs_get.get("content-security-policy").and_then(|v| v.to_str().ok()),
+                Some("sandbox; default-src 'none'"),
+                "Missing sandboxed SVG CSP on {}",
+                probe_path
+            );
+        }
+        for probe_path in header_probes {
+            let (st_get, hdrs_get, _) = req_raw(&app, "GET", &probe_path, None, &[], None).await;
+            assert!(
+                st_get == StatusCode::OK || st_get == StatusCode::NOT_FOUND,
+                "Unexpected status {} for {}",
+                st_get,
+                probe_path
+            );
             assert_eq!(
                 hdrs_get.get("x-content-type-options").and_then(|v| v.to_str().ok()),
                 Some("nosniff"),

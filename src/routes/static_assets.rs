@@ -14,17 +14,47 @@ fn decode_path_lower(raw_path: &str) -> String {
     String::from_utf8_lossy(&decoded).to_ascii_lowercase()
 }
 
+fn normalize_path_segments(path: &str) -> Option<String> {
+    let mut segments: Vec<&str> = Vec::new();
+    for seg in path.split('/') {
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        if seg == ".." {
+            segments.pop()?;
+            continue;
+        }
+        segments.push(seg);
+    }
+    if segments.is_empty() {
+        Some("/".to_string())
+    } else {
+        Some(format!("/{}", segments.join("/")))
+    }
+}
+
 pub(crate) fn apply_uploaded_svg_headers(raw_path: &str, resp: &mut Response) {
     let raw_lc = raw_path.to_ascii_lowercase();
     let decoded_lc = decode_path_lower(raw_path);
-    let in_upload_dir = decoded_lc.starts_with("/uploads/editorial/")
-        || decoded_lc.starts_with("/images/uploads/")
-        || raw_lc.starts_with("/uploads/editorial/")
-        || raw_lc.starts_with("/images/uploads/");
+    let norm_raw = normalize_path_segments(&raw_lc);
+    let norm_decoded = normalize_path_segments(&decoded_lc);
+
+    let is_upload_path = |p: &str| {
+        p.starts_with("/uploads/editorial/") || p.starts_with("/images/uploads/")
+    };
+    let in_upload_dir = norm_decoded.as_deref().map(is_upload_path).unwrap_or(false)
+        || norm_raw.as_deref().map(is_upload_path).unwrap_or(false);
     if !in_upload_dir {
         return;
     }
-    let has_svg_ext = decoded_lc.ends_with(".svg") || raw_lc.ends_with(".svg");
+    let has_svg_ext = norm_decoded
+        .as_deref()
+        .map(|p| p.ends_with(".svg"))
+        .unwrap_or(false)
+        || norm_raw
+            .as_deref()
+            .map(|p| p.ends_with(".svg"))
+            .unwrap_or(false);
     let has_svg_ct = resp
         .headers()
         .get(axum::http::header::CONTENT_TYPE)

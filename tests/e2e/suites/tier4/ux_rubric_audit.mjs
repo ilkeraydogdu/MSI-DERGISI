@@ -171,25 +171,45 @@ export async function evaluatePageUxRubric(pageRes, meta = {}) {
 
     function parseBgGradientAverage(bgImg) {
       if (!bgImg || bgImg === "none" || !bgImg.includes("gradient(")) return null;
-      const matches = Array.from(
+      const rgbStops = Array.from(
         bgImg.matchAll(/rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*[,/]\s*(\d+(?:\.\d+)?))?\s*\)/gi)
-      );
-      if (matches.length === 0) return null;
+      ).map((m) => ({
+        r: Number.parseFloat(m[1]),
+        g: Number.parseFloat(m[2]),
+        b: Number.parseFloat(m[3]),
+        a: m[4] !== undefined ? Number.parseFloat(m[4]) : 1,
+      }));
+      const srgbStops = Array.from(
+        bgImg.matchAll(/color\(\s*srgb\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+(?:\.\d+)?%?))?\s*\)/gi)
+      ).map((m) => {
+        let a = 1;
+        if (m[4] !== undefined) {
+          a = m[4].endsWith("%") ? Number.parseFloat(m[4]) / 100 : Number.parseFloat(m[4]);
+        }
+        return {
+          r: Math.round(Number.parseFloat(m[1]) * 255),
+          g: Math.round(Number.parseFloat(m[2]) * 255),
+          b: Math.round(Number.parseFloat(m[3]) * 255),
+          a,
+        };
+      });
+      const stops = [...rgbStops, ...srgbStops];
+      if (stops.length === 0) return null;
       let r = 0;
       let g = 0;
       let b = 0;
       let a = 0;
-      for (const m of matches) {
-        r += Number.parseFloat(m[1]);
-        g += Number.parseFloat(m[2]);
-        b += Number.parseFloat(m[3]);
-        a += m[4] !== undefined ? Number.parseFloat(m[4]) : 1;
+      for (const s of stops) {
+        r += s.r;
+        g += s.g;
+        b += s.b;
+        a += s.a;
       }
       return {
-        r: Math.round(r / matches.length),
-        g: Math.round(g / matches.length),
-        b: Math.round(b / matches.length),
-        a: a / matches.length,
+        r: Math.round(r / stops.length),
+        g: Math.round(g / stops.length),
+        b: Math.round(b / stops.length),
+        a: a / stops.length,
       };
     }
 

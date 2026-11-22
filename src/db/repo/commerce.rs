@@ -191,11 +191,11 @@ impl Database {
         }
     }
 
-    pub fn insert_order_invoice(&self, inv: &OrderInvoice) -> rusqlite::Result<i64> {
+    pub fn insert_order_invoice(&self, inv: &OrderInvoice) -> rusqlite::Result<(i64, String)> {
         // Retry loop for invoice_no UNIQUE constraint collisions.
-        // On collision, regenerate invoice_no with a fresh timestamp-derived suffix.
+        // On collision, regenerate invoice_no with fresh entropy and return the persisted invoice_no.
         let mut current_inv = inv.clone();
-        let max_attempts = 3;
+        let max_attempts = 5;
 
         for attempt in 0..max_attempts {
             let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
@@ -228,18 +228,17 @@ impl Database {
                     if current_inv.payment_status == "paid" {
                         self.activate_invoice_entitlements(&current_inv);
                     }
-                    return Ok(rowid);
+                    return Ok((rowid, current_inv.invoice_no));
                 }
                 Err(e) => {
                     if matches!(e.sqlite_error_code(), Some(rusqlite::ErrorCode::ConstraintViolation))
                         && attempt < max_attempts - 1
                     {
-                        // Regenerate invoice_no with fresh nanosecond timestamp to avoid collision
                         let now = chrono::Utc::now();
                         let year_str = now.format("%Y").to_string();
-                        let nanos = now.timestamp_nanos_opt().unwrap_or(0);
-                        let numeric_suffix: u32 = (nanos.abs() as u64 % 900_000 + 100_000) as u32;
-                        current_inv.invoice_no = format!("MSI-{}-{:06}", year_str, numeric_suffix);
+                        let rand_suffix =
+                            (uuid::Uuid::new_v4().as_u128() % 900_000 + 100_000) as u32;
+                        current_inv.invoice_no = format!("MSI-{}-{:06}", year_str, rand_suffix);
                         continue;
                     }
                     return Err(e);
@@ -353,7 +352,8 @@ impl Database {
             let dynamic_exp = (chrono::Utc::now() + chrono::Duration::days(365))
                 .format("%Y-%m-%d")
                 .to_string();
-            let assigned_role = match sub_code.as_str() {
+            let norm_sub = sub_code.trim().to_ascii_lowercase();
+            let assigned_role = match norm_sub.as_str() {
                 "kurumsal" => "subscriber_corporate",
                 "basili-dijital" => "subscriber_print_digital",
                 _ => "subscriber_digital",
@@ -361,11 +361,11 @@ impl Database {
             let tier_title = self
                 .get_subscription_plans()
                 .into_iter()
-                .find(|p| p.code.eq_ignore_ascii_case(&sub_code))
+                .find(|p| p.code.eq_ignore_ascii_case(&norm_sub))
                 .map(|p| p.name_tr)
                 .unwrap_or(sub_title);
-            if let Ok(conn) = self.open_conn() {
-                if let Ok(tx) = conn.unchecked_transaction() {
+            if let Ok(mut conn) = self.open_conn() {
+                if let Ok(tx) = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate) {
                     let _ = tx.execute(
                         "UPDATE renewal_reminders SET status = 'halted_by_renewal' WHERE LOWER(user_email) = LOWER(?1) AND status = 'scheduled'",
                         params![inv.user_email],
@@ -378,7 +378,7 @@ impl Database {
                                   OR EXISTS (
                                       SELECT 1 FROM user_roles ur
                                       WHERE ur.role_code = users.role
-                                        AND ur.role_code NOT IN ('registered', 'subscriber_public', 'subscriber_corporate', 'subscriber_print_digital', 'subscriber_digital')
+                                        AND ur.role_code NOT IN ('reader', 'registered', 'subscriber_public', 'subscriber_corporate', 'subscriber_print_digital', 'subscriber_digital')
                                   )
                                 THEN role
                                 ELSE ?1
@@ -409,8 +409,10 @@ impl Database {
             return None;
         }
 
-        let conn = self.open_conn().ok()?;
-        let tx = conn.unchecked_transaction().ok()?;
+        let mut conn = self.open_conn().ok()?;
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .ok()?;
 
         let mut target: OrderInvoice = {
             let mut stmt = tx
@@ -500,10 +502,10 @@ impl Database {
         if oid.is_empty() {
             return false;
         }
-        let Ok(conn) = self.open_conn() else {
+        let Ok(mut conn) = self.open_conn() else {
             return false;
         };
-        let Ok(tx) = conn.unchecked_transaction() else {
+        let Ok(tx) = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate) else {
             return false;
         };
         let target_opt: Option<(i64, String)> = tx

@@ -800,6 +800,7 @@ pub async fn public_personalized_feed(
 
     let all_contents = state.db.get_all_contents();
     let rules = state.db.get_recommendation_rules();
+    let institution_categories = state.db.list_institution_categories(false);
     let user_org = user_opt
         .as_ref()
         .map(|u| u.organization_category.trim())
@@ -811,7 +812,7 @@ pub async fn public_personalized_feed(
 
     let interest_set: std::collections::HashSet<String> = interests
         .iter()
-        .map(|s| s.trim().to_ascii_lowercase())
+        .map(|s| content_service::fold_tr(s))
         .filter(|s| !s.is_empty())
         .collect();
     let has_interests = !interest_set.is_empty();
@@ -845,7 +846,7 @@ pub async fn public_personalized_feed(
                     .filter(|interest| {
                         c.ssb_tags
                             .iter()
-                            .any(|t| t.trim().eq_ignore_ascii_case(interest))
+                            .any(|t| content_service::fold_eq_tr(t, interest))
                     })
                     .count() as i64
             };
@@ -853,29 +854,35 @@ pub async fn public_personalized_feed(
             let mut rule_boost: i64 = 0;
             let mut inst_rule_boost: i64 = 0;
             for rule in rules.iter().filter(|r| r.is_active) {
-                if !rule.recommended_content_slug.eq_ignore_ascii_case(&c.slug) {
+                if !content_service::fold_eq_tr(&rule.recommended_content_slug, &c.slug) {
                     continue;
                 }
                 let src = rule.source_tag_or_cat.trim();
+                let src_folded = content_service::fold_tr(src);
                 let source_matches = !has_interests
                     || src.is_empty()
                     || src == "*"
-                    || src.eq_ignore_ascii_case("all")
-                    || interest_set.contains(&src.to_ascii_lowercase())
+                    || content_service::fold_eq_tr(src, "all")
+                    || interest_set.contains(&src_folded)
                     || (interest_matches > 0
-                        && (c.content_type.eq_ignore_ascii_case(src)
-                            || c.placements.iter().any(|p| p.eq_ignore_ascii_case(src))));
+                        && (content_service::fold_eq_tr(&c.content_type, src)
+                            || c.placements
+                                .iter()
+                                .any(|p| content_service::fold_eq_tr(p, src))));
                 if !source_matches {
                     continue;
                 }
 
                 let inst = rule.target_institution.trim();
                 let is_inst_wildcard =
-                    inst.is_empty() || inst == "*" || inst.eq_ignore_ascii_case("all");
+                    inst.is_empty() || inst == "*" || content_service::fold_eq_tr(inst, "all");
                 let is_inst_exact = !is_inst_wildcard
-                    && ((!user_org.is_empty() && content_service::fold_eq_tr(inst, user_org))
-                        || (!user_org_name.is_empty()
-                            && content_service::fold_eq_tr(inst, user_org_name)));
+                    && content_service::institution_rule_matches_user(
+                        inst,
+                        user_org,
+                        user_org_name,
+                        &institution_categories,
+                    );
                 if !is_inst_wildcard && !is_inst_exact {
                     continue;
                 }

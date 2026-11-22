@@ -199,8 +199,8 @@ pub async fn checkout_order(
         order.payment_status = "pending_bank_transfer".to_string();
     }
 
-    let inv_id = match state.db.insert_order_invoice(&order) {
-        Ok(id) => id,
+    let (inv_id, persisted_invoice_no) = match state.db.insert_order_invoice(&order) {
+        Ok(res) => res,
         Err(e) => {
             return ApiResponse::server_error_with_key(
                 &state.translations,
@@ -212,6 +212,7 @@ pub async fn checkout_order(
             .into_response();
         }
     };
+    order.invoice_no = persisted_invoice_no;
 
     if paytr_config.is_configured() {
         let client_ip = extract_client_ip(&headers);
@@ -509,8 +510,8 @@ pub async fn cart_checkout(
         order.payment_status = "pending_bank_transfer".to_string();
     }
 
-    let inv_id = match state.db.insert_order_invoice(&order) {
-        Ok(id) => id,
+    let (inv_id, persisted_invoice_no) = match state.db.insert_order_invoice(&order) {
+        Ok(res) => res,
         Err(e) => {
             return ApiResponse::server_error_with_key(
                 &state.translations,
@@ -522,6 +523,7 @@ pub async fn cart_checkout(
             .into_response();
         }
     };
+    order.invoice_no = persisted_invoice_no;
 
     if paytr_config.is_configured() {
         let client_ip = extract_client_ip(&headers);

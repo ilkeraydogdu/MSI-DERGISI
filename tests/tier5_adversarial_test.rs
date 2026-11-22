@@ -1815,3 +1815,991 @@ async fn t5_not_found_responses_omit_canonical_and_emit_noindex() {
 
     cleanup_test_db(&db_path);
 }
+
+#[tokio::test]
+async fn t5_rbac_publish_bypass_blocked_on_legacy_upsert_and_bulk() {
+    let (state, db_path) = build_test_state("t5_p2_rbac_publish_bypass");
+    let app = build_test_router(&state);
+
+    let (_, editor_cookie) = create_user_with_session(
+        &state,
+        "ce_t5_rbac@msidergisi.com",
+        "StaffPass!2026",
+        "Content Editor",
+        "content_editor",
+        "Medya",
+        "MSI",
+        false,
+        "",
+    );
+
+    let mut pub_item = fixture_content(7101);
+    pub_item.id = 0;
+    pub_item.slug = "t5-p2-published-guard".into();
+    pub_item.title_tr = "Orijinal Yayında Başlık".into();
+    pub_item.status = "published".into();
+    pub_item.visibility_level = 0;
+    let pub_id = state.db.upsert_content(&pub_item).unwrap();
+
+    let mut draft_item = fixture_content(7102);
+    draft_item.id = 0;
+    draft_item.slug = "t5-p2-draft-editable".into();
+    draft_item.title_tr = "Taslak Başlık".into();
+    draft_item.status = "draft".into();
+    draft_item.visibility_level = 0;
+    let draft_id = state.db.upsert_content(&draft_item).unwrap();
+    state.db.refresh_l1_sections(&["contents"]);
+
+    // (a) content_editor cannot overwrite a published article via POST /api/v1/admin/contents with status="draft"
+    let mut overwrite_payload = serde_json::to_value(&pub_item).unwrap();
+    overwrite_payload["id"] = json!(pub_id);
+    overwrite_payload["status"] = json!("draft");
+    overwrite_payload["title_tr"] = json!("Unpublished By ContentEditor");
+    overwrite_payload["visibility_level"] = json!(2);
+
+    let (st_upsert, _, upsert_json) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        "/api/v1/admin/contents",
+        Some(&editor_cookie),
+        Some(overwrite_payload),
+    )
+    .await;
+    assert_eq!(st_upsert, StatusCode::FORBIDDEN);
+    assert_eq!(upsert_json["error_code"], "FORBIDDEN");
+    assert_eq!(upsert_json["required_permission"], "contents:publish");
+
+    // (b) content_editor cannot bulk-archive, bulk-draft, bulk-visibility, or bulk-feature published articles
+    for (action, val) in [
+        ("archive", None),
+        ("draft", None),
+        ("set_visibility", Some("2")),
+        ("set_featured", Some("true")),
+    ] {
+        let (st_bulk, _, bulk_json) = req_with_csrf(
+            &app,
+            &state,
+            "POST",
+            "/api/v1/admin/contents/bulk",
+            Some(&editor_cookie),
+            Some(json!({
+                "ids": [pub_id],
+                "action": action,
+                "value": val
+            })),
+        )
+        .await;
+        assert_eq!(
+            st_bulk,
+            StatusCode::FORBIDDEN,
+            "Bulk action '{}' on published article must return 403",
+            action
+        );
+        assert_eq!(bulk_json["error_code"], "FORBIDDEN");
+        assert_eq!(bulk_json["required_permission"], "contents:publish");
+    }
+
+    // DB record must remain completely unchanged
+    let after_pub = state
+        .db
+        .get_all_contents()
+        .into_iter()
+        .find(|c| c.id == pub_id)
+        .unwrap();
+    assert_eq!(after_pub.status, "published");
+    assert_eq!(after_pub.title_tr, "Orijinal Yayında Başlık");
+    assert_eq!(after_pub.visibility_level, 0);
+
+    // Legitimate edit on an existing "draft" article by content_editor still succeeds
+    let mut draft_edit_payload = serde_json::to_value(&draft_item).unwrap();
+    draft_edit_payload["id"] = json!(draft_id);
+    draft_edit_payload["status"] = json!("draft");
+    draft_edit_payload["title_tr"] = json!("Taslak Güncellendi");
+    let (st_draft_ok, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        "/api/v1/admin/contents",
+        Some(&editor_cookie),
+        Some(draft_edit_payload),
+    )
+    .await;
+    assert_eq!(st_draft_ok, StatusCode::OK);
+
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_editorial_svg_upload_rejects_xss_past_2kb_and_event_handlers() {
+    let (mut state, db_path) = build_test_state("t5_p2_svg_xss");
+    let temp_static = format!("{}_static", db_path);
+    let mut cfg = (*state.config).clone();
+    cfg.static_dir = temp_static.clone();
+    state.config = std::sync::Arc::new(cfg);
+    let app = build_test_router(&state);
+
+    let (_, editor_cookie) = create_user_with_session(
+        &state,
+        "ce_t5_svg@msidergisi.com",
+        "StaffPass!2026",
+        "SVG Uploader",
+        "content_editor",
+        "Medya",
+        "MSI",
+        false,
+        "",
+    );
+
+    let padded_past_2kb = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\">{}<script>alert(1)</script></svg>",
+        " ".repeat(2100)
+    );
+    let payloads = [
+        (
+            "onload.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" onload=\"alert(1)\"><circle r=\"5\"/></svg>",
+        ),
+        ("past2kb.svg", padded_past_2kb.as_str()),
+        (
+            "xlink_js.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><a xlink:href=\"javascript:alert(1)\">x</a></svg>",
+        ),
+        (
+            "animate_xss.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><animate attributeName=\"href\" values=\"javascript:alert(1)\"/></svg>",
+        ),
+    ];
+
+    for (fname, svg_body) in payloads {
+        let csrf = security_engine::generate_csrf_token(&state.config.session_secret);
+        let boundary = "----MSI_T5_BOUNDARY_SVG";
+        let multipart_body = format!(
+            "--{b}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{fname}\"\r\nContent-Type: image/svg+xml\r\n\r\n{svg}\r\n--{b}--\r\n",
+            b = boundary,
+            fname = fname,
+            svg = svg_body
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/admin/editorial/upload")
+            .header(header::COOKIE, format!("{}; csrf_token={}", editor_cookie, csrf))
+            .header("x-csrf-token", &csrf)
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(multipart_body))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "Malicious SVG '{}' must be rejected with 400",
+            fname
+        );
+    }
+
+    // No .svg files may have been written to uploads/editorial
+    let editorial_dir = std::path::Path::new(&temp_static)
+        .join("uploads")
+        .join("editorial");
+    if editorial_dir.exists() {
+        let svg_count = std::fs::read_dir(&editorial_dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("svg"))
+            .count();
+        assert_eq!(svg_count, 0, "Zero .svg files may be written on rejected uploads");
+    }
+
+    // Clean valid SVG passes detection
+    let clean_svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>";
+    assert_eq!(
+        msi_dergisi_platform::services::editorial_media_service::detect_image_extension(clean_svg),
+        Some("svg")
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_static);
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_paytr_uppercase_kurumsal_invoice_collision_and_concurrent_callbacks() {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    // Spin up a local stub PayTR get-token server on 127.0.0.1:0 (zero external network calls)
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let stub_addr = listener.local_addr().unwrap();
+    let stub_handle = tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let body = r#"{"status":"success","token":"stub-iframe-tok-t5"}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+
+    let (mut state, db_path) = build_test_state("t5_p2_paytr_kurumsal");
+    let mut cfg = (*state.config).clone();
+    cfg.paytr_api_url = format!("http://{}/odeme/api/get-token", stub_addr);
+    state.config = std::sync::Arc::new(cfg);
+    let app = build_test_router(&state);
+
+    let sign_paytr = |merchant_oid: &str, status: &str, total_amount: &str| -> String {
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(state.config.paytr_merchant_key.as_bytes()).unwrap();
+        mac.update(
+            format!(
+                "{}{}{}{}",
+                merchant_oid, state.config.paytr_merchant_salt, status, total_amount
+            )
+            .as_bytes(),
+        );
+        base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            mac.finalize().into_bytes(),
+        )
+    };
+
+    // (a) Uppercase "KURUMSAL" cart-checkout + PayTR callback -> subscriber_corporate
+    let (user_corp, corp_cookie) = create_user_with_session(
+        &state,
+        "kurumsal_buyer_t5@example.com",
+        "StrongPass!2026",
+        "Kurumsal Alıcı",
+        "registered",
+        "Sektör Kuruluşları",
+        "Savunma A.Ş.",
+        false,
+        "",
+    );
+
+    let (st_cart, _, cart_val) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        "/api/v1/commerce/cart-checkout",
+        Some(&corp_cookie),
+        Some(json!({
+            "email": user_corp.email,
+            "full_name": "Kurumsal Alıcı",
+            "distance_sales_consent": true,
+            "items": [{ "item_type": "subscription", "item_code": "KURUMSAL", "qty": 1 }]
+        })),
+    )
+    .await;
+    assert_eq!(st_cart, StatusCode::OK, "cart-checkout failed: {:?}", cart_val);
+    let corp_oid = cart_val["merchant_oid"].as_str().unwrap().to_string();
+    let corp_kurus = cart_val["amount_kurus"].as_i64().unwrap().to_string();
+    let corp_hash = sign_paytr(&corp_oid, "success", &corp_kurus);
+    let cb_body = serde_urlencoded::to_string([
+        ("merchant_oid", corp_oid.as_str()),
+        ("status", "success"),
+        ("total_amount", corp_kurus.as_str()),
+        ("hash", corp_hash.as_str()),
+    ])
+    .unwrap();
+    let cb_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/payments/paytr/callback")
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from(cb_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cb_resp.status(), StatusCode::OK);
+    let upgraded = state.db.get_user_by_email(&user_corp.email).unwrap().0;
+    assert_eq!(upgraded.role, "subscriber_corporate");
+
+    // (b) Duplicate invoice_no collision returns the actual persisted unique invoice_no
+    let inv_template = msi_dergisi_platform::models::OrderInvoice {
+        id: 0,
+        invoice_no: "MSI-2026-991122".into(),
+        user_email: user_corp.email.clone(),
+        full_name: "Collision Test".into(),
+        organization_name: "Test".into(),
+        item_type: "subscription".into(),
+        item_code: "dijital".into(),
+        item_title: "Dijital Abonelik".into(),
+        amount_try: 990.0,
+        payment_status: "pending".into(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        pdf_watermark_code: "WM-COLL-1".into(),
+    };
+    let (id1, no1) = state.db.insert_order_invoice(&inv_template).unwrap();
+    assert_eq!(no1, "MSI-2026-991122");
+    let (id2, no2) = state.db.insert_order_invoice(&inv_template).unwrap();
+    assert_ne!(id1, id2);
+    assert_ne!(no2, "MSI-2026-991122");
+    let db_no2 = state
+        .db
+        .get_order_invoices()
+        .into_iter()
+        .find(|i| i.id == id2)
+        .map(|i| i.invoice_no)
+        .unwrap();
+    assert_eq!(no2, db_no2);
+
+    // (c) 5 concurrent signed PayTR callbacks for the same merchant_oid -> all 200 OK, zero 500/SQLITE_BUSY
+    let (race_user, _) = create_user_with_session(
+        &state,
+        "paytr_race_t5@example.com",
+        "StrongPass!2026",
+        "Race Buyer",
+        "registered",
+        "Sektör Kuruluşları",
+        "Race A.Ş.",
+        false,
+        "",
+    );
+    let race_inv = msi_dergisi_platform::models::OrderInvoice {
+        id: 0,
+        invoice_no: "MSI-2026-884411".into(),
+        user_email: race_user.email.clone(),
+        full_name: "Race Buyer".into(),
+        organization_name: "Race A.Ş.".into(),
+        item_type: "subscription".into(),
+        item_code: "dijital".into(),
+        item_title: "Dijital E-Dergi Aboneliği".into(),
+        amount_try: 990.0,
+        payment_status: "pending".into(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        pdf_watermark_code: "WM-RACE-1".into(),
+    };
+    state.db.insert_order_invoice(&race_inv).unwrap();
+    let race_oid =
+        msi_dergisi_platform::services::payment_service::generate_merchant_oid("MSI-2026-884411");
+    let race_hash = sign_paytr(&race_oid, "success", "99000");
+    let race_body = serde_urlencoded::to_string([
+        ("merchant_oid", race_oid.as_str()),
+        ("status", "success"),
+        ("total_amount", "99000"),
+        ("hash", race_hash.as_str()),
+    ])
+    .unwrap();
+
+    let mut handles = Vec::new();
+    for _ in 0..5 {
+        let app_c = app.clone();
+        let body_c = race_body.clone();
+        handles.push(tokio::spawn(async move {
+            let resp = app_c
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/payments/paytr/callback")
+                        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                        .body(Body::from(body_c))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let st = resp.status();
+            let txt = String::from_utf8_lossy(
+                &to_bytes(resp.into_body(), 1024 * 1024).await.unwrap(),
+            )
+            .to_string();
+            (st, txt)
+        }));
+    }
+    for h in handles {
+        let (st, txt) = h.await.unwrap();
+        assert_eq!(st, StatusCode::OK, "Concurrent callback failed: {}", txt);
+        assert_eq!(txt, "OK");
+    }
+
+    let conn = state.db.open_conn().unwrap();
+    let purchase_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM user_purchased_items WHERE LOWER(user_email) = LOWER(?1) AND item_code = 'dijital'",
+            [&race_user.email],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(purchase_rows, 1);
+
+    stub_handle.abort();
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_resend_verification_throttles_bursts_and_invalidates_prior_tokens() {
+    let (state, db_path) = build_test_state("t5_p2_resend_verify");
+    let app = build_test_router(&state);
+
+    let hash = auth_service::hash_password("StrongPass!2026", &state.config.session_secret);
+    let uid = state
+        .db
+        .admin_create_user(
+            "resend_burst_t5@example.com",
+            &hash,
+            "Unverified T5",
+            "registered",
+            "Sektör Kuruluşları",
+            "Test A.Ş.",
+            "Uzman",
+            false,
+            "",
+        )
+        .unwrap();
+    {
+        let conn = state.db.open_conn().unwrap();
+        conn.execute("UPDATE users SET email_verified = 0 WHERE id = ?1", [uid])
+            .unwrap();
+        state.db.refresh_l1_sections(&["users"]);
+    }
+
+    let tok1 = "tok1_initial_verification_secret_t5".to_string();
+    let expires = (chrono::Utc::now() + chrono::Duration::hours(24))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    state
+        .db
+        .create_email_verification_token(uid, &tok1, &expires)
+        .unwrap();
+
+    // Burst 5 resend-verification calls -> first 2 succeed (200), remaining hit 429 Too Many Requests
+    let mut statuses = Vec::new();
+    for _ in 0..5 {
+        let (st, _, _) = req_raw(
+            &app,
+            "POST",
+            "/api/v1/auth/resend-verification",
+            None,
+            &[("x-forwarded-for", "198.51.100.88")],
+            Some(json!({ "email": "resend_burst_t5@example.com" })),
+        )
+        .await;
+        statuses.push(st);
+    }
+    assert_eq!(statuses[0], StatusCode::OK);
+    assert_eq!(statuses[1], StatusCode::OK);
+    assert!(
+        statuses[2..].iter().all(|s| *s == StatusCode::TOO_MANY_REQUESTS),
+        "Rapid burst must return 429 after threshold: {:?}",
+        statuses
+    );
+
+    // Old token tok1 must have been invalidated once tok2 was issued
+    let verify_uri = format!("/hesap-dogrula?token={}&confirm=1", tok1);
+    let (st_old, _, _) = req_raw(&app, "GET", &verify_uri, None, &[], None).await;
+    assert_eq!(st_old, StatusCode::BAD_REQUEST);
+    let user_after = state.db.get_user_by_id(uid).unwrap();
+    assert!(!user_after.email_verified);
+
+    // TOTP verify-setup brute-force throttling
+    let (_, totp_cookie) = create_user_with_session(
+        &state,
+        "totp_setup_throttle_t5@example.com",
+        "StrongPass!2026",
+        "TOTP Setup Throttle",
+        "registered",
+        "Sektör Kuruluşları",
+        "Test A.Ş.",
+        false,
+        "",
+    );
+    let (st_s, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        "/api/v1/auth/totp/setup",
+        Some(&totp_cookie),
+        None,
+    )
+    .await;
+    assert_eq!(st_s, StatusCode::OK);
+
+    let mut totp_statuses = Vec::new();
+    for _ in 0..6 {
+        let (st, _, _) = req_with_csrf(
+            &app,
+            &state,
+            "POST",
+            "/api/v1/auth/totp/verify-setup",
+            Some(&totp_cookie),
+            Some(json!({ "code": "000000" })),
+        )
+        .await;
+        totp_statuses.push(st);
+    }
+    assert_eq!(totp_statuses[5], StatusCode::TOO_MANY_REQUESTS);
+
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_personalized_feed_turkish_i_case_folding() {
+    let (state, db_path) = build_test_state("t5_p2_turkish_i_feed");
+    let app = build_test_router(&state);
+
+    let mut older_iha = fixture_content(7201);
+    older_iha.id = 0;
+    older_iha.slug = "t5-p2-older-iha-article".into();
+    older_iha.status = "published".into();
+    older_iha.published_at = "2025-01-10 10:00:00".into();
+    older_iha.ssb_tags = vec!["iha".into()];
+    older_iha.is_featured = false;
+    older_iha.is_sponsored = false;
+    state.db.upsert_content(&older_iha).unwrap();
+
+    let mut newer_deniz = fixture_content(7202);
+    newer_deniz.id = 0;
+    newer_deniz.slug = "t5-p2-newer-deniz-article".into();
+    newer_deniz.status = "published".into();
+    newer_deniz.published_at = "2026-11-20 10:00:00".into();
+    newer_deniz.ssb_tags = vec!["deniz".into()];
+    newer_deniz.is_featured = true;
+    newer_deniz.is_sponsored = false;
+    state.db.upsert_content(&newer_deniz).unwrap();
+    state.db.refresh_l1_sections(&["contents"]);
+
+    let (st_tr, _, bytes_tr) = req_raw(
+        &app,
+        "GET",
+        "/api/v1/public/personalized?interests=%C4%B0HA&limit=1",
+        None,
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(st_tr, StatusCode::OK);
+    let val_tr: Value = serde_json::from_slice(&bytes_tr).unwrap();
+    assert_eq!(
+        val_tr["data"]["items"][0]["slug"].as_str(),
+        Some("t5-p2-older-iha-article")
+    );
+
+    let (st_ascii, _, bytes_ascii) = req_raw(
+        &app,
+        "GET",
+        "/api/v1/public/personalized?interests=iha&limit=1",
+        None,
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(st_ascii, StatusCode::OK);
+    let val_ascii: Value = serde_json::from_slice(&bytes_ascii).unwrap();
+    assert_eq!(
+        val_tr["data"]["items"][0]["slug"],
+        val_ascii["data"]["items"][0]["slug"]
+    );
+
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_personalized_feed_recommendation_rule_institution_alias() {
+    let (state, db_path) = build_test_state("t5_p2_inst_rule_alias");
+    let app = build_test_router(&state);
+
+    let mut older_boosted = fixture_content(7301);
+    older_boosted.id = 0;
+    older_boosted.slug = "t5-p2-tsk-boosted-older".into();
+    older_boosted.status = "published".into();
+    older_boosted.published_at = "2025-01-10 10:00:00".into();
+    older_boosted.ssb_tags = vec!["hava-araclari".into()];
+    older_boosted.is_featured = false;
+    older_boosted.is_sponsored = false;
+    state.db.upsert_content(&older_boosted).unwrap();
+
+    let mut newer_plain = fixture_content(7302);
+    newer_plain.id = 0;
+    newer_plain.slug = "t5-p2-newer-unboosted".into();
+    newer_plain.status = "published".into();
+    newer_plain.published_at = "2026-11-20 10:00:00".into();
+    newer_plain.ssb_tags = vec!["hava-araclari".into()];
+    newer_plain.is_featured = false;
+    newer_plain.is_sponsored = false;
+    state.db.upsert_content(&newer_plain).unwrap();
+
+    state
+        .db
+        .insert_recommendation_rule(&msi_dergisi_platform::models::RecommendationRule {
+            id: 0,
+            rule_name: "TSK Özel Öneri Kuralı".into(),
+            source_tag_or_cat: "*".into(),
+            target_institution: "tsk".into(),
+            recommended_content_slug: "t5-p2-tsk-boosted-older".into(),
+            priority: 10,
+            is_active: true,
+        })
+        .unwrap();
+    state
+        .db
+        .insert_recommendation_rule(&msi_dergisi_platform::models::RecommendationRule {
+            id: 0,
+            rule_name: "SSB Kod Eşleme Kuralı".into(),
+            source_tag_or_cat: "*".into(),
+            target_institution: "ssb".into(),
+            recommended_content_slug: "t5-p2-tsk-boosted-older".into(),
+            priority: 10,
+            is_active: true,
+        })
+        .unwrap();
+    state.db.refresh_l1_sections(&["contents", "recommendation_rules"]);
+
+    let (_, tsk_cookie) = create_user_with_session(
+        &state,
+        "tsk_user_t5@tsk.tr",
+        "StrongPass!2026",
+        "TSK Personeli",
+        "subscriber_public",
+        "Türk Silahlı Kuvvetleri",
+        "TSK",
+        true,
+        "Kamu",
+    );
+
+    let (st_tsk, _, bytes_tsk) = req_raw(
+        &app,
+        "GET",
+        "/api/v1/public/personalized?limit=1",
+        Some(&tsk_cookie),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(st_tsk, StatusCode::OK);
+    let val_tsk: Value = serde_json::from_slice(&bytes_tsk).unwrap();
+    assert_eq!(
+        val_tsk["data"]["items"][0]["slug"].as_str(),
+        Some("t5-p2-tsk-boosted-older")
+    );
+
+    // Also verify institution_categories label_tr -> code alias ("SSB (Savunma Sanayii Başkanlığı)" -> "ssb")
+    let (_, ssb_cookie) = create_user_with_session(
+        &state,
+        "ssb_user_t5@ssb.gov.tr",
+        "StrongPass!2026",
+        "SSB Personeli",
+        "subscriber_public",
+        "SSB (Savunma Sanayii Başkanlığı)",
+        "SSB",
+        true,
+        "Kamu",
+    );
+    let (st_ssb, _, bytes_ssb) = req_raw(
+        &app,
+        "GET",
+        "/api/v1/public/personalized?limit=1",
+        Some(&ssb_cookie),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(st_ssb, StatusCode::OK);
+    let val_ssb: Value = serde_json::from_slice(&bytes_ssb).unwrap();
+    assert_eq!(
+        val_ssb["data"]["items"][0]["slug"].as_str(),
+        Some("t5-p2-tsk-boosted-older")
+    );
+
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_sanitize_inline_rich_html_escapes_unclosed_lt() {
+    use msi_dergisi_platform::editorial::common::{
+        blocks_to_wp_html, sanitize_inline_rich_html, ContentBlock,
+    };
+
+    let clean = sanitize_inline_rich_html("<img src=x onerror=alert(1)");
+    assert!(!clean.contains('<'), "Raw '<' must never be emitted: {}", clean);
+    assert!(clean.starts_with("&lt;img"));
+
+    let wp_html = blocks_to_wp_html(&[ContentBlock {
+        id: "b1".into(),
+        block_type: "paragraph".into(),
+        content: "<svg onload=alert(1)".into(),
+        meta: None,
+    }]);
+    assert!(
+        !wp_html.contains("<svg"),
+        "Unclosed <svg must be escaped in blocks_to_wp_html: {}",
+        wp_html
+    );
+    assert_eq!(wp_html, "<p>&lt;svg onload=alert(1)</p>");
+
+    // Verify end-to-end editorial API also escapes unclosed '<' in blocks[0].content
+    let (state, db_path) = build_test_state("t5_p2_editorial_unclosed_lt");
+    let app = build_test_router(&state);
+    let (_, editor_cookie) = create_user_with_session(
+        &state,
+        "ce_t5_lt@msidergisi.com",
+        "StaffPass!2026",
+        "LT Editor",
+        "content_editor",
+        "Medya",
+        "MSI",
+        false,
+        "",
+    );
+
+    let (st_save, _, save_val) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        "/api/v1/admin/editorial/articles",
+        Some(&editor_cookie),
+        Some(json!({
+            "id": "",
+            "title": "Unclosed Tag Test",
+            "status": "draft",
+            "content": "",
+            "blocks": [{ "id": "b-1", "type": "paragraph", "content": "<img src=x onerror=alert(1)" }]
+        })),
+    )
+    .await;
+    assert_eq!(st_save, StatusCode::OK, "save response: {:?}", save_val);
+    let saved_id = save_val["article"]["id"].as_str().unwrap();
+
+    let (st_get, _, get_bytes) = req_raw(
+        &app,
+        "GET",
+        &format!("/api/v1/admin/editorial/articles/{}", saved_id),
+        Some(&editor_cookie),
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(st_get, StatusCode::OK);
+    let get_val: Value = serde_json::from_slice(&get_bytes).unwrap();
+    let block_content = get_val["article"]["blocks"][0]["content"]
+        .as_str()
+        .unwrap();
+    assert!(!block_content.contains('<'), "Got raw '<': {}", block_content);
+    assert!(block_content.starts_with("&lt;img"));
+
+    cleanup_test_db(&db_path);
+}
+
+#[test]
+fn t5_concurrent_refresh_l1_sections_no_lost_updates() {
+    let (state, db_path) = build_test_state("t5_p2_l1_concurrent");
+    state.db.refresh_l1_cache();
+
+    let db_a = state.db.clone();
+    let db_b = state.db.clone();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let bar_a = barrier.clone();
+    let bar_b = barrier.clone();
+
+    let pw_hash =
+        auth_service::hash_password("StrongPass!2026", &state.config.session_secret);
+
+    std::thread::scope(|s| {
+        s.spawn(move || {
+            bar_a.wait();
+            for i in 0..20 {
+                let mut u = fixture_user(8000 + i);
+                u.id = 0;
+                u.email = format!("t5_l1_race_{}@example.com", i);
+                db_a.create_or_update_user(&u, &pw_hash).unwrap();
+                db_a.refresh_l1_sections(&["users"]);
+            }
+        });
+        s.spawn(move || {
+            bar_b.wait();
+            for i in 0..20 {
+                let mut c = fixture_content(8000 + i);
+                c.id = 0;
+                c.slug = format!("t5-l1-race-content-{}", i);
+                db_b.upsert_content(&c).unwrap();
+                db_b.refresh_l1_sections(&["contents"]);
+            }
+        });
+    });
+
+    let all_users = state.db.get_all_users();
+    let all_contents = state.db.get_all_contents();
+    for i in 0..20 {
+        let email = format!("t5_l1_race_{}@example.com", i);
+        assert!(
+            all_users.iter().any(|u| u.email == email),
+            "Lost L1 update for user {}",
+            email
+        );
+        let slug = format!("t5-l1-race-content-{}", i);
+        assert!(
+            all_contents.iter().any(|c| c.slug == slug),
+            "Lost L1 update for content {}",
+            slug
+        );
+    }
+
+    cleanup_test_db(&db_path);
+}
+
+#[tokio::test]
+async fn t5_noindex_routes_omit_link_canonical_header() {
+    let (state, db_path) = build_test_state("t5_p2_noindex_canonical");
+    let app = build_test_router(&state);
+
+    for path in ["/hesabim", "/sifre-sifirla"] {
+        let (st, hdrs, body_bytes) = req_raw(&app, "GET", path, None, &[], None).await;
+        assert_eq!(st, StatusCode::OK, "Expected 200 OK on {}", path);
+
+        let robots = hdrs
+            .get("x-robots-tag")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(
+            robots.contains("noindex"),
+            "Expected x-robots-tag noindex on {} (got: {})",
+            path,
+            robots
+        );
+
+        let link_hdr = hdrs.get("link").and_then(|v| v.to_str().ok()).unwrap_or("");
+        assert!(
+            !link_hdr.contains("rel=\"canonical\""),
+            "noindex route {} must NOT emit Link rel=\"canonical\" (got: {})",
+            path,
+            link_hdr
+        );
+
+        let html = String::from_utf8_lossy(&body_bytes);
+        assert!(
+            !html.contains("rel=\"canonical\""),
+            "noindex route {} HTML must NOT emit <link rel=\"canonical\">",
+            path
+        );
+    }
+
+    cleanup_test_db(&db_path);
+}
+
+#[test]
+fn t5_article_revision_i64_and_scheduled_publish_reverted_draft_guard() {
+    let (state, db_path) = build_test_state("t5_p2_rev_i64_sched");
+
+    // 1. ArticleRevision.id > i32::MAX round-trips without truncation
+    let mut item = fixture_content(7401);
+    item.id = 0;
+    item.slug = "t5-p2-rev-i64-article".into();
+    let cid = state.db.upsert_content(&item).unwrap();
+
+    let big_rev_id: i64 = 5_000_000_123;
+    {
+        let conn = state.db.open_conn().unwrap();
+        conn.execute(
+            "INSERT INTO content_versions (
+                id, content_id, version, title_tr, title_en, body_tr, body_en,
+                summary_tr, summary_en, changed_by, change_note, created_at, en_status
+             ) VALUES (?1, ?2, 99, 'Büyük Revizyon Başlık', '', '<p>Büyük Revizyon</p>', '',
+                       'Özet', '', 'editor@test.com', 'i64 test', '2026-11-22T12:00:00Z', 'none')",
+            rusqlite::params![big_rev_id, cid],
+        )
+        .unwrap();
+    }
+
+    let revs = state.db.editorial_list_revisions(cid);
+    assert!(
+        revs.iter().any(|r| r.id == big_rev_id),
+        "ArticleRevision.id {} must round-trip without i32 truncation: {:?}",
+        big_rev_id,
+        revs.iter().map(|r| r.id).collect::<Vec<_>>()
+    );
+    let restored = state
+        .db
+        .editorial_restore_revision(cid, big_rev_id, "editor@test.com")
+        .unwrap();
+    assert_eq!(restored.title, "Büyük Revizyon Başlık");
+
+    // 2. Concurrent revert to 'draft' & double scheduler tick never leave stale/double publish
+    let mut sched_item = fixture_content(7402);
+    sched_item.id = 0;
+    sched_item.slug = "t5-p2-sched-due-article".into();
+    sched_item.status = "scheduled".into();
+    sched_item.published_at = String::new();
+    let sched_id = state.db.upsert_content(&sched_item).unwrap();
+    {
+        let conn = state.db.open_conn().unwrap();
+        conn.execute(
+            "UPDATE contents SET scheduled_at = '2020-01-01 00:00:00', status = 'scheduled' WHERE id = ?1",
+            [sched_id],
+        )
+        .unwrap();
+    }
+
+    // Two concurrent scheduler runs publish at most once
+    let db1 = state.db.clone();
+    let db2 = state.db.clone();
+    let bar = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let bar1 = bar.clone();
+    let bar2 = bar.clone();
+    let (res1, res2) = std::thread::scope(|s| {
+        let h1 = s.spawn(move || {
+            bar1.wait();
+            db1.editorial_publish_due_scheduled().unwrap()
+        });
+        let h2 = s.spawn(move || {
+            bar2.wait();
+            db2.editorial_publish_due_scheduled().unwrap()
+        });
+        (h1.join().unwrap(), h2.join().unwrap())
+    });
+    assert_eq!(
+        res1.len() + res2.len(),
+        1,
+        "Concurrent scheduler ticks must publish the due article exactly once"
+    );
+
+    // Newly published scheduled item must be immediately visible under TR timezone
+    let pub_obj = state
+        .db
+        .get_all_contents()
+        .into_iter()
+        .find(|c| c.id == sched_id)
+        .unwrap();
+    assert_eq!(pub_obj.status, "published");
+    assert!(
+        msi_dergisi_platform::services::content_service::is_publicly_visible(&pub_obj),
+        "Scheduled article published_at '{}' must be immediately publicly visible",
+        pub_obj.published_at
+    );
+
+    // Reverted draft article is NOT promoted to published
+    {
+        let conn = state.db.open_conn().unwrap();
+        conn.execute(
+            "UPDATE contents SET status = 'draft', scheduled_at = '2020-01-01 00:00:00' WHERE id = ?1",
+            [sched_id],
+        )
+        .unwrap();
+    }
+    let after_revert = state.db.editorial_publish_due_scheduled().unwrap();
+    assert!(after_revert.is_empty());
+    let final_status: String = state
+        .db
+        .open_conn()
+        .unwrap()
+        .query_row(
+            "SELECT status FROM contents WHERE id = ?1",
+            [sched_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(final_status, "draft");
+
+    cleanup_test_db(&db_path);
+}

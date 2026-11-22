@@ -131,16 +131,9 @@ pub fn detect_image_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.len() >= 2 && &bytes[0..2] == b"BM" {
         return Some("bmp");
     }
-    // Safe SVG check (rejects embedded scripts/event handlers)
-    let prefix_len = bytes.len().min(2048);
-    if let Ok(head_str) = std::str::from_utf8(&bytes[..prefix_len]) {
-        let lower = head_str.trim_start().to_ascii_lowercase();
-        if (lower.starts_with("<svg") || (lower.starts_with("<?xml") && lower.contains("<svg")))
-            && !lower.contains("<script")
-            && !lower.contains("javascript:")
-        {
-            return Some("svg");
-        }
+    // Safe SVG check across 100% of bytes (rejects embedded scripts/event handlers/obfuscated entities)
+    if crate::engine::validation_engine::validate_svg_safe(bytes).is_ok() {
+        return Some("svg");
     }
     None
 }
@@ -512,6 +505,11 @@ pub fn process_and_store_image(
     let magic_ext = detect_image_extension(bytes).ok_or_else(|| {
         AppError::BadRequest("Yalnızca geçerli görsel dosyaları yüklenebilir.".to_string())
     })?;
+    if magic_ext == "svg" {
+        crate::engine::validation_engine::validate_svg_safe(bytes).map_err(|_| {
+            AppError::BadRequest("Güvenlik nedeniyle geçersiz SVG içeriği reddedildi.".to_string())
+        })?;
+    }
 
     let safe_orig = sanitize_original_name(orig_name, magic_ext);
     let stem = generate_unique_stem();

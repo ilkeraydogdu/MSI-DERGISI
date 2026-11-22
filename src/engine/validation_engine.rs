@@ -247,30 +247,43 @@ const SVG_BLOCKED_PATTERNS: &[&str] = &[
     "<iframe",
     "<object",
     "<embed",
+    "<animate",
+    "<set ",
+    "<set\t",
+    "<set\n",
+    "<set\r",
+    "<set>",
+    "<set/",
+    "<?xml-stylesheet",
     "javascript:",
     "vbscript:",
     "data:text/html",
     "&#",
+    "&colon;",
+    "&tab;",
+    "&newline;",
 ];
 
 /// Regex-free check for inline event-handler attributes (`on*=`, e.g. `onclick=`, `onload=`).
 fn contains_inline_event_attr(lower: &str) -> bool {
-    // Scan for ` on` followed by alphabetic chars and `=` outside of attribute values.
-    // A simple heuristic: find any occurrence of ` on<letters>=` where letters are [a-z].
     let bytes = lower.as_bytes();
     let len = bytes.len();
     let mut i = 0;
-    while i < len {
-        // Look for " on" prefix (space + 'o' + 'n')
-        if i + 3 < len && bytes[i] == b' ' && bytes[i + 1] == b'o' && bytes[i + 2] == b'n' {
-            let start = i + 3;
-            let mut j = start;
-            // Consume alphabetic event name
+    while i + 3 < len {
+        let prev_sep = i == 0
+            || matches!(
+                bytes[i - 1],
+                b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'"' | b'\''
+            );
+        if prev_sep && bytes[i] == b'o' && bytes[i + 1] == b'n' && bytes[i + 2].is_ascii_alphabetic() {
+            let mut j = i + 2;
             while j < len && bytes[j].is_ascii_alphabetic() {
                 j += 1;
             }
-            // Must have consumed at least one letter and be followed by '='
-            if j > start && j < len && bytes[j] == b'=' {
+            while j < len && matches!(bytes[j], b' ' | b'\t' | b'\n' | b'\r') {
+                j += 1;
+            }
+            if j < len && bytes[j] == b'=' {
                 return true;
             }
             i = j;
@@ -279,6 +292,48 @@ fn contains_inline_event_attr(lower: &str) -> bool {
         }
     }
     false
+}
+
+/// Validates 100% of an uploaded or fetched SVG byte buffer against XSS vectors.
+pub fn validate_svg_safe(raw: &[u8]) -> Result<(), String> {
+    let svg_str = std::str::from_utf8(raw)
+        .map_err(|e| format!("SVG content is not valid UTF-8: {}", e))?;
+
+    let trimmed = svg_str.trim_start_matches('\u{feff}').trim_start();
+    let lower = trimmed.to_ascii_lowercase();
+    let valid_header =
+        lower.starts_with("<svg") || (lower.starts_with("<?xml") && lower.contains("<svg"));
+    if !valid_header {
+        return Err("SVG content must begin with <svg or <?xml ... <svg".to_string());
+    }
+
+    for pattern in SVG_BLOCKED_PATTERNS {
+        if lower.contains(pattern) {
+            return Err(format!(
+                "SVG content contains blocked pattern: {}",
+                pattern
+            ));
+        }
+    }
+
+    let compact: String = lower
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace() && !c.is_control())
+        .collect();
+    for compact_pat in ["javascript:", "vbscript:", "data:text/html"] {
+        if compact.contains(compact_pat) {
+            return Err(format!(
+                "SVG content contains blocked URI scheme: {}",
+                compact_pat
+            ));
+        }
+    }
+
+    if contains_inline_event_attr(&lower) {
+        return Err("SVG content contains inline event handler attribute".to_string());
+    }
+
+    Ok(())
 }
 
 /// Sanitizes raw SVG byte content by rejecting known XSS vectors.
@@ -290,24 +345,7 @@ fn contains_inline_event_attr(lower: &str) -> bool {
 /// # Errors
 /// Returns `Err(reason)` when the input is not valid UTF-8 or contains a blocked pattern.
 pub fn sanitize_svg_content(raw: &[u8]) -> Result<Vec<u8>, String> {
-    let svg_str = std::str::from_utf8(raw)
-        .map_err(|e| format!("SVG content is not valid UTF-8: {}", e))?;
-
-    let lower = svg_str.to_lowercase();
-
-    for pattern in SVG_BLOCKED_PATTERNS {
-        if lower.contains(pattern) {
-            return Err(format!(
-                "SVG content contains blocked pattern: {}",
-                pattern
-            ));
-        }
-    }
-
-    if contains_inline_event_attr(&lower) {
-        return Err("SVG content contains inline event handler attribute".to_string());
-    }
-
+    validate_svg_safe(raw)?;
     Ok(raw.to_vec())
 }
 

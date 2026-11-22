@@ -695,6 +695,29 @@ pub async fn admin_bulk_content_operation(
         Vec::new()
     };
 
+    if matches!(action, "draft" | "archive" | "set_visibility" | "set_featured") {
+        let targets_privileged = payload.ids.iter().any(|id| {
+            let db_status = state.db.get_content_status_by_id(*id);
+            let status_opt = db_status.as_deref().or_else(|| {
+                all_contents
+                    .iter()
+                    .find(|c| c.id == *id)
+                    .map(|c| c.status.as_str())
+            });
+            status_opt.is_some_and(|st| {
+                matches!(
+                    st.trim().to_ascii_lowercase().as_str(),
+                    "" | "published" | "publish" | "scheduled" | "future" | "archived" | "archive"
+                )
+            })
+        });
+        if targets_privileged {
+            if let Err(resp) = require_perm(&operator, "contents:publish") {
+                return resp;
+            }
+        }
+    }
+
     let mut affected = 0usize;
     for id in &payload.ids {
         match action {

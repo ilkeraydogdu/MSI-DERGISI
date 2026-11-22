@@ -139,6 +139,13 @@ pub async fn list_admin_contents(
     .into_response()
 }
 
+fn is_privileged_content_status(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "" | "published" | "publish" | "scheduled" | "future" | "archived" | "archive"
+    )
+}
+
 pub async fn admin_upsert_content(
     operator: OperatorUser,
     headers: HeaderMap,
@@ -149,9 +156,18 @@ pub async fn admin_upsert_content(
         return resp;
     }
     let wants_publish = item.status.trim().is_empty() || item.status.trim() == "published";
-    if wants_publish {
+    if is_privileged_content_status(&item.status) {
         if let Err(resp) = require_perm(&operator, "contents:publish") {
             return resp;
+        }
+    }
+    if item.id > 0 {
+        if let Some(existing_status) = state.db.get_content_status_by_id(item.id) {
+            if is_privileged_content_status(&existing_status) {
+                if let Err(resp) = require_perm(&operator, "contents:publish") {
+                    return resp;
+                }
+            }
         }
     }
 
@@ -310,53 +326,7 @@ fn validate_upload_signature(ext: &str, bytes: &[u8]) -> bool {
         "jpg" | "jpeg" => bytes.starts_with(&[0xFF, 0xD8, 0xFF]),
         "pdf" => bytes.starts_with(b"%PDF-"),
         "mp4" => bytes.len() >= 12 && &bytes[4..8] == b"ftyp",
-        "svg" => {
-            let Ok(text) = std::str::from_utf8(bytes) else {
-                return false;
-            };
-            let trimmed = text.trim_start();
-            let lower = trimmed.to_ascii_lowercase();
-            let valid_header = lower.starts_with("<svg") || (lower.starts_with("<?xml") && lower.contains("<svg"));
-            if !valid_header {
-                return false;
-            }
-            for forbidden in [
-                "<script",
-                "<foreignobject",
-                "<iframe",
-                "<object",
-                "<embed",
-                "<?xml-stylesheet",
-                "javascript:",
-                "vbscript:",
-                "data:text/html",
-                "&#",
-            ] {
-                if lower.contains(forbidden) {
-                    return false;
-                }
-            }
-            // Reject any inline event attribute (`on<event>=` including whitespace before `=`)
-            let bytes_low = lower.as_bytes();
-            let mut i = 0;
-            while i + 3 < bytes_low.len() {
-                let prev_ws = i == 0 || matches!(bytes_low[i - 1], b' ' | b'\t' | b'\n' | b'\r' | b'/');
-                if prev_ws && bytes_low[i] == b'o' && bytes_low[i + 1] == b'n' && bytes_low[i + 2].is_ascii_alphabetic() {
-                    let mut j = i + 2;
-                    while j < bytes_low.len() && bytes_low[j].is_ascii_alphabetic() {
-                        j += 1;
-                    }
-                    while j < bytes_low.len() && matches!(bytes_low[j], b' ' | b'\t' | b'\n' | b'\r') {
-                        j += 1;
-                    }
-                    if j < bytes_low.len() && bytes_low[j] == b'=' {
-                        return false;
-                    }
-                }
-                i += 1;
-            }
-            true
-        }
+        "svg" => crate::engine::validation_engine::validate_svg_safe(bytes).is_ok(),
         _ => false,
     }
 }

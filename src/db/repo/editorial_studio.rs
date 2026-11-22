@@ -1108,7 +1108,7 @@ impl Database {
         };
         stmt.query_map(params![content_id], |r| {
             Ok(ArticleRevision {
-                id: r.get::<_, i64>(0)? as i32,
+                id: r.get::<_, i64>(0)?,
                 article_id: r.get::<_, i64>(1)?.to_string(),
                 editor_id: None,
                 editor_name: r.get(6)?,
@@ -2011,21 +2011,32 @@ impl Database {
             return Ok(Vec::new());
         }
 
-        let pub_now = chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string();
+        let pub_now = (chrono::Utc::now() + chrono::Duration::hours(3))
+            .format("%Y-%m-%d %H:%M")
+            .to_string();
         let iso_now = chrono::Utc::now().to_rfc3339();
-        let tx = conn.transaction().map_err(|e| e.to_string())?;
-        for item in &due {
-            tx.execute(
-                "UPDATE contents SET status = 'published', published_at = ?1, updated_at = ?2 WHERE id = ?3",
-                params![pub_now, iso_now, item.id],
-            )
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|e| e.to_string())?;
+        let mut published = Vec::new();
+        for item in due {
+            let rows_affected = tx
+                .execute(
+                    "UPDATE contents SET status = 'published', published_at = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'scheduled'",
+                    params![pub_now, iso_now, item.id],
+                )
+                .map_err(|e| e.to_string())?;
+            if rows_affected == 1 {
+                published.push(item);
+            }
         }
         tx.commit().map_err(|e| e.to_string())?;
         drop(conn);
 
-        crate::engine::content_query_engine::CentralContentQueryEngine::invalidate_cache();
-        self.refresh_l1_sections(&["contents"]);
-        Ok(due)
+        if !published.is_empty() {
+            crate::engine::content_query_engine::CentralContentQueryEngine::invalidate_cache();
+            self.refresh_l1_sections(&["contents"]);
+        }
+        Ok(published)
     }
 }

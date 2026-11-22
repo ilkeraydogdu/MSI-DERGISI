@@ -2065,7 +2065,7 @@ fn handle_action_click(action: &str, act_el: &Element, ev: &MouseEvent) {
             let aid = act_el.get_attribute("data-article-id").unwrap_or_default();
             if let Some(rid) = act_el
                 .get_attribute("data-rev-id")
-                .and_then(|s| s.parse::<i32>().ok())
+                .and_then(|s| s.parse::<i64>().ok())
             {
                 api::restore_article_revision(aid, rid);
             }

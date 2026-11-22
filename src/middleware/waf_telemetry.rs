@@ -269,14 +269,15 @@ pub async fn central_waf_and_telemetry_middleware(
             HeaderValue::from_static("no-store, private"),
         );
     }
-    let is_noindex_path = is_admin_root
+    let path_lc = path.to_ascii_lowercase();
+    let is_noindex = is_admin_root
         || is_admin_subpage
-        || path.starts_with("/hesabim")
-        || path.starts_with("/sifre-")
-        || path == "/hesap-dogrula"
-        || path == "/abonelik-iptal"
-        || path.starts_with("/api/");
-    if is_noindex_path {
+        || path_lc.starts_with("/hesabim")
+        || path_lc.starts_with("/sifre-")
+        || path_lc == "/hesap-dogrula"
+        || path_lc == "/abonelik-iptal"
+        || path_lc.starts_with("/api/");
+    if is_noindex {
         response.headers_mut().insert(
             HeaderName::from_static("x-robots-tag"),
             HeaderValue::from_static("noindex, nofollow, noarchive"),
@@ -298,12 +299,7 @@ pub async fn central_waf_and_telemetry_middleware(
                 .append(axum::http::header::SET_COOKIE, v);
         }
     }
-    if response.status().is_success()
-        && !path.starts_with("/api/")
-        && !is_static
-        && !is_admin_root
-        && !is_admin_subpage
-    {
+    if response.status().is_success() && !is_noindex && !is_static {
         let canonical_url = format!(
             "{}{}",
             state.config.public_url.trim_end_matches('/'),

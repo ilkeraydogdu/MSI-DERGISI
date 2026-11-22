@@ -269,11 +269,84 @@ fn turkish_lowercase(s: &str) -> String {
     out
 }
 
+pub fn fold_tr(s: &str) -> String {
+    turkish_lowercase(s.trim())
+}
+
 pub fn fold_eq_tr(a: &str, b: &str) -> bool {
     let a_t = a.trim();
     let b_t = b.trim();
     turkish_lowercase(a_t) == turkish_lowercase(b_t)
         || a_t.to_lowercase() == b_t.to_lowercase()
+}
+
+/// Evaluates whether a `recommendation_rules.target_institution` matches the user's
+/// `organization_category` or `organization_name`, resolving aliases via `institution_categories`
+/// (`code`, `legacy_value`, `label_tr`, `label_en`) and TSK/public-sector canonical equivalents.
+pub fn institution_rule_matches_user(
+    rule_target: &str,
+    user_org: &str,
+    user_org_name: &str,
+    categories: &[crate::models::InstitutionCategory],
+) -> bool {
+    let inst = rule_target.trim();
+    if inst.is_empty() || inst == "*" || fold_eq_tr(inst, "all") {
+        return true;
+    }
+    let u_cat = user_org.trim();
+    let u_name = user_org_name.trim();
+    if u_cat.is_empty() && u_name.is_empty() {
+        return false;
+    }
+
+    if (!u_cat.is_empty() && fold_eq_tr(inst, u_cat))
+        || (!u_name.is_empty() && fold_eq_tr(inst, u_name))
+    {
+        return true;
+    }
+
+    let matches_category = |candidate: &str, cat: &crate::models::InstitutionCategory| -> bool {
+        !candidate.is_empty()
+            && (fold_eq_tr(candidate, &cat.code)
+                || fold_eq_tr(candidate, &cat.legacy_value)
+                || fold_eq_tr(candidate, &cat.label_tr)
+                || fold_eq_tr(candidate, &cat.label_en))
+    };
+
+    if let Some(cat) = categories.iter().find(|c| matches_category(inst, c)) {
+        if matches_category(u_cat, cat) || matches_category(u_name, cat) {
+            return true;
+        }
+    }
+
+    // Handle TSK / Turkish Armed Forces canonical aliases across codes & labels
+    let is_tsk_alias = |s: &str| {
+        let f = fold_tr(s);
+        f == "tsk"
+            || f == "türk silahlı kuvvetleri"
+            || f == "turk silahli kuvvetleri"
+            || f == "turkish armed forces"
+            || f == "kamu / tsk / ssb"
+            || f.contains("türk silahlı kuvvetleri")
+    };
+    if is_tsk_alias(inst) {
+        if (!u_cat.is_empty() && is_tsk_alias(u_cat))
+            || (!u_name.is_empty() && is_tsk_alias(u_name))
+        {
+            return true;
+        }
+        // Also match TSK force commands in institution_categories
+        if categories.iter().any(|cat| {
+            matches!(
+                cat.code.trim().to_ascii_lowercase().as_str(),
+                "kkk" | "dzkk" | "hvkk" | "jgk" | "sgk"
+            ) && (matches_category(u_cat, cat) || matches_category(u_name, cat))
+        }) {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Enforces `B13` institution-exclusive content gating (`target_institutions_json`).
@@ -376,7 +449,8 @@ pub fn select_related_articles_authorized(
         .filter(|c| user_matches_target_institutions(c, user, db))
         .cloned()
         .collect();
-    select_related_articles(current, &allowed, rules, user, limit)
+    let categories = db.list_institution_categories(false);
+    select_related_articles_with_categories(current, &allowed, rules, user, &categories, limit)
 }
 
 pub fn select_related_articles(
@@ -386,6 +460,17 @@ pub fn select_related_articles(
     user: Option<&UserAccount>,
     limit: usize,
 ) -> Vec<ContentItem> {
+    select_related_articles_with_categories(current, all_contents, rules, user, &[], limit)
+}
+
+fn select_related_articles_with_categories(
+    current: &ContentItem,
+    all_contents: &[ContentItem],
+    rules: &[RecommendationRule],
+    user: Option<&UserAccount>,
+    categories: &[crate::models::InstitutionCategory],
+    limit: usize,
+) -> Vec<ContentItem> {
     if is_sponsored_or_advertorial(current) {
         return Vec::new();
     }
@@ -393,6 +478,9 @@ pub fn select_related_articles(
     let target_limit = limit.max(3);
     let user_institution = user
         .map(|u| u.organization_category.as_str())
+        .unwrap_or("");
+    let user_org_name = user
+        .map(|u| u.organization_name.as_str())
         .unwrap_or("");
 
     let mut scored_candidates: Vec<(i64, i64, ContentItem)> = all_contents
@@ -408,32 +496,34 @@ pub fn select_related_articles(
 
             // 1. Operator RecommendationRule matches (Institution + SSB Tag / Category)
             for rule in rules.iter().filter(|r| r.is_active) {
-                if rule.recommended_content_slug == candidate.slug {
+                if fold_eq_tr(&rule.recommended_content_slug, &candidate.slug) {
                     let source_matches = rule.source_tag_or_cat == "*"
-                        || rule.source_tag_or_cat.eq_ignore_ascii_case("all")
+                        || fold_eq_tr(&rule.source_tag_or_cat, "all")
                         || current
                             .ssb_tags
                             .iter()
-                            .any(|t| t.eq_ignore_ascii_case(&rule.source_tag_or_cat))
+                            .any(|t| fold_eq_tr(t, &rule.source_tag_or_cat))
                         || current
                             .placements
                             .iter()
-                            .any(|p| p.eq_ignore_ascii_case(&rule.source_tag_or_cat))
-                        || current
-                            .content_type
-                            .eq_ignore_ascii_case(&rule.source_tag_or_cat);
+                            .any(|p| fold_eq_tr(p, &rule.source_tag_or_cat))
+                        || fold_eq_tr(&current.content_type, &rule.source_tag_or_cat);
 
-                    let inst_matches = rule.target_institution.is_empty()
-                        || rule.target_institution == "*"
-                        || fold_eq_tr(&rule.target_institution, "all")
-                        || (!user_institution.is_empty()
-                            && fold_eq_tr(&rule.target_institution, user_institution));
+                    let inst_wildcard = rule.target_institution.trim().is_empty()
+                        || rule.target_institution.trim() == "*"
+                        || fold_eq_tr(&rule.target_institution, "all");
+                    let inst_exact = !inst_wildcard
+                        && institution_rule_matches_user(
+                            &rule.target_institution,
+                            user_institution,
+                            user_org_name,
+                            categories,
+                        );
+                    let inst_matches = inst_wildcard || inst_exact;
 
                     if source_matches && inst_matches {
                         score += 120 + (rule.priority as i64 * 15);
-                        if !user_institution.is_empty()
-                            && fold_eq_tr(&rule.target_institution, user_institution)
-                        {
+                        if inst_exact {
                             score += 60;
                         }
                     }
@@ -445,7 +535,7 @@ pub fn select_related_articles(
                 if candidate
                     .ssb_tags
                     .iter()
-                    .any(|ct| ct.eq_ignore_ascii_case(tag))
+                    .any(|ct| fold_eq_tr(ct, tag))
                 {
                     score += 35;
                 }
@@ -457,7 +547,7 @@ pub fn select_related_articles(
                     if candidate
                         .ssb_tags
                         .iter()
-                        .any(|ct| ct.eq_ignore_ascii_case(interest))
+                        .any(|ct| fold_eq_tr(ct, interest))
                     {
                         score += 25;
                     }

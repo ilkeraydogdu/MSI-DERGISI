@@ -13,7 +13,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
@@ -39,6 +39,7 @@ pub struct Database {
     pub db_path: String,
     pub pool: Pool<SqliteConnectionManager>,
     pub l1_cache: Arc<RwLock<Option<L1CacheSnapshot>>>,
+    pub l1_refresh_lock: Arc<Mutex<()>>,
 }
 
 impl Database {
@@ -71,6 +72,7 @@ impl Database {
             db_path: db_path.to_string(),
             pool,
             l1_cache: Arc::new(RwLock::new(None)),
+            l1_refresh_lock: Arc::new(Mutex::new(())),
         };
 
         let mut conn = db

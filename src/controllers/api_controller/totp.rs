@@ -127,6 +127,27 @@ pub async fn totp_verify_setup(
     let user_mutex = totp_user_lock(&email_key);
     let _user_guard = user_mutex.lock().await;
 
+    let setup_lockout_key = format!("totp_setup:{}", email_key);
+    if let LoginCheckResult::Locked {
+        remaining_secs,
+        attempts,
+    } = security_engine::check_login_allowed(&setup_lockout_key)
+    {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "status": "error",
+                "error_code": "ACCOUNT_LOCKED",
+                "message": format!(
+                    "Çok fazla hatalı 2FA kurulum denemesi. Lütfen {} saniye bekleyin.",
+                    remaining_secs
+                ),
+                "data": { "remaining_secs": remaining_secs, "attempts": attempts }
+            })),
+        )
+            .into_response();
+    }
+
     // If 2FA is already active, require full re-authentication (current password + current TOTP/backup code).
     if let Some(existing_secret) = state
         .db
@@ -210,6 +231,7 @@ pub async fn totp_verify_setup(
             norm_provided.as_bytes(),
             norm_pending.as_bytes(),
         ) {
+            security_engine::record_failed_login(&setup_lockout_key);
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({
@@ -224,6 +246,7 @@ pub async fn totp_verify_setup(
     }
 
     if !totp_service::verify_totp(&secret, &payload.code) {
+        security_engine::record_failed_login(&setup_lockout_key);
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
@@ -271,6 +294,7 @@ pub async fn totp_verify_setup(
         return ApiResponse::server_error(&state.translations, "tr", "totp_save_backup_codes", &e)
             .into_response();
     }
+    security_engine::reset_login_attempts(&setup_lockout_key);
     clear_user_totp_steps(&email_key);
 
     let client_ip = extract_client_ip(&headers);

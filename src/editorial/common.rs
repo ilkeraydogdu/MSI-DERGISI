@@ -793,7 +793,7 @@ pub struct ArticleLock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArticleRevision {
-    pub id: i32,
+    pub id: i64,
     pub article_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor_id: Option<i32>,
@@ -1436,6 +1436,9 @@ pub fn sanitize_inline_rich_html(input: &str) -> String {
                     }
                     _ => {}
                 }
+                continue;
+            } else {
+                out.push_str("&lt;");
                 continue;
             }
         }

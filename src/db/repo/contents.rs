@@ -165,10 +165,23 @@ impl Database {
             .collect()
     }
 
+    pub fn get_content_status_by_id(&self, id: i64) -> Option<String> {
+        if id <= 0 {
+            return None;
+        }
+        let conn = self.open_conn().ok()?;
+        conn.query_row(
+            "SELECT COALESCE(status, 'published') FROM contents WHERE id = ?1 LIMIT 1",
+            params![id],
+            |r| r.get(0),
+        )
+        .ok()
+    }
+
 
     pub fn upsert_content(&self, item: &ContentItem) -> rusqlite::Result<i64> {
-        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
-        let tx = conn.unchecked_transaction()?;
+        let mut conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let status = if item.status.trim().is_empty() {
             "published"
         } else {

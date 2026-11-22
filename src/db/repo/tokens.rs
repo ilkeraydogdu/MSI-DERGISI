@@ -213,6 +213,18 @@ impl Database {
         Ok(())
     }
 
+    pub fn invalidate_user_verification_tokens(&self, user_id: i64) -> Result<(), String> {
+        let conn = self
+            .open_conn()
+            .map_err(|e| format!("DB connection error: {}", e))?;
+        conn.execute(
+            "UPDATE email_verification_tokens SET verified = 1 WHERE user_id = ?1 AND verified = 0",
+            params![user_id],
+        )
+        .map_err(|e| format!("Failed to invalidate user verification tokens: {}", e))?;
+        Ok(())
+    }
+
     // =========================================================================
     // Persistent Revoked Session / Pending-2FA Tokens (016_spec_parity_and_security.sql)
     // =========================================================================

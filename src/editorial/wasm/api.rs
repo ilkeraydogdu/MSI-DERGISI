@@ -2928,7 +2928,7 @@ pub fn open_revisions_modal(article_id: String, article_title: String) {
     });
 }
 
-pub fn restore_article_revision(article_id: String, rev_id: i32) {
+pub fn restore_article_revision(article_id: String, rev_id: i64) {
     let aid = article_id.trim().to_string();
     if aid.is_empty() {
         return;

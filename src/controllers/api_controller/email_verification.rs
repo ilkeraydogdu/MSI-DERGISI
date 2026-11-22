@@ -189,10 +189,75 @@ pub struct ResendVerificationPayload {
     pub email: String,
 }
 
+static RESEND_VERIFICATION_EMAIL_LIMITS: Lazy<std::sync::Mutex<HashMap<String, (u32, i64)>>> =
+    Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
+static RESEND_VERIFICATION_IP_LIMITS: Lazy<std::sync::Mutex<HashMap<String, (u32, i64)>>> =
+    Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
+
+fn check_resend_rate_limit(
+    store: &std::sync::Mutex<HashMap<String, (u32, i64)>>,
+    key: &str,
+    max_requests: u32,
+    window_secs: i64,
+) -> bool {
+    let norm = key.trim().to_lowercase();
+    if norm.is_empty() {
+        return true;
+    }
+    let Ok(mut map) = store.lock() else {
+        return true;
+    };
+    let now = chrono::Utc::now().timestamp();
+    if map.len() > 5_000 {
+        map.retain(|_, (_, ts)| now - *ts < window_secs * 2);
+    }
+    let entry = map.entry(norm).or_insert((0, now));
+    if now - entry.1 >= window_secs {
+        entry.0 = 1;
+        entry.1 = now;
+    } else {
+        entry.0 = entry.0.saturating_add(1);
+    }
+    entry.0 <= max_requests
+}
+
 pub async fn resend_verification(
     State(state): State<AppState>,
+    opt_ip: Option<Extension<security_engine::ResolvedClientIp>>,
+    headers: HeaderMap,
     Json(payload): Json<ResendVerificationPayload>,
 ) -> Response {
+    let (client_ip, was_forwarded) = resolve_client_ip_with_forwarded(opt_ip.as_ref(), &headers);
+    let ip_max = if !was_forwarded && (client_ip == "127.0.0.1" || client_ip == "::1") {
+        20
+    } else {
+        6
+    };
+    if !client_ip.is_empty()
+        && client_ip != "unknown"
+        && !check_resend_rate_limit(&RESEND_VERIFICATION_IP_LIMITS, &client_ip, ip_max, 60)
+    {
+        return ApiResponse::error(
+            &state.translations,
+            "tr",
+            StatusCode::TOO_MANY_REQUESTS,
+            error_codes::RATE_LIMITED,
+            msg_keys::RATE_LIMIT_EXCEEDED,
+        )
+        .into_response();
+    }
+
+    if !check_resend_rate_limit(&RESEND_VERIFICATION_EMAIL_LIMITS, &payload.email, 2, 60) {
+        return ApiResponse::error(
+            &state.translations,
+            "tr",
+            StatusCode::TOO_MANY_REQUESTS,
+            error_codes::RATE_LIMITED,
+            msg_keys::RATE_LIMIT_EXCEEDED,
+        )
+        .into_response();
+    }
+
     if let Some((user, _pw_hash)) = state.db.get_user_by_email(&payload.email) {
         if !user.email_verified && user.role != "deleted" {
             let token = format!(
@@ -203,6 +268,7 @@ pub async fn resend_verification(
             let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
             let expires_str = expires_at.format("%Y-%m-%d %H:%M:%S").to_string();
 
+            let _ = state.db.invalidate_user_verification_tokens(user.id);
             if let Err(e) = state
                 .db
                 .create_email_verification_token(user.id, &token, &expires_str)

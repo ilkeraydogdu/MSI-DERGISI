@@ -152,14 +152,15 @@ pub async fn admin_create_content_version(
     if let Err(resp) = require_perm(&operator, "contents:write") {
         return resp;
     }
-    if id <= 0 || (payload.content_id > 0 && payload.content_id != id) {
+    if id <= 0 || payload.content_id < 0 || (payload.content_id > 0 && payload.content_id != id) {
         return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
     }
-    if let Some(db_status) = state.db.get_content_status_by_id(id) {
-        if is_privileged_content_status(&db_status) {
-            if let Err(resp) = require_perm(&operator, "contents:publish") {
-                return resp;
-            }
+    let Some(db_status) = state.db.get_content_status_by_id(id) else {
+        return json_error(&state, StatusCode::NOT_FOUND, msg_keys::CONTENT_NOT_FOUND);
+    };
+    if is_privileged_content_status(&db_status) {
+        if let Err(resp) = require_perm(&operator, "contents:publish") {
+            return resp;
         }
     }
     let clean_title_tr = validation_engine::sanitize_plain_text(&payload.title_tr);
@@ -203,6 +204,9 @@ pub async fn admin_restore_content_version(
 ) -> Response {
     if let Err(resp) = require_perm(&operator, "contents:write") {
         return resp;
+    }
+    if id <= 0 || version <= 0 {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
     }
     if let Some(db_status) = state.db.get_content_status_by_id(id) {
         if is_privileged_content_status(&db_status) {

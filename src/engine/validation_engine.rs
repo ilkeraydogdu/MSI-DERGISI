@@ -449,10 +449,11 @@ pub fn validate_svg_safe(raw: &[u8]) -> Result<(), String> {
 
     let mut rest = svg_str.trim_start_matches('\u{feff}').trim_start();
     if rest.starts_with("<?") {
-        let is_xml_decl = rest.len() >= 5
-            && rest[..5].eq_ignore_ascii_case("<?xml")
-            && rest
-                .as_bytes()
+        let header_bytes = rest.as_bytes();
+        let is_xml_decl = header_bytes
+            .get(..5)
+            .is_some_and(|b| b.eq_ignore_ascii_case(b"<?xml"))
+            && header_bytes
                 .get(5)
                 .is_some_and(|b| is_xml_sep(*b) || *b == b'?');
         if !is_xml_decl {
@@ -853,5 +854,25 @@ mod tests {
 
         let safe_with_xml_and_png = b"\xef\xbb\xbf<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns=\"http://www.w3.org/2000/svg\"><image href=\"data:image/png;base64,iVBORw0KGgo=\" width=\"10\" height=\"10\"/></svg>";
         assert!(validate_svg_safe(safe_with_xml_and_png).is_ok());
+    }
+
+    #[test]
+    fn svg_rejects_multibyte_utf8_after_pi_without_panic() {
+        for payload in [
+            b"<?\xc4\x9f\xc4\x9f>".as_slice(),
+            b"<?\xc3\xa9\xc3\xa9>".as_slice(),
+            b"\xef\xbb\xbf<?\xc4\x9f\xc4\x9f><svg xmlns=\"http://www.w3.org/2000/svg\"/>".as_slice(),
+            b"<?xml\xc4\x9f><svg xmlns=\"http://www.w3.org/2000/svg\"/>".as_slice(),
+        ] {
+            assert!(
+                validate_svg_safe(payload).is_err(),
+                "Expected multi-byte UTF-8 PI payload to be rejected cleanly without panic"
+            );
+        }
+
+        // Valid multi-byte UTF-8 inside SVG attributes and text nodes must succeed without panic
+        let valid_utf8_svg =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><text x=\"0\" y=\"10\" data-label=\"ğüşçöİ\">\u{00c7}a\u{011f}r\u{0131}</text></svg>";
+        assert!(validate_svg_safe(valid_utf8_svg.as_bytes()).is_ok());
     }
 }

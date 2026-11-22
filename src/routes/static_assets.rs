@@ -9,12 +9,29 @@ use tower_http::services::ServeDir;
 
 use crate::controllers::AppState;
 
-async fn harden_uploaded_svg_headers(req: Request, next: Next) -> Response {
-    let path_lc = req.uri().path().to_ascii_lowercase();
-    let is_uploaded_svg = path_lc.ends_with(".svg")
-        && (path_lc.starts_with("/uploads/editorial/") || path_lc.starts_with("/images/uploads/"));
-    let mut resp = next.run(req).await;
-    if is_uploaded_svg {
+fn decode_path_lower(raw_path: &str) -> String {
+    let decoded = urlencoding::decode_binary(raw_path.as_bytes());
+    String::from_utf8_lossy(&decoded).to_ascii_lowercase()
+}
+
+pub(crate) fn apply_uploaded_svg_headers(raw_path: &str, resp: &mut Response) {
+    let raw_lc = raw_path.to_ascii_lowercase();
+    let decoded_lc = decode_path_lower(raw_path);
+    let in_upload_dir = decoded_lc.starts_with("/uploads/editorial/")
+        || decoded_lc.starts_with("/images/uploads/")
+        || raw_lc.starts_with("/uploads/editorial/")
+        || raw_lc.starts_with("/images/uploads/");
+    if !in_upload_dir {
+        return;
+    }
+    let has_svg_ext = decoded_lc.ends_with(".svg") || raw_lc.ends_with(".svg");
+    let has_svg_ct = resp
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.trim().to_ascii_lowercase().starts_with("image/svg+xml"))
+        .unwrap_or(false);
+    if has_svg_ext || has_svg_ct {
         resp.headers_mut().insert(
             HeaderName::from_static("x-content-type-options"),
             HeaderValue::from_static("nosniff"),
@@ -24,6 +41,12 @@ async fn harden_uploaded_svg_headers(req: Request, next: Next) -> Response {
             HeaderValue::from_static("sandbox; default-src 'none'"),
         );
     }
+}
+
+async fn harden_uploaded_svg_headers(req: Request, next: Next) -> Response {
+    let raw_path = req.uri().path().to_string();
+    let mut resp = next.run(req).await;
+    apply_uploaded_svg_headers(&raw_path, &mut resp);
     resp
 }
 

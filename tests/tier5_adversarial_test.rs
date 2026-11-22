@@ -2902,7 +2902,7 @@ async fn t5_content_version_rbac_and_html_sanitization() {
     .await;
     assert_eq!(st_ce_submit, StatusCode::FORBIDDEN);
 
-    // 2. Path(id) vs payload.content_id mismatch MUST be rejected (400) even on draft
+    // 2. Path(id) vs payload.content_id mismatch, negative content_id, and missing content id MUST be rejected
     let (st_mismatch, _, _) = req_with_csrf(
         &app,
         &state,
@@ -2918,6 +2918,51 @@ async fn t5_content_version_rbac_and_html_sanitization() {
     )
     .await;
     assert_eq!(st_mismatch, StatusCode::BAD_REQUEST);
+
+    let (st_neg_cid, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        &format!("/api/v1/admin/contents/{}/versions", draft_id),
+        Some(&ce_cookie),
+        Some(json!({
+            "content_id": -1,
+            "title_tr": "Negative ID",
+            "body_tr": "<p>Test</p>",
+            "summary_tr": "Test"
+        })),
+    )
+    .await;
+    assert_eq!(st_neg_cid, StatusCode::BAD_REQUEST);
+
+    let (st_missing_id, _, missing_json) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        "/api/v1/admin/contents/999999/versions",
+        Some(&eic_cookie),
+        Some(json!({
+            "content_id": 999999,
+            "title_tr": "Missing Content",
+            "body_tr": "<p>Test</p>",
+            "summary_tr": "Test"
+        })),
+    )
+    .await;
+    assert_eq!(st_missing_id, StatusCode::NOT_FOUND);
+    assert_eq!(missing_json["error_code"], "NOT_FOUND");
+
+    let (st_neg_restore, _, _) = req_with_csrf(
+        &app,
+        &state,
+        "POST",
+        "/api/v1/admin/contents/-1/versions/1/restore",
+        Some(&eic_cookie),
+        None,
+    )
+    .await;
+    assert_eq!(st_neg_restore, StatusCode::BAD_REQUEST);
+
     assert_eq!(
         state.db.get_content_versions(pub_id).len(),
         1,
@@ -3092,6 +3137,14 @@ async fn t5_svg_namespace_uri_style_bypass_and_static_headers() {
             "ctrl_ff_onload.svg",
             "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect\x0conload=\"alert(1)\" width=\"5\" height=\"5\"/></svg>",
         ),
+        (
+            "pi_multibyte_g.svg",
+            std::str::from_utf8(b"<?\xc4\x9f\xc4\x9f>").unwrap(),
+        ),
+        (
+            "pi_multibyte_e.svg",
+            std::str::from_utf8(b"<?\xc3\xa9\xc3\xa9>").unwrap(),
+        ),
     ];
 
     for (endpoint, field_name) in [
@@ -3167,16 +3220,28 @@ async fn t5_svg_namespace_uri_style_bypass_and_static_headers() {
         } else {
             format!("/{}", uploaded_url)
         };
-        let (st_get, hdrs_get, _) = req_raw(&app, "GET", &get_path, None, &[], None).await;
-        assert_eq!(st_get, StatusCode::OK);
-        assert_eq!(
-            hdrs_get.get("x-content-type-options").and_then(|v| v.to_str().ok()),
-            Some("nosniff")
-        );
-        assert_eq!(
-            hdrs_get.get("content-security-policy").and_then(|v| v.to_str().ok()),
-            Some("sandbox; default-src 'none'")
-        );
+        let stem_path = get_path.strip_suffix(".svg").expect("uploaded SVG path ends with .svg");
+        for probe_path in [
+            get_path.clone(),
+            format!("{}.%73vg", stem_path),
+            format!("{}%2esvg", stem_path),
+            format!("{}%2e%73%76%67", stem_path),
+        ] {
+            let (st_get, hdrs_get, _) = req_raw(&app, "GET", &probe_path, None, &[], None).await;
+            assert_eq!(st_get, StatusCode::OK, "Expected 200 OK for {}", probe_path);
+            assert_eq!(
+                hdrs_get.get("x-content-type-options").and_then(|v| v.to_str().ok()),
+                Some("nosniff"),
+                "Missing nosniff on {}",
+                probe_path
+            );
+            assert_eq!(
+                hdrs_get.get("content-security-policy").and_then(|v| v.to_str().ok()),
+                Some("sandbox; default-src 'none'"),
+                "Missing sandboxed SVG CSP on {}",
+                probe_path
+            );
+        }
     }
 
     let _ = std::fs::remove_dir_all(&temp_static);

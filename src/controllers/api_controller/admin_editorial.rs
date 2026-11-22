@@ -94,7 +94,7 @@ fn operator_to_editorial_user(op: &OperatorUser) -> User {
 fn is_privileged_lifecycle_status(status: &str) -> bool {
     matches!(
         status.trim().to_ascii_lowercase().as_str(),
-        "publish" | "published" | "future" | "scheduled" | "archived" | "archive"
+        "" | "publish" | "published" | "future" | "scheduled" | "archived" | "archive"
     )
 }
 

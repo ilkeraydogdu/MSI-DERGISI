@@ -270,18 +270,7 @@ pub async fn central_waf_and_telemetry_middleware(
         );
     }
     let path_lc = path.to_ascii_lowercase();
-    if path_lc.ends_with(".svg")
-        && (path_lc.starts_with("/uploads/editorial/") || path_lc.starts_with("/images/uploads/"))
-    {
-        response.headers_mut().insert(
-            HeaderName::from_static("x-content-type-options"),
-            HeaderValue::from_static("nosniff"),
-        );
-        response.headers_mut().insert(
-            HeaderName::from_static("content-security-policy"),
-            HeaderValue::from_static("sandbox; default-src 'none'"),
-        );
-    }
+    crate::routes::static_assets::apply_uploaded_svg_headers(&path, &mut response);
     let is_noindex = is_admin_root
         || is_admin_subpage
         || path_lc.starts_with("/hesabim")

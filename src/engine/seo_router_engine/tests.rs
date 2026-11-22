@@ -79,4 +79,7 @@ use std::collections::HashMap;
         let robots = generate_robots_txt("https://msidergisi.com");
         assert!(robots.contains("Host: msidergisi.com"));
         assert!(robots.contains("Sitemap: https://msidergisi.com/sitemap-news.xml"));
+        assert_eq!(brand.logo_url, "/images/logo.svg");
+        let manifest = CentralSeoEngine::generate_web_manifest("https://msidergisi.com", &brand);
+        assert!(manifest.contains("\"theme_color\": \"#cb382a\""));
     }

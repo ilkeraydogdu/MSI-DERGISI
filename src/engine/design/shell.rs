@@ -235,9 +235,13 @@ pub fn render_full(
                     );
                 }
                 // Bootstrap CSS intentionally eliminated; pure MSI editorial design system only
-                head.link_css("/css/msi-design-system.css?v=14");
-                head.style_tag(Some("design-tokens"), &design.css());
-                head.style_tag(Some("msi-ssr-enhancements"), SSR_ENHANCEMENT_CSS);
+                head.link_css("/css/msi-design-system.css?v=35");
+                head.link_css("/css/design-tokens.css");
+                head.script_inline(
+                    crate::engine::design::theme_boot::UNIFIED_THEME_PREHYDRATE_JS,
+                    nonce,
+                    None,
+                );
             });
 
             html.el(
@@ -332,9 +336,8 @@ pub fn render_full(
                     bd.script_src("/js/vendor/lenis.min.js", nonce, true);
                     bd.script_src("/js/vendor/gsap.min.js", nonce, true);
                     bd.script_src("/js/vendor/ScrollTrigger.min.js", nonce, true);
-                    bd.script_src("/js/msi-ui.js?v=12", nonce, true);
+                    bd.script_src("/js/msi-ui.js?v=35", nonce, true);
                     bd.script_inline(SPECULATION_RULES_JSON, nonce, Some("speculationrules"));
-                    bd.script_inline(SSR_INTERACTION_SCRIPT, nonce, None);
                 },
             );
         },
@@ -352,9 +355,11 @@ fn write_header(
 ) {
     let home_href = lang_href("/", lang);
     let search_href = lang_href("/arama", lang);
+    let account_href = lang_href("/hesabim", lang);
     let search_aria = tr_text(tr, lang, "nav.search", "Ara", "Search");
     let notif_aria = tr_text(tr, lang, "shell.notifications", "Bildirimler", "Notifications");
     let theme_aria = tr_text(tr, lang, "shell.toggle_theme", "Tema değiştir", "Toggle theme");
+    let account_aria = tr_text(tr, lang, "nav.account", "Hesabım", "My Account");
     let menu_aria = tr_text(tr, lang, "shell.menu", "Menü", "Menu");
     let notif_count_str = notification_count.to_string();
 
@@ -372,8 +377,8 @@ fn write_header(
                                     ("class", "brand-logo"),
                                     ("src", "/images/logo-white.svg"),
                                     ("alt", brand),
-                                    ("width", "156"),
-                                    ("height", "58"),
+                                    ("width", "178"),
+                                    ("height", "66"),
                                     ("decoding", "async"),
                                 ],
                             );
@@ -413,6 +418,18 @@ fn write_header(
                         ],
                         |btn| {
                             btn.raw(&icon("moon"));
+                        },
+                    );
+                    acts.el(
+                        "a",
+                        &[
+                            ("class", "icon-button account-link"),
+                            ("href", &account_href),
+                            ("aria-label", &account_aria),
+                            ("title", &account_aria),
+                        ],
+                        |a| {
+                            a.raw(&icon("user"));
                         },
                     );
                     acts.el(
@@ -571,6 +588,18 @@ fn write_nav_bar(
                             a.text(other_lang_upper);
                         },
                     );
+                    let mob_account_href = lang_href("/hesabim", lang);
+                    let mob_sub_href = lang_href("/abonelik-ve-satis", lang);
+                    let mob_account_lbl = tr_text(tr, lang, "nav.account", "Hesabım", "My Account");
+                    let mob_sub_lbl = tr_text(tr, lang, "nav.subscriptions", "Abonelik", "Subscribe");
+                    nav_el.el("div", &[("class", "mobile-nav-actions")], |ma| {
+                        ma.el("a", &[("class", "button primary"), ("href", &mob_account_href)], |a| {
+                            a.text(&mob_account_lbl);
+                        });
+                        ma.el("a", &[("class", "button secondary"), ("href", &mob_sub_href)], |a| {
+                            a.text(&mob_sub_lbl);
+                        });
+                    });
                 },
             );
         });
@@ -871,7 +900,6 @@ fn write_footer(
 ) {
     let is_en = lang.eq_ignore_ascii_case("en");
     let home = lang_href("/", lang);
-    let badge = if is_en { "REVIEW" } else { "DERGİSİ" };
     let tagline = tr_text(
         tr,
         lang,
@@ -952,15 +980,11 @@ fn write_footer(
                                 ("class", "brand-logo"),
                                 ("src", "/images/logo-white.svg"),
                                 ("alt", brand),
-                                ("width", "108"),
-                                ("height", "40"),
-                                ("loading", "lazy"),
+                                ("width", "128"),
+                                ("height", "47"),
                                 ("decoding", "async"),
                             ],
                         );
-                        wb.el("span", &[("class", "wordmark-badge")], |b| {
-                            b.text(badge);
-                        });
                     });
                 });
                 inner.el("span", &[], |sp| {
@@ -1053,19 +1077,32 @@ fn write_footer(
         });
 
         ft.el("div", &[("class", "container footer-bottom")], |btm| {
-            btm.el("span", &[], |sp| { sp.text(&copyright_txt); });
-            btm.el("span", &[], |sp| {
+            btm.el("span", &[("class", "footer-bottom-left")], |sp| {
+                sp.text(&copyright_txt);
+            });
+            btm.el("span", &[("class", "footer-bottom-center")], |sp| {
                 sp.text("MSI Dergisi · MSI Turkish Defence Review (ISSN 1306-0309)");
+            });
+            btm.el("span", &[("class", "footer-bottom-right")], |sp| {
+                sp.text(if is_en { "Software & Design: " } else { "Yazılım & Tasarım: " });
+                sp.el(
+                    "a",
+                    &[
+                        ("href", "https://pofudukdijital.com"),
+                        ("target", "_blank"),
+                        ("rel", "noopener"),
+                        ("class", "footer-credit-link"),
+                    ],
+                    |a| {
+                        a.text("Pofuduk Dijital");
+                    },
+                );
             });
         });
     });
 }
 
-const SPECULATION_RULES_JSON: &str = r#"{"prefetch":[{"source":"document","where":{"and":[{"href_matches":["/icerik/*","/kategori/*","/e-dergi","/abonelik-ve-satis","/kurumsal/*"]},{"not":{"href_matches":["/admin*","/api/*","*logout*"]}}]},"eagerness":"moderate"}]}"#;
-
-const SSR_ENHANCEMENT_CSS: &str = r#".issue-view-tabs{display:flex;gap:8px;margin:12px 0;border-bottom:1px solid var(--msi-border);padding-bottom:8px;}.issue-view-tab{padding:7px 14px;border:1px solid var(--msi-border);border-radius:var(--radius);background:var(--msi-bg-subtle);color:var(--msi-text-primary);font-size:.8125rem;font-weight:700;cursor:pointer;}.issue-view-tab.is-active{background:var(--msi-red);border-color:var(--msi-red);color:#fff;}.issue-pdf-panel{margin-top:8px;}.issue-pdf-frame{width:100%;height:500px;border:1px solid var(--msi-border);border-radius:var(--radius);background:var(--msi-bg-subtle);}.issue-pdf-locked{padding:20px;border:1px solid var(--msi-border);border-radius:var(--radius);background:var(--msi-bg-subtle);display:grid;gap:14px;}.ad-floating-popup{position:fixed;right:20px;bottom:20px;width:min(340px,calc(100vw - 24px));z-index:35;background:var(--msi-bg-surface);color:var(--msi-text-primary);border:1px solid var(--msi-border);border-top:3px solid var(--msi-red);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}.ad-floating-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px 8px 12px;border-bottom:1px solid var(--msi-border);font-size:.72rem;color:var(--msi-text-muted);}.ad-floating-close{width:30px;height:30px;}.ad-floating-body{display:block;text-decoration:none;color:inherit;padding:12px;}.ad-floating-img{width:100%;height:132px;object-fit:cover;border-radius:var(--radius);margin-bottom:10px;display:block;}.ad-floating-copy h3{font-size:.95rem;margin:4px 0 6px;line-height:1.3;}.ad-floating-copy p{font-size:.8rem;color:var(--msi-text-muted);margin:0 0 8px;line-height:1.45;}.ad-floating-cta{font-size:.78rem;font-weight:700;color:var(--msi-red);}[hidden]{display:none !important;}@media(max-width:640px){.ad-floating-popup{right:12px;bottom:12px;width:calc(100vw - 24px);}.issue-pdf-frame{height:380px;}}"#;
-
-const SSR_INTERACTION_SCRIPT: &str = r#"(()=>{try{const el=document.getElementById("msi-i18n");if(el)window.__MSI_I18N__=JSON.parse(el.textContent||"{}");}catch{}const fp=document.getElementById("ad-floating-popup");if(fp){const id=fp.dataset.adId||"0";try{if(sessionStorage.getItem("msi_dismiss_ad_"+id)==="1")fp.hidden=true;}catch{}fp.querySelector("[data-dismiss-floating-ad]")?.addEventListener("click",()=>{fp.hidden=true;try{sessionStorage.setItem("msi_dismiss_ad_"+id,"1");}catch{}});}const setIssueView=(mode)=>{document.querySelectorAll("[data-issue-view]").forEach((btn)=>{const on=btn.dataset.issueView===mode;btn.classList.toggle("is-active",on);btn.setAttribute("aria-selected",String(on));});const toc=document.getElementById("issue-toc-panel"),pdf=document.getElementById("issue-pdf-panel");if(toc)toc.hidden=mode!=="toc";if(pdf)pdf.hidden=mode!=="pdf";};document.addEventListener("click",(e)=>{const tab=e.target.closest("[data-issue-view]");if(tab){setIssueView(tab.dataset.issueView||"toc");return;}const opener=e.target.closest("[data-open-issue]");if(opener){setIssueView("toc");const fr=document.getElementById("issue-pdf-frame");const num=opener.dataset.openIssue;if(fr&&num)fr.src="/api/v1/edergi/"+encodeURIComponent(num)+"/download-pdf#toolbar=0";}});})();"#;
+const SPECULATION_RULES_JSON: &str = r#"{"prefetch":[{"source":"document","where":{"and":[{"href_matches":["/icerik/*","/kategori/*","/e-dergi","/abonelik-ve-satis","/kurumsal/*"]},{"not":{"href_matches":["/podmin*","/admin*","/api/*","*logout*"]}}]},"eagerness":"moderate"}]}"#;
 
 const SOCIAL_LINKS_SVG_HTML: &str = r#"<a href="https://www.facebook.com/MSI.Dergisi/" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi Facebook"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 21v-8h2.7l.4-3h-3.1V8.1c0-.9.3-1.5 1.6-1.5h1.7V3.9c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3V10H7.3v3h2.8v8h3.4Z"/></svg></a><a href="https://www.linkedin.com/company/msi-dergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi LinkedIn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.9 8.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4ZM5.2 10h3.4v10.2H5.2V10Zm5.5 0h3.2v1.4h.1c.5-.8 1.6-1.7 3.3-1.7 3.5 0 4.1 2.3 4.1 5.3v5.2H18v-4.6c0-1.1 0-2.5-1.5-2.5s-1.8 1.2-1.8 2.4v4.7h-3.4V10Z"/></svg></a><a href="https://www.instagram.com/msidergisi/" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a><a href="https://nsosyal.com/msidergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi NSosyal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4m-8.4 0a6 6 0 0 1 0-8.4m11.2-2.8a10 10 0 0 1 0 14m-14 0a10 10 0 0 1 0-14"/></svg></a><a href="https://twitter.com/MSI_Dergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi X (Twitter)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.2 3h2.9l-6.4 7.3L22.2 21h-5.9l-4.6-6-5.3 6H3.5l6.8-7.8L3.1 3h6l4.2 5.5L18.2 3Zm-1 16.2h1.6L8.3 4.7H6.6l10.6 14.5Z"/></svg></a><a href="https://www.youtube.com/c/msidergisi" target="_blank" rel="noopener noreferrer" aria-label="MSI Dergisi YouTube"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5A2.7 2.7 0 0 0 2.4 7.2C2 8.9 2 12 2 12s0 3.1.4 4.8a2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9c.4-1.7.4-4.8.4-4.8s0-3.1-.4-4.8ZM10 15.2V8.8l5.5 3.2-5.5 3.2Z"/></svg></a>"#;
 
@@ -1112,6 +1149,9 @@ mod tests {
             impressions_count: 0,
             clicks_count: 0,
             is_active: true,
+            start_date: None,
+            end_date: None,
+            rotation_mode: "weighted".into(),
         };
         let html = render_full(
             "en",
@@ -1134,11 +1174,16 @@ mod tests {
             },
         );
         assert!(!html.contains("bootstrap.min.css"));
+        assert!(!html.contains("msi-ssr-enhancements"));
+        assert!(!html.contains("window.__MSI_I18N__="));
+        assert!(html.contains("/css/msi-design-system.css?v=35"));
+        assert!(html.contains("/js/msi-ui.js?v=35"));
+        assert!(html.contains("/images/logo-white.svg"));
         assert!(html.contains("<script id=\"msi-i18n\" type=\"application/json\" nonce=\"test-nonce\">"));
         assert!(html.contains("id=\"ad-floating-popup\""));
         assert!(html.contains("EN &lt;script&gt;alert(1)&lt;/script&gt; Title"));
         assert!(!html.contains("<script>alert(1)</script>"));
-        assert!(html.contains("/api/v1/edergi/286/download-pdf#toolbar=0"));
+        assert!(html.contains("/api/v1/edergi/286/download-pdf?publication_type=msi#toolbar=0"));
         assert!(!html.contains("Hoş geldiniz"));
         let body_part = html.split("</head>").nth(1).unwrap_or("");
         assert!(!body_part.contains("Defense"));

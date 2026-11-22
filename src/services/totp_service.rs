@@ -143,16 +143,31 @@ pub fn generate_qr_svg(uri: &str) -> Result<String, String> {
 /// Verifies a 6-digit TOTP code against the stored Base32 secret.
 /// Returns `true` only if `secret_base32` is valid Base32 and `code` matches within `±SKEW` steps.
 pub fn verify_totp(secret_base32: &str, code: &str) -> bool {
+    verify_totp_step(secret_base32, code).is_some()
+}
+
+/// Verifies a 6-digit TOTP code against the stored Base32 secret and returns the matched
+/// 30-second time step so callers can enforce anti-replay protection within the same step.
+pub fn verify_totp_step(secret_base32: &str, code: &str) -> Option<u64> {
     let trimmed = code.trim();
     if trimmed.len() != DIGITS || !trimmed.chars().all(|c| c.is_ascii_digit()) {
-        return false;
+        return None;
     }
 
-    let Ok(totp) = build_totp(secret_base32, "verify@msidergisi.com") else {
-        return false;
-    };
-
-    totp.check_current(trimmed).unwrap_or(false)
+    let totp = build_totp(secret_base32, "verify@msidergisi.com").ok()?;
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let base_step = now_secs / TIME_STEP;
+    let mut matched: Option<u64> = None;
+    for step in base_step.saturating_sub(SKEW as u64)..=(base_step + SKEW as u64) {
+        let expected = totp.generate(step * TIME_STEP);
+        if constant_time_eq(trimmed.as_bytes(), expected.as_bytes()) {
+            matched = Some(step);
+        }
+    }
+    matched
 }
 
 /// Generates 8 random 8-character uppercase alphanumeric recovery backup codes using UUIDv4 CSPRNG bytes.

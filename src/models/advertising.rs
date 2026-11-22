@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_rotation_mode() -> String {
+    "weighted".to_string()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AdCampaign {
  pub id: i64,
@@ -26,6 +30,12 @@ pub struct AdCampaign {
  pub impressions_count: i64,
  pub clicks_count: i64,
  pub is_active: bool,
+ #[serde(default)]
+ pub start_date: Option<String>,
+ #[serde(default)]
+ pub end_date: Option<String>,
+ #[serde(default = "default_rotation_mode")]
+ pub rotation_mode: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

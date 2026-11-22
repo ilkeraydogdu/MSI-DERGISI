@@ -59,6 +59,16 @@ pub fn build() -> Router<AppState> {
         )
         .route("/api/v1/admin/ads/check-conflict", post(api_controller::admin_check_ad_conflict))
         .route("/api/v1/admin/ads/:id", delete(api_controller::admin_delete_ad))
+        .route(
+            "/api/v1/admin/recommendation-rules",
+            get(api_controller::admin_list_recommendation_rules)
+                .post(api_controller::admin_create_recommendation_rule),
+        )
+        .route(
+            "/api/v1/admin/recommendation-rules/:id",
+            put(api_controller::admin_update_recommendation_rule)
+                .delete(api_controller::admin_delete_recommendation_rule),
+        )
         .route("/api/v1/admin/analytics", get(api_controller::admin_analytics_bundle))
         .route("/api/v1/admin/analytics/bundle", get(api_controller::admin_analytics_bundle))
         .route(
@@ -100,6 +110,10 @@ pub fn build() -> Router<AppState> {
         .route(
             "/api/v1/admin/analytics/conversion-funnel",
             get(api_controller::admin_conversion_funnel),
+        )
+        .route(
+            "/api/v1/admin/reports/subscribers",
+            get(api_controller::admin_subscribers_report),
         )
         .route(
             "/api/v1/admin/corporate-requests",
@@ -148,6 +162,10 @@ pub fn build() -> Router<AppState> {
             post(api_controller::admin_halt_renewed_reminders),
         )
         .route(
+            "/api/v1/admin/subscriptions/trigger-reminders",
+            post(api_controller::admin_halt_renewed_reminders),
+        )
+        .route(
             "/api/v1/admin/redirects",
             get(api_controller::admin_list_redirects).post(api_controller::admin_insert_redirect),
         )
@@ -160,6 +178,22 @@ pub fn build() -> Router<AppState> {
             "/api/v1/admin/translations",
             get(api_controller::admin_list_translations_api)
                 .post(api_controller::admin_upsert_translation_api),
+        )
+        .route(
+            "/api/v1/admin/translations/auto-translate",
+            post(api_controller::admin_auto_translate),
+        )
+        .route(
+            "/api/v1/admin/translations/pending",
+            get(api_controller::admin_list_pending_translations),
+        )
+        .route(
+            "/api/v1/admin/translations/:key/approve",
+            post(api_controller::admin_approve_translation),
+        )
+        .route(
+            "/api/v1/admin/translations/:key/reject",
+            post(api_controller::admin_reject_translation),
         )
         .route(
             "/api/v1/admin/translations/:key",
@@ -178,6 +212,16 @@ pub fn build() -> Router<AppState> {
         .route(
             "/api/v1/admin/issues/:issue_number",
             delete(api_controller::admin_delete_issue),
+        )
+        .route(
+            "/api/v1/admin/issues/:publication_type/:issue_number",
+            get(api_controller::admin_get_issue_by_key)
+                .put(api_controller::admin_update_issue_by_key)
+                .delete(api_controller::admin_delete_issue_by_key),
+        )
+        .route(
+            "/api/v1/admin/issues/:publication_type/:issue_number/convert-pdf",
+            post(api_controller::admin_convert_issue_pdf),
         )
         .route(
             "/api/v1/admin/edergi-files/:name",
@@ -242,6 +286,11 @@ pub fn build() -> Router<AppState> {
             delete(api_controller::admin_delete_custom_field),
         )
         .route(
+            "/api/v1/admin/custom-field-values",
+            get(api_controller::admin_get_custom_field_values)
+                .put(api_controller::admin_put_custom_field_values),
+        )
+        .route(
             "/api/v1/admin/cache",
             get(api_controller::admin_list_cache_operations).post(api_controller::admin_flush_cache),
         )
@@ -254,4 +303,168 @@ pub fn build() -> Router<AppState> {
         .route("/api/v1/admin/monitoring/services", get(api_controller::admin_monitoring_services))
         .route("/api/v1/admin/monitoring/seo", get(api_controller::admin_monitoring_seo))
         .route("/api/v1/admin/monitoring/refresh", post(api_controller::admin_monitoring_refresh))
+        // ── Glossary CRUD (glossary:manage) ────────────────────────────────
+        .route(
+            "/api/v1/admin/glossary",
+            get(api_controller::admin_list_glossary).post(api_controller::admin_upsert_glossary),
+        )
+        .route(
+            "/api/v1/admin/glossary/:id",
+            delete(api_controller::admin_delete_glossary),
+        )
+        // ── Locales CRUD (locales:manage) ──────────────────────────────────
+        .route(
+            "/api/v1/admin/locales",
+            get(api_controller::admin_list_locales).post(api_controller::admin_upsert_locale),
+        )
+        .route(
+            "/api/v1/admin/locales/:code",
+            put(api_controller::admin_update_locale).delete(api_controller::admin_delete_locale),
+        )
+        // ── Email Groups CRUD (email_groups:manage) ────────────────────────
+        .route(
+            "/api/v1/admin/email-groups",
+            get(api_controller::admin_list_email_groups)
+                .post(api_controller::admin_upsert_email_group),
+        )
+        .route(
+            "/api/v1/admin/email-groups/:code",
+            delete(api_controller::admin_delete_email_group),
+        )
+        // ── Backup (backup:manage) ─────────────────────────────────────────
+        .route("/api/v1/admin/backup", post(api_controller::admin_trigger_backup))
+        // ── Editorial Studio API (/api/v1/admin/editorial/*) ───────────────
+        .route(
+            "/api/v1/admin/editorial/session",
+            get(api_controller::editorial_session),
+        )
+        .route(
+            "/api/v1/admin/editorial/articles",
+            get(api_controller::editorial_list_articles)
+                .post(api_controller::editorial_save_article),
+        )
+        .route(
+            "/api/v1/admin/editorial/articles/:id",
+            get(api_controller::editorial_get_article)
+                .delete(api_controller::editorial_delete_article),
+        )
+        .route(
+            "/api/v1/admin/editorial/articles/:id/refresh-stats",
+            post(api_controller::editorial_refresh_stats),
+        )
+        .route(
+            "/api/v1/admin/editorial/articles/:id/revisions",
+            get(api_controller::editorial_list_revisions),
+        )
+        .route(
+            "/api/v1/admin/editorial/articles/:id/revisions/:rev_id/restore",
+            post(api_controller::editorial_restore_revision),
+        )
+        .route(
+            "/api/v1/admin/editorial/locks",
+            get(api_controller::editorial_list_locks),
+        )
+        .route(
+            "/api/v1/admin/editorial/articles/:id/lock",
+            post(api_controller::editorial_acquire_lock)
+                .delete(api_controller::editorial_release_lock),
+        )
+        .route(
+            "/api/v1/admin/editorial/categories",
+            get(api_controller::editorial_list_categories)
+                .post(api_controller::editorial_create_category),
+        )
+        .route(
+            "/api/v1/admin/editorial/categories/:id",
+            put(api_controller::editorial_update_category)
+                .delete(api_controller::editorial_delete_category),
+        )
+        .route(
+            "/api/v1/admin/editorial/meta",
+            get(api_controller::editorial_meta),
+        )
+        .route(
+            "/api/v1/admin/editorial/issues",
+            post(api_controller::editorial_upsert_issue),
+        )
+        .route(
+            "/api/v1/admin/editorial/issues/:id",
+            delete(api_controller::editorial_delete_issue),
+        )
+        .route(
+            "/api/v1/admin/editorial/glossary",
+            post(api_controller::editorial_upsert_glossary),
+        )
+        .route(
+            "/api/v1/admin/editorial/glossary/:id",
+            delete(api_controller::editorial_delete_glossary),
+        )
+        .route(
+            "/api/v1/admin/editorial/tags",
+            get(api_controller::editorial_list_tags),
+        )
+        .route(
+            "/api/v1/admin/editorial/redirects",
+            get(api_controller::editorial_list_redirects),
+        )
+        .route(
+            "/api/v1/admin/editorial/redirects/:id",
+            delete(api_controller::editorial_delete_redirect),
+        )
+        .route(
+            "/api/v1/admin/editorial/media",
+            get(api_controller::editorial_list_media),
+        )
+        .route(
+            "/api/v1/admin/editorial/media/:id",
+            delete(api_controller::editorial_delete_media),
+        )
+        .route(
+            "/api/v1/admin/editorial/upload",
+            post(api_controller::editorial_upload_image)
+                .layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
+        )
+        .route(
+            "/api/v1/admin/editorial/fetch-remote-image",
+            post(api_controller::editorial_fetch_remote_image),
+        )
+        .route(
+            "/api/v1/admin/editorial/media/watermark-url",
+            post(api_controller::editorial_watermark_url),
+        )
+        .route(
+            "/api/v1/admin/editorial/settings",
+            get(api_controller::editorial_get_settings)
+                .post(api_controller::editorial_save_settings),
+        )
+        .route(
+            "/api/v1/admin/editorial/social/share",
+            post(api_controller::editorial_social_share),
+        )
+        .route(
+            "/api/v1/admin/editorial/social/test-twitter",
+            post(api_controller::editorial_test_twitter),
+        )
+        .route(
+            "/api/v1/admin/editorial/social/test-telegram",
+            post(api_controller::editorial_test_telegram),
+        )
+        .route(
+            "/api/v1/admin/editorial/research/sources",
+            get(api_controller::editorial_list_research_sources)
+                .post(api_controller::editorial_create_research_source),
+        )
+        .route(
+            "/api/v1/admin/editorial/research/sources/:id",
+            put(api_controller::editorial_update_research_source)
+                .delete(api_controller::editorial_delete_research_source),
+        )
+        .route(
+            "/api/v1/admin/editorial/research/search",
+            get(api_controller::editorial_research_search),
+        )
+        .route(
+            "/api/v1/admin/editorial/research/read",
+            post(api_controller::editorial_research_read),
+        )
 }

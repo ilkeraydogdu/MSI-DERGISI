@@ -21,5 +21,6 @@ pub fn seed_initial_data(conn: &Connection) -> rusqlite::Result<()> {
     ads::seed_ad_campaigns(conn)?;
     commerce::seed_subscription_plans_and_commerce(conn)?;
     settings::seed_site_settings_and_notifications(conn)?;
+    taxonomy::seed_operational_defaults(conn)?;
     Ok(())
 }

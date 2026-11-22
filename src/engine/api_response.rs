@@ -274,16 +274,111 @@ pub fn resolve_lang(params: &std::collections::HashMap<String, String>) -> &str 
         .unwrap_or("tr")
 }
 
-/// Resolve language from headers Accept-Language or query param.
+/// Parses an RFC 9110 `Accept-Language` header and returns the highest-weight
+/// supported platform language (`"en"` or `"tr"`), skipping `q=0` and malformed
+/// `q` values and breaking ties by earliest occurrence.
+pub fn parse_accept_language(header_val: &str) -> Option<&'static str> {
+    let mut best: Option<(f32, usize, &'static str)> = None;
+
+    for (idx, raw_item) in header_val.split(',').enumerate() {
+        let mut parts = raw_item.split(';');
+        let raw_tag = parts.next().unwrap_or("").trim();
+        if raw_tag.is_empty() {
+            continue;
+        }
+
+        let mut q_val: f32 = 1.0;
+        let mut malformed = false;
+        for param in parts {
+            let trimmed = param.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some((k, v)) = trimmed.split_once('=') {
+                if k.trim().eq_ignore_ascii_case("q") {
+                    match v.trim().parse::<f32>() {
+                        Ok(parsed) if parsed.is_finite() && (0.0..=1.0).contains(&parsed) => {
+                            q_val = parsed;
+                        }
+                        _ => {
+                            malformed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if malformed || q_val <= 0.0 {
+            continue;
+        }
+
+        let primary = raw_tag.split(['-', '_']).next().unwrap_or("").trim();
+        let supported = if primary.eq_ignore_ascii_case("en") {
+            Some("en")
+        } else if primary.eq_ignore_ascii_case("tr") {
+            Some("tr")
+        } else {
+            None
+        };
+
+        let Some(lang) = supported else {
+            continue;
+        };
+
+        let should_replace = match best {
+            None => true,
+            Some((best_q, best_idx, _)) => q_val > best_q || ((q_val - best_q).abs() < f32::EPSILON && idx < best_idx),
+        };
+        if should_replace {
+            best = Some((q_val, idx, lang));
+        }
+    }
+
+    best.map(|(_, _, lang)| lang)
+}
+
+/// Resolve language with precedence:
+/// `?lang=` query > `msi_lang=` cookie > `Accept-Language` header > `"tr"`.
 pub fn resolve_lang_from_headers(
     params: &std::collections::HashMap<String, String>,
-    _headers: &axum::http::HeaderMap,
+    headers: &axum::http::HeaderMap,
 ) -> String {
-    // For now, prefer query param; could be extended to parse Accept-Language.
-    params
-        .get("lang")
-        .cloned()
-        .unwrap_or_else(|| "tr".to_string())
+    if let Some(l) = params.get("lang") {
+        let trimmed = l.trim();
+        if trimmed.eq_ignore_ascii_case("en") {
+            return "en".to_string();
+        }
+        if trimmed.eq_ignore_ascii_case("tr") {
+            return "tr".to_string();
+        }
+    }
+    if let Some(cookie) = headers
+        .get(axum::http::header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+    {
+        for part in cookie.split(';') {
+            if let Some((k, v)) = part.trim().split_once('=') {
+                if k.trim().eq_ignore_ascii_case("msi_lang") {
+                    let val = v.trim().trim_matches('"');
+                    if val.eq_ignore_ascii_case("en") {
+                        return "en".to_string();
+                    }
+                    if val.eq_ignore_ascii_case("tr") {
+                        return "tr".to_string();
+                    }
+                }
+            }
+        }
+    }
+    if let Some(accept_lang) = headers
+        .get(axum::http::header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Some(detected) = parse_accept_language(accept_lang) {
+            return detected.to_string();
+        }
+    }
+    "tr".to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -453,5 +548,43 @@ impl IntoResponse for AppError {
             })),
         )
             .into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{header, HeaderMap};
+    use std::collections::HashMap;
+
+    #[test]
+    fn accept_language_parser_honors_q_values_ties_and_invalid_entries() {
+        assert_eq!(parse_accept_language("en-US,en;q=0.9,tr;q=0.8"), Some("en"));
+        assert_eq!(parse_accept_language("tr-TR,tr;q=0.9,en-US;q=0.8"), Some("tr"));
+        assert_eq!(parse_accept_language("en;q=0,tr;q=0.5"), Some("tr"));
+        assert_eq!(parse_accept_language("en;q=0"), None);
+        assert_eq!(parse_accept_language("fr-FR,de;q=0.9"), None);
+        assert_eq!(parse_accept_language("en;q=invalid,tr;q=0.4"), Some("tr"));
+        assert_eq!(parse_accept_language("en;q=1.5,tr;q=0.4"), Some("tr"));
+        assert_eq!(parse_accept_language("en;q=-0.2,tr;q=0.4"), Some("tr"));
+        assert_eq!(parse_accept_language("en;q=0.8,tr;q=0.8"), Some("en"));
+        assert_eq!(parse_accept_language("tr;q=0.8,en;q=0.8"), Some("tr"));
+        assert_eq!(parse_accept_language("fr-CH,de;q=0.9,en-GB;q=0.7"), Some("en"));
+    }
+
+    #[test]
+    fn resolve_lang_from_headers_follows_precedence() {
+        let mut params = HashMap::new();
+        let mut headers = HeaderMap::new();
+        assert_eq!(resolve_lang_from_headers(&params, &headers), "tr");
+
+        headers.insert(header::ACCEPT_LANGUAGE, "en-GB,en;q=0.8".parse().unwrap());
+        assert_eq!(resolve_lang_from_headers(&params, &headers), "en");
+
+        headers.insert(header::COOKIE, "msi_lang=tr".parse().unwrap());
+        assert_eq!(resolve_lang_from_headers(&params, &headers), "tr");
+
+        params.insert("lang".to_string(), "en".to_string());
+        assert_eq!(resolve_lang_from_headers(&params, &headers), "en");
     }
 }

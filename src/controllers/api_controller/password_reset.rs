@@ -15,15 +15,17 @@ pub struct ForgotPasswordPayload {
 
 pub async fn forgot_password(
     State(state): State<AppState>,
+    opt_ip: Option<Extension<security_engine::ResolvedClientIp>>,
     headers: HeaderMap,
     Json(payload): Json<ForgotPasswordPayload>,
 ) -> Response {
-    let client_ip = extract_client_ip(&headers);
+    let (client_ip, was_forwarded) = resolve_client_ip_with_forwarded(opt_ip.as_ref(), &headers);
 
     // ── Form Spam Protection (honeypot + timing + per-form rate limit) ──
-    let spam_result = security_engine::validate_form_submission(
+    let spam_result = security_engine::validate_form_submission_with_forwarded(
         "forgot_password",
         &client_ip,
+        was_forwarded,
         payload.website_url.as_deref(),
         payload._form_ts,
     );

@@ -6,10 +6,88 @@
     (
       document.body?.dataset?.adminPath ||
       location.pathname.replace(/\/tasarim\/?$/, "") ||
-      "/msi-komuta"
-    ).replace(/\/+$/, "") || "/msi-komuta";
+      "/podmin"
+    ).replace(/\/+$/, "") || "/podmin";
   const adminLink = $("#editor-admin-link");
   if (adminLink) adminLink.href = adminBase;
+
+  function readCookie(name) {
+    const prefix = name + "=";
+    const hit = document.cookie
+      .split(";")
+      .map((c) => c.trim())
+      .find((c) => c.startsWith(prefix));
+    return hit ? decodeURIComponent(hit.slice(prefix.length)) : "";
+  }
+  function writeThemeCookie(theme) {
+    const sec = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `msi_admin_theme=${encodeURIComponent(theme)}; path=/; max-age=31536000; SameSite=Lax${sec}`;
+  }
+  function resolveAutoStudioTheme() {
+    try {
+      if (window.matchMedia) {
+        if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+        if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
+      }
+    } catch {}
+    const hour = new Date().getHours();
+    return hour >= 19 || hour < 7 ? "dark" : "light";
+  }
+  function getExplicitStudioTheme() {
+    try {
+      const ls = localStorage.getItem("msi_admin_theme");
+      if (ls === "dark" || ls === "light") return ls;
+    } catch {}
+    const ck = readCookie("msi_admin_theme");
+    if (ck === "dark" || ck === "light") return ck;
+    try {
+      const pub = localStorage.getItem("msi_theme");
+      if (pub === "dark" || pub === "light") return pub;
+    } catch {}
+    return "";
+  }
+  function getStoredStudioTheme() {
+    return getExplicitStudioTheme() || resolveAutoStudioTheme();
+  }
+  function applyStudioTheme(theme) {
+    const next = theme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    document.body.classList.toggle("admin-dark-mode", next === "dark");
+    document.body.classList.toggle("admin-light-mode", next === "light");
+    const btn = $("#studio-theme-toggle");
+    if (btn) {
+      btn.setAttribute("aria-pressed", String(next === "dark"));
+      const lbl = btn.querySelector(".studio-theme-label");
+      if (lbl) lbl.textContent = next === "dark" ? "Açık Stüdyo" : "Koyu Stüdyo";
+    }
+  }
+  function toggleStudioTheme() {
+    const current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    const next = current === "dark" ? "light" : "dark";
+    applyStudioTheme(next);
+    try {
+      localStorage.setItem("msi_admin_theme", next);
+      localStorage.setItem("msi_theme", next);
+    } catch {}
+    writeThemeCookie(next);
+  }
+  const syncAutoStudioTheme = () => {
+    if (!getExplicitStudioTheme()) applyStudioTheme(resolveAutoStudioTheme());
+  };
+  applyStudioTheme(getStoredStudioTheme());
+  try {
+    if (window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", syncAutoStudioTheme);
+      window.matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", syncAutoStudioTheme);
+    }
+  } catch {}
+  window.setInterval(syncAutoStudioTheme, 60000);
+  $("#studio-theme-toggle")?.addEventListener("click", toggleStudioTheme);
+  window.addEventListener("storage", (e) => {
+    if ((e.key === "msi_admin_theme" || e.key === "msi_theme") && (e.newValue === "dark" || e.newValue === "light")) {
+      applyStudioTheme(e.newValue);
+    }
+  });
   const kinds = {
     magazine_hero: "Dergi kapağı",
     news_hero: "Haber manşeti",
@@ -36,20 +114,129 @@
     saved,
     pageIndex = 0,
     dirty = false,
+    canSave = document.body?.dataset?.canSave !== "false",
     previewTimer,
     revision = 0,
     requestId = 0,
     previewDark = false;
   const clone = (o) => JSON.parse(JSON.stringify(o)),
-    page = () => config.pages[pageIndex];
+    page = () => config.pages[pageIndex],
+    prefersReducedMotion = () => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  const FOCUSABLE_SEL = 'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  function applySavePermissionUi() {
+    const saveBtn = $("#save-button");
+    const banner = $("#studio-readonly-banner");
+    if (saveBtn) {
+      saveBtn.disabled = !canSave;
+      saveBtn.setAttribute("aria-disabled", String(!canSave));
+      if (!canSave) {
+        saveBtn.title = "Salt okunur erişim: Kaydetmek için settings:write yetkisi gerekir.";
+      } else {
+        saveBtn.removeAttribute("title");
+      }
+    }
+    if (banner) {
+      banner.hidden = canSave;
+    }
+  }
+  applySavePermissionUi();
+  let studioConfirmResolve = null;
+  let studioConfirmPrevFocus = null;
+  function closeStudioConfirm(accepted) {
+    const modal = $("#studio-confirm-modal");
+    const card = modal?.querySelector(".studio-modal-card");
+    if (card && window.gsap) window.gsap.killTweensOf(card);
+    if (modal) modal.hidden = true;
+    const prev = studioConfirmPrevFocus;
+    studioConfirmPrevFocus = null;
+    if (prev && typeof prev.focus === "function") prev.focus();
+    const res = studioConfirmResolve;
+    studioConfirmResolve = null;
+    if (typeof res === "function") res(!!accepted);
+  }
+  function studioConfirm(message, title = "İşlem Onayı") {
+    const modal = $("#studio-confirm-modal");
+    const msgEl = $("#studio-confirm-message");
+    const titleEl = $("#studio-confirm-title");
+    if (!modal || !msgEl) return Promise.resolve(false);
+    if (studioConfirmResolve) closeStudioConfirm(false);
+    studioConfirmPrevFocus = document.activeElement;
+    if (titleEl) titleEl.textContent = title;
+    msgEl.textContent = String(message || "");
+    modal.hidden = false;
+    const card = modal.querySelector(".studio-modal-card");
+    if (card && window.gsap && !prefersReducedMotion()) {
+      window.gsap.killTweensOf(card);
+      window.gsap.fromTo(
+        card,
+        { opacity: 0.85, y: 10, scale: 0.98 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: "power2.out", clearProps: "transform,opacity" },
+      );
+    }
+    $("#studio-confirm-accept")?.focus();
+    return new Promise((resolve) => {
+      studioConfirmResolve = resolve;
+    });
+  }
+  $("#studio-confirm-cancel")?.addEventListener("click", () => closeStudioConfirm(false));
+  $("#studio-confirm-close")?.addEventListener("click", () => closeStudioConfirm(false));
+  $("#studio-confirm-accept")?.addEventListener("click", () => closeStudioConfirm(true));
+  $("#studio-confirm-modal")?.addEventListener("click", (e) => {
+    if (e.target === $("#studio-confirm-modal")) closeStudioConfirm(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    const modal = $("#studio-confirm-modal");
+    if (!modal || modal.hidden) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeStudioConfirm(false);
+      return;
+    }
+    if (e.key === "Tab") {
+      const focusables = Array.from(modal.querySelectorAll(FOCUSABLE_SEL)).filter((el) => {
+        if (el.closest("[hidden]")) return false;
+        const st = window.getComputedStyle(el);
+        return st.display !== "none" && st.visibility !== "hidden" && el.getClientRects().length > 0;
+      });
+      if (!focusables.length) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const cur = document.activeElement;
+      if (!modal.contains(cur)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
+      if (e.shiftKey) {
+        if (cur === first || cur === modal) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (cur === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
   function feedback(message, error = false) {
-    $("#editor-feedback").textContent = message;
-    $("#editor-feedback").setAttribute("role", error ? "alert" : "status");
+    const el = $("#editor-feedback");
+    el.textContent = message;
+    el.setAttribute("role", error ? "alert" : "status");
+    el.dataset.state = !message ? "" : error ? "error" : "success";
+  }
+  function setSaveState(text, isDirty) {
+    const pill = $("#save-state");
+    if (!pill) return;
+    pill.textContent = text;
+    pill.dataset.dirty = isDirty ? "true" : "false";
   }
   function mark() {
     dirty = true;
     revision++;
-    $("#save-state").textContent = "Kaydedilmemiş değişiklikler";
+    setSaveState("Kaydedilmemiş değişiklikler", true);
     try {
       localStorage.setItem("msi_design_draft", JSON.stringify(config));
     } catch {}
@@ -380,6 +567,7 @@
     }
   });
   async function save() {
+    if (!canSave) return;
     const b = $("#save-button");
     b.disabled = true;
     const atRevision = revision;
@@ -400,13 +588,13 @@
         try {
           localStorage.removeItem("msi_design_draft");
         } catch {}
-        $("#save-state").textContent = "Tüm değişiklikler kaydedildi";
+        setSaveState("Tüm değişiklikler kaydedildi", false);
       }
       feedback("Tasarım kaydedildi. Sayfalar yeni ayarlarla üretiliyor.");
     } catch (error) {
       feedback(error.message, true);
     } finally {
-      b.disabled = false;
+      b.disabled = !canSave;
     }
   }
   $("#save-button").addEventListener("click", save);
@@ -467,12 +655,17 @@
     render();
     mark();
   });
-  $("#delete-page").addEventListener("click", () => {
+  $("#delete-page").addEventListener("click", async () => {
     if (config.pages.length <= 1) {
       feedback("En az bir sayfa kalmalıdır.", true);
       return;
     }
-    if (!confirm(`"${page().title || page().slug}" sayfasını silmek istediğinize emin misiniz?`)) {
+    if (
+      !(await studioConfirm(
+        `"${page().title || page().slug}" sayfasını silmek istediğinize emin misiniz?`,
+        "Sayfayı Sil",
+      ))
+    ) {
       return;
     }
     config.pages.splice(pageIndex, 1);
@@ -513,12 +706,28 @@
   $$("[data-editor-tab]").forEach((tab) => {
     function activate() {
       const name = tab.dataset.editorTab;
+      const panels = $$("[data-editor-tab]")
+        .map((t) => $("#" + t.dataset.editorTab + "-panel"))
+        .filter(Boolean);
+      let activePanel = null;
       $$("[data-editor-tab]").forEach((t) => {
         const active = t === tab;
         t.setAttribute("aria-selected", String(active));
         t.tabIndex = active ? 0 : -1;
-        $("#" + t.dataset.editorTab + "-panel").hidden = !active;
+        const p = $("#" + t.dataset.editorTab + "-panel");
+        if (p) {
+          p.hidden = !active;
+          if (active && t.dataset.editorTab === name) activePanel = p;
+        }
       });
+      if (activePanel && window.gsap && !prefersReducedMotion()) {
+        window.gsap.killTweensOf(panels);
+        window.gsap.fromTo(
+          activePanel,
+          { opacity: 0.78, y: 6 },
+          { opacity: 1, y: 0, duration: 0.22, ease: "power2.out", clearProps: "transform,opacity" },
+        );
+      }
     }
     tab.addEventListener("click", activate);
     tab.addEventListener("keydown", (e) => {
@@ -532,9 +741,28 @@
       }
     });
   });
+  $$("[data-mobile-view]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const ws = $(".editor-workspace");
+      if (!ws) return;
+      const mode = btn.dataset.mobileView;
+      const next = ws.dataset.mobileView === mode ? "" : mode;
+      if (next) ws.dataset.mobileView = next;
+      else delete ws.dataset.mobileView;
+      $$("[data-mobile-view]").forEach((el) =>
+        el.setAttribute("aria-pressed", String(Boolean(next && el.dataset.mobileView === next))),
+      );
+      window.scrollTo(0, 0);
+    }),
+  );
   $$("[data-preview-width]").forEach((b) =>
     b.addEventListener("click", () => {
-      $("#design-preview").style.width = b.dataset.previewWidth;
+      const w = b.dataset.previewWidth || "100%";
+      $("#design-preview").style.width = w;
+      const stage = $(".preview-stage");
+      if (stage) {
+        stage.dataset.previewDevice = w === "390px" ? "mobile" : w === "768px" ? "tablet" : "desktop";
+      }
       $$("[data-preview-width]").forEach((el) =>
         el.setAttribute("aria-pressed", String(el === b)),
       );
@@ -543,8 +771,10 @@
   $("#preview-theme").addEventListener("click", () => {
     previewDark = !previewDark;
     $("#preview-theme").setAttribute("aria-pressed", String(previewDark));
-    $("#design-preview").contentDocument.documentElement.dataset.theme =
-      previewDark ? "dark" : "light";
+    const doc = $("#design-preview").contentDocument;
+    if (doc?.documentElement) {
+      doc.documentElement.dataset.theme = previewDark ? "dark" : "light";
+    }
   });
   $("#export-design").addEventListener("click", () => {
     const a = document.createElement("a"),
@@ -566,7 +796,7 @@
       const imported = JSON.parse(await file.text());
       const response = await fetch(`${adminBase}/tasarim/onizleme`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonCsrfHeaders(),
         body: JSON.stringify(imported),
       });
       if (!response.ok) {
@@ -587,11 +817,12 @@
     }
     e.target.value = "";
   });
-  $("#restore-defaults").addEventListener("click", () => {
+  $("#restore-defaults").addEventListener("click", async () => {
     if (
-      !confirm(
+      !(await studioConfirm(
         "Tüm tasarım ayarları varsayılan fabrika düzenine sıfırlanacaktır (taslağa alınır). Devam edilsin mi?",
-      )
+        "Fabrika Varsayılanlarına Sıfırla",
+      ))
     ) {
       return;
     }
@@ -603,10 +834,13 @@
       "Varsayılan tasarım taslağa alındı. Kayıtlı tasarım henüz değiştirilmedi.",
     );
   });
-  $("#discard-draft").addEventListener("click", () => {
+  $("#discard-draft").addEventListener("click", async () => {
     if (
       dirty &&
-      !confirm("Kaydedilmemiş taslak değişiklikler tamamen silinecek. Emin misiniz?")
+      !(await studioConfirm(
+        "Kaydedilmemiş taslak değişiklikler tamamen silinecek. Emin misiniz?",
+        "Taslağı Geri Al",
+      ))
     ) {
       return;
     }
@@ -618,7 +852,7 @@
     } catch {}
     render();
     preview();
-    $("#save-state").textContent = "Kayıtlı tasarım";
+    setSaveState("Kayıtlı tasarım", false);
   });
   window.addEventListener("beforeunload", (e) => {
     if (dirty) {
@@ -632,6 +866,10 @@
       if (!response.ok) throw Error("Tasarım ayarları yüklenemedi.");
       const rawData = await response.json();
       const data = rawData?.data || rawData;
+      if (typeof data.can_save === "boolean") {
+        canSave = data.can_save;
+      }
+      applySavePermissionUi();
       saved = clone(data.config);
       config = data.config;
       defaults = data.defaults;
@@ -649,13 +887,18 @@
         dirty = true;
       }
       render();
-      $("#save-state").textContent = dirty
-        ? "Yerel taslak geri yüklendi"
-        : "Kayıtlı tasarım";
+      setSaveState(
+        dirty
+          ? "Yerel taslak geri yüklendi"
+          : canSave
+            ? "Kayıtlı tasarım"
+            : "Salt okunur mod",
+        dirty,
+      );
       await preview();
     } catch (error) {
       feedback(error.message, true);
-      $("#save-state").textContent = "Yüklenemedi";
+      setSaveState("Yüklenemedi", false);
       $("#save-button").disabled = true;
     }
   })();

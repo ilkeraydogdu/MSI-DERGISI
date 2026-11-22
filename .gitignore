@@ -44,3 +44,15 @@ public/images/tour.mp4
 
 # IDE / local agent settings
 .claude/
+
+# Runtime database backups & uploaded editorial media
+storage/db/backups/
+storage/uploads/
+
+# Sub-crate build targets & local agent/merge temp artifacts
+crates/*/target/
+storage/db/*.bak*
+.agents/
+*.tmp
+*.orig
+*.rej

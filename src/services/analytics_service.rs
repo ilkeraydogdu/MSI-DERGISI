@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use sha2::{Digest, Sha256};
 
 use crate::models::{
     AdAnalyticsReport, AdCampaign, AnalyticsEvent, ContentAnalyticsReport, ContentItem,
@@ -11,6 +12,14 @@ use crate::models::{
 pub fn compute_content_report(
     content: &ContentItem,
     events: &[AnalyticsEvent],
+) -> ContentAnalyticsReport {
+    compute_content_report_with_options(content, events, false)
+}
+
+pub fn compute_content_report_with_options(
+    content: &ContentItem,
+    events: &[AnalyticsEvent],
+    anonymize: bool,
 ) -> ContentAnalyticsReport {
     let matching_events: Vec<&AnalyticsEvent> = events
         .iter()
@@ -56,7 +65,8 @@ pub fn compute_content_report(
         (0.0, 0.0)
     };
 
-    let institution_breakdown = build_institution_breakdown(&matching_events);
+    let min_k = if anonymize { 3 } else { 1 };
+    let institution_breakdown = build_institution_breakdown_k(&matching_events, min_k);
 
     ContentAnalyticsReport {
         content_slug: content.slug.clone(),
@@ -73,6 +83,14 @@ pub fn compute_content_report(
 /// calculating impressions, clicks, CTR %, and separate institution breakdowns for
 /// both impressions ("Görenlerin kurum dağılımı") and clicks ("Tıklayanların kurum dağılımı").
 pub fn compute_ad_report(ad: &AdCampaign, events: &[AnalyticsEvent]) -> AdAnalyticsReport {
+    compute_ad_report_with_options(ad, events, false)
+}
+
+pub fn compute_ad_report_with_options(
+    ad: &AdCampaign,
+    events: &[AnalyticsEvent],
+    anonymize: bool,
+) -> AdAnalyticsReport {
     let ad_events: Vec<&AnalyticsEvent> =
         events.iter().filter(|e| e.ad_id == Some(ad.id)).collect();
 
@@ -111,8 +129,9 @@ pub fn compute_ad_report(ad: &AdCampaign, events: &[AnalyticsEvent]) -> AdAnalyt
         0.0
     };
 
-    let impression_institutions = build_institution_breakdown(&impression_events);
-    let click_institutions = build_institution_breakdown(&click_events);
+    let min_k = if anonymize { 3 } else { 1 };
+    let impression_institutions = build_institution_breakdown_k(&impression_events, min_k);
+    let click_institutions = build_institution_breakdown_k(&click_events, min_k);
 
     AdAnalyticsReport {
         ad_id: ad.id,
@@ -201,7 +220,145 @@ pub fn compute_reader_reports(
         .collect()
 }
 
-fn build_institution_breakdown(events: &[&AnalyticsEvent]) -> Vec<InstitutionBreakdownItem> {
+fn anon_hash8(salt: &str, user_id: i64, email: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(format!("msi-anon-b3:{}:{}:{}", salt, user_id, email.trim().to_lowercase()).as_bytes());
+    let digest = hex::encode(hasher.finalize());
+    digest[..8].to_string()
+}
+
+pub fn compute_reader_reports_anonymized(
+    users: &[UserAccount],
+    events: &[AnalyticsEvent],
+    ads: &[AdCampaign],
+    salt: &str,
+) -> Vec<ReaderAnalyticsReport> {
+    let mut org_name_counts: HashMap<String, usize> = HashMap::new();
+    let mut org_cat_counts: HashMap<String, usize> = HashMap::new();
+    for u in users {
+        if u.role == "deleted" {
+            continue;
+        }
+        let on = u.organization_name.trim().to_string();
+        if !on.is_empty() {
+            *org_name_counts.entry(on).or_insert(0) += 1;
+        }
+        let oc = u.organization_category.trim().to_string();
+        if !oc.is_empty() {
+            *org_cat_counts.entry(oc).or_insert(0) += 1;
+        }
+    }
+
+    let raw = compute_reader_reports(users, events, ads);
+    raw.into_iter()
+        .map(|mut r| {
+            let h8 = anon_hash8(salt, r.user_id, &r.email);
+            let org_n = r.organization_name.trim().to_string();
+            let org_c = r.organization_category.trim().to_string();
+            r.user_id = 0;
+            r.full_name = format!("Okur #{}", h8);
+            // Must not contain '@' or raw email components
+            r.email = format!("anon_{}", h8);
+            r.organization_name = if org_n.is_empty() || org_name_counts.get(&org_n).copied().unwrap_or(0) < 3 {
+                "Gizli Kurum (k<3)".to_string()
+            } else {
+                org_n
+            };
+            r.organization_category = if org_c.is_empty() || org_cat_counts.get(&org_c).copied().unwrap_or(0) < 3 {
+                "Diğer Kurumlar (k<3)".to_string()
+            } else {
+                org_c
+            };
+            r
+        })
+        .collect()
+}
+
+pub fn apply_k_anonymity_to_institution_counts(
+    counts: Vec<(String, i64)>,
+    min_k: i64,
+) -> Vec<InstitutionBreakdownItem> {
+    if counts.is_empty() {
+        return Vec::new();
+    }
+    let total_sum: i64 = counts.iter().map(|(_, c)| *c).sum();
+    if total_sum <= 0 {
+        return Vec::new();
+    }
+    let total = total_sum as f64;
+    let mut retained: Vec<(String, i64)> = Vec::new();
+    let mut suppressed_sum: i64 = 0;
+    for (label, count) in counts {
+        if count >= min_k {
+            retained.push((label, count));
+        } else {
+            suppressed_sum += count;
+        }
+    }
+    if min_k > 1 && suppressed_sum >= min_k {
+        retained.push(("Diğer Kurumlar (k<3)".to_string(), suppressed_sum));
+    }
+    let mut breakdown: Vec<InstitutionBreakdownItem> = retained
+        .into_iter()
+        .map(|(organization_category, count)| InstitutionBreakdownItem {
+            organization_category,
+            count,
+            percentage: round_one_decimal((count as f64 / total) * 100.0),
+        })
+        .collect();
+    breakdown.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.organization_category.cmp(&b.organization_category))
+    });
+    breakdown
+}
+
+pub fn anonymize_open_data_users(users: &[UserAccount], salt: &str) -> Vec<serde_json::Value> {
+    let mut org_name_counts: HashMap<String, usize> = HashMap::new();
+    let mut org_cat_counts: HashMap<String, usize> = HashMap::new();
+    for u in users {
+        if u.role == "deleted" {
+            continue;
+        }
+        *org_name_counts.entry(u.organization_name.trim().to_string()).or_insert(0) += 1;
+        *org_cat_counts.entry(u.organization_category.trim().to_string()).or_insert(0) += 1;
+    }
+    users
+        .iter()
+        .map(|u| {
+            let h8 = anon_hash8(salt, u.id, &u.email);
+            let org_name = if org_name_counts.get(u.organization_name.trim()).copied().unwrap_or(0) < 3 {
+                "Gizli Kurum (k<3)"
+            } else {
+                u.organization_name.trim()
+            };
+            let org_cat = if org_cat_counts.get(u.organization_category.trim()).copied().unwrap_or(0) < 3 {
+                "Diğer Kurumlar (k<3)"
+            } else {
+                u.organization_category.trim()
+            };
+            serde_json::json!({
+                "user_id": 0,
+                "anon_id": format!("anon_{}", h8),
+                "full_name": format!("Okur #{}", h8),
+                "email": format!("anon_{}", h8),
+                "role": u.role,
+                "organization_category": org_cat,
+                "organization_name": org_name,
+                "is_gov_verified": u.is_gov_verified,
+                "subscription_tier": u.subscription_tier,
+                "ssb_interests": u.ssb_interests,
+                "created_at": u.created_at.get(..7).unwrap_or(&u.created_at)
+            })
+        })
+        .collect()
+}
+
+fn build_institution_breakdown_k(
+    events: &[&AnalyticsEvent],
+    min_k: i64,
+) -> Vec<InstitutionBreakdownItem> {
     if events.is_empty() {
         return Vec::new();
     }
@@ -216,23 +373,12 @@ fn build_institution_breakdown(events: &[&AnalyticsEvent]) -> Vec<InstitutionBre
         *counts.entry(cat).or_insert(0) += 1;
     }
 
-    let total = events.len() as f64;
-    let mut breakdown: Vec<InstitutionBreakdownItem> = counts
-        .into_iter()
-        .map(|(organization_category, count)| InstitutionBreakdownItem {
-            organization_category,
-            count,
-            percentage: round_one_decimal((count as f64 / total) * 100.0),
-        })
-        .collect();
+    apply_k_anonymity_to_institution_counts(counts.into_iter().collect(), min_k)
+}
 
-    breakdown.sort_by(|a, b| {
-        b.count
-            .cmp(&a.count)
-            .then_with(|| a.organization_category.cmp(&b.organization_category))
-    });
-
-    breakdown
+#[allow(dead_code)]
+fn build_institution_breakdown(events: &[&AnalyticsEvent]) -> Vec<InstitutionBreakdownItem> {
+    build_institution_breakdown_k(events, 1)
 }
 
 fn round_one_decimal(val: f64) -> f64 {

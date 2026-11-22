@@ -1,5 +1,46 @@
 use std::env;
 
+/// Returns `true` if `seg` represents the retired `msi-komuta` admin slug
+/// (case-insensitive, ignoring slashes, hyphens, underscores, whitespace,
+/// or percent-encoded `%20`/`%2d`/`%5f`, and checking `/` sub-segments).
+pub fn is_retired_admin_segment(seg: &str) -> bool {
+    let trimmed = seg.trim_matches(|c: char| c.is_whitespace() || c == '/');
+    if trimmed.is_empty() {
+        return false;
+    }
+    let strip_part = |part: &str| -> String {
+        part.trim()
+            .to_ascii_lowercase()
+            .replace("%20", "")
+            .replace("%2d", "")
+            .replace("%5f", "")
+            .chars()
+            .filter(|c| !matches!(c, '-' | '_' | ' ' | '\t' | '\r' | '\n'))
+            .collect()
+    };
+    if strip_part(trimmed) == "msikomuta" {
+        return true;
+    }
+    trimmed.split('/').any(|part| strip_part(part) == "msikomuta")
+}
+
+/// Normalizes `ADMIN_PATH_SECRET`, mapping empty values, multi-segment slash
+/// paths, `"podmin"` case variants, and any retired `msi-komuta` variant to
+/// `"podmin"`, while preserving valid single-segment custom secrets (e.g., E2E
+/// `e2e-admin-*`).
+pub fn normalize_admin_path_secret(raw: &str) -> String {
+    let trimmed = raw.trim_matches(|c: char| c.is_whitespace() || c == '/');
+    if trimmed.is_empty()
+        || trimmed.contains('/')
+        || is_retired_admin_segment(trimmed)
+        || trimmed.eq_ignore_ascii_case("podmin")
+    {
+        "podmin".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[derive(Clone)]
 pub struct AppConfig {
     pub app_name: String,
@@ -12,8 +53,6 @@ pub struct AppConfig {
     pub static_dir: String,
     pub sqlite_db_path: String,
     pub edergi_dir: String,
-    #[allow(dead_code)]
-    pub mariadb_database: String,
     pub session_secret: String,
     pub watermark_secret: String,
     pub admin_default_user: String,
@@ -45,6 +84,19 @@ pub struct AppConfig {
     pub monitoring_redis_port: u16,
     pub monitoring_smtp_port: u16,
     pub indexnow_api_url: String,
+    pub backup_enabled: bool,
+    pub backup_dir: String,
+    pub backup_retention_days: u32,
+    pub backup_archive_dir: String,
+    pub backup_incremental_interval_secs: u64,
+    pub backup_encryption_key: String,
+    pub s3_backup_endpoint: String,
+    pub s3_backup_bucket: String,
+    pub s3_backup_region: String,
+    pub s3_backup_access_key: String,
+    pub s3_backup_secret_key: String,
+    pub s3_backup_prefix: String,
+    pub newsletter_poll_interval_secs: u64,
 }
 
 impl AppConfig {
@@ -56,11 +108,25 @@ impl AppConfig {
             .and_then(|p| p.to_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "public".to_string());
 
+        let app_env = env::var("APP_ENV").unwrap_or_else(|_| "production".to_string());
+        let sqlite_db_path = env::var("SQLITE_DB_PATH")
+            .unwrap_or_else(|_| "storage/db/msi_platform.db".to_string());
+        let default_backup_dir = std::path::Path::new(&sqlite_db_path)
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(|p| p.join("backups").to_string_lossy().to_string())
+            .unwrap_or_else(|| "storage/db/backups".to_string());
+        let backup_dir = env::var("BACKUP_DIR")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or(default_backup_dir);
+        let default_archive_dir = format!("{}/offsite", backup_dir.trim_end_matches('/'));
+
         Self {
             app_name: env::var("APP_NAME").unwrap_or_else(|_| {
                 "MSI Dergisi & MSI TDR - Savunma Sanayii ve Havacılık Platformu".to_string()
             }),
-            app_env: env::var("APP_ENV").unwrap_or_else(|_| "production".to_string()),
+            app_env: app_env.clone(),
             host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: env::var("PORT")
                 .ok()
@@ -77,14 +143,11 @@ impl AppConfig {
                 .ok()
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or(default_static_dir),
-            sqlite_db_path: env::var("SQLITE_DB_PATH")
-                .unwrap_or_else(|_| "storage/db/msi_platform.db".to_string()),
+            sqlite_db_path,
             edergi_dir: env::var("EDERGI_DIR")
                 .ok()
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or_else(|| "storage/edergi".to_string()),
-            mariadb_database: env::var("MARIADB_DATABASE")
-                .unwrap_or_else(|_| "msi_dergisi_db".to_string()),
             session_secret: env::var("SESSION_SECRET")
                 .unwrap_or_else(|_| "dev-only-session-secret-change-in-prod".to_string()),
             watermark_secret: env::var("WATERMARK_SECRET")
@@ -93,10 +156,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "operator@msidergisi.com".to_string()),
             admin_default_pass: env::var("ADMIN_DEFAULT_PASS").unwrap_or_default(),
             admin_path_secret: env::var("ADMIN_PATH_SECRET")
-                .ok()
-                .map(|v| v.trim().trim_matches('/').to_string())
-                .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| "msi-komuta".to_string()),
+                .map(|v| normalize_admin_path_secret(&v))
+                .unwrap_or_else(|_| "podmin".to_string()),
             ad_max_quota_per_keyword: env::var("AD_MAX_QUOTA_PER_KEYWORD")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -199,6 +260,39 @@ impl AppConfig {
                 .unwrap_or(25),
             indexnow_api_url: env::var("INDEXNOW_API_URL")
                 .unwrap_or_else(|_| "https://api.indexnow.org/indexnow".to_string()),
+            backup_enabled: env::var("BACKUP_ENABLED")
+                .map(|v| !v.eq_ignore_ascii_case("false") && v != "0")
+                .unwrap_or(app_env != "test"),
+            backup_dir,
+            backup_retention_days: env::var("BACKUP_RETENTION_DAYS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(14),
+            backup_archive_dir: env::var("BACKUP_ARCHIVE_DIR")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or(default_archive_dir),
+            backup_incremental_interval_secs: env::var("BACKUP_INCREMENTAL_INTERVAL_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1800),
+            backup_encryption_key: env::var("BACKUP_ENCRYPTION_KEY").unwrap_or_default(),
+            s3_backup_endpoint: env::var("S3_BACKUP_ENDPOINT").unwrap_or_default(),
+            s3_backup_bucket: env::var("S3_BACKUP_BUCKET").unwrap_or_default(),
+            s3_backup_region: env::var("S3_BACKUP_REGION")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "eu-central-1".to_string()),
+            s3_backup_access_key: env::var("S3_BACKUP_ACCESS_KEY").unwrap_or_default(),
+            s3_backup_secret_key: env::var("S3_BACKUP_SECRET_KEY").unwrap_or_default(),
+            s3_backup_prefix: env::var("S3_BACKUP_PREFIX")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "msi-backups".to_string()),
+            newsletter_poll_interval_secs: env::var("NEWSLETTER_POLL_INTERVAL_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
         }
     }
 
@@ -253,6 +347,76 @@ impl std::fmt::Debug for AppConfig {
             .field("paytr_merchant_salt", &"[REDACTED]")
             .field("legacy_seed_secret", &"[REDACTED]")
             .field("monitoring_enabled", &self.monitoring_enabled)
+            .field("backup_enabled", &self.backup_enabled)
+            .field("backup_dir", &self.backup_dir)
+            .field("backup_archive_dir", &self.backup_archive_dir)
+            .field("backup_incremental_interval_secs", &self.backup_incremental_interval_secs)
+            .field("backup_encryption_key", &"[REDACTED]")
+            .field("s3_backup_endpoint", &self.s3_backup_endpoint)
+            .field("s3_backup_bucket", &self.s3_backup_bucket)
+            .field("s3_backup_region", &self.s3_backup_region)
+            .field("s3_backup_prefix", &self.s3_backup_prefix)
+            .field("s3_backup_access_key", &"[REDACTED]")
+            .field("s3_backup_secret_key", &"[REDACTED]")
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retired_msi_komuta_variants_normalize_to_podmin_while_custom_secrets_remain() {
+        for retired in [
+            "msi-komuta",
+            "/MSI-KOMUTA/",
+            "msi_komuta",
+            "msikomuta",
+            "msi%20komuta",
+            "msi%2dkomuta",
+            "msi%2Dkomuta",
+            "msi%5fkomuta",
+            "msi%5Fkomuta",
+            "msi komuta",
+            "msi-komuta/tasarim",
+            "podmin/tasarim",
+            "PODMIN",
+            "  /msi-komuta/  ",
+            "",
+            "   ",
+            "///",
+        ] {
+            assert_eq!(
+                normalize_admin_path_secret(retired),
+                "podmin",
+                "Expected '{}' to normalize to 'podmin'",
+                retired
+            );
+        }
+
+        assert!(is_retired_admin_segment("msi-komuta"));
+        assert!(is_retired_admin_segment("/MSI-KOMUTA/"));
+        assert!(is_retired_admin_segment("msi_komuta"));
+        assert!(is_retired_admin_segment("msikomuta"));
+        assert!(is_retired_admin_segment("msi%20komuta"));
+        assert!(is_retired_admin_segment("msi%2dkomuta"));
+        assert!(is_retired_admin_segment("msi%2Dkomuta"));
+        assert!(is_retired_admin_segment("msi komuta"));
+        assert!(is_retired_admin_segment("msi-komuta/tasarim"));
+        assert!(!is_retired_admin_segment(""));
+        assert!(!is_retired_admin_segment("   "));
+        assert!(!is_retired_admin_segment("podmin"));
+        assert!(!is_retired_admin_segment("PODMIN"));
+        assert!(!is_retired_admin_segment("e2e-admin-abc123"));
+
+        assert_eq!(normalize_admin_path_secret("podmin"), "podmin");
+        assert_eq!(normalize_admin_path_secret("/podmin/"), "podmin");
+        assert_eq!(normalize_admin_path_secret("PODMIN"), "podmin");
+        assert_eq!(normalize_admin_path_secret("podmin/tasarim"), "podmin");
+        assert_eq!(
+            normalize_admin_path_secret("e2e-admin-abc123"),
+            "e2e-admin-abc123"
+        );
     }
 }

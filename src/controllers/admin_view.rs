@@ -2,87 +2,32 @@
 //! Renders the CSP-clean HTML5 Operator & B2B Defense Analytics Center (`/{admin_path}`)
 //! and Dedicated Command Login Gateway for UMSA Prodüksiyon — MSI Dergisi & MSI TDR.
 
-/// The 17-tab admin dashboard HTML template, embedded at compile time.
-const ADMIN_DASHBOARD_HTML: &str = include_str!("../engine/design/admin_dashboard.html");
-
-/// The dedicated enterprise command login gateway HTML template, embedded at compile time.
-const ADMIN_LOGIN_HTML: &str = include_str!("../engine/design/admin_login.html");
-
-fn escape_attr(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for ch in value.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
-fn normalize_admin_path(admin_path: &str) -> &str {
-    let trimmed = admin_path.trim().trim_matches('/');
-    if trimmed.is_empty() {
-        "admin"
-    } else {
-        trimmed
-    }
-}
-
-fn apply_csp_nonce(html: &str, nonce: Option<&str>) -> String {
-    match nonce.map(str::trim).filter(|n| !n.is_empty()) {
-        Some(n) => {
-            let escaped = escape_attr(n);
-            html.replace("nonce=\"{nonce}\"", &format!("nonce=\"{}\"", escaped))
-        }
-        None => html.replace(" nonce=\"{nonce}\"", ""),
-    }
-}
+use crate::engine::design::admin::{render_dashboard, render_login};
+use crate::engine::translation_engine::TranslationCache;
 
 /// Renders the dedicated Enterprise Command Login Gateway (`GET /{admin_path}` when unauthenticated)
 /// with CSP nonce injection and dynamic `data-admin-path` binding on `<body>`.
-pub fn render_admin_login(nonce: Option<&str>, admin_path: &str) -> String {
-    let clean_path = escape_attr(normalize_admin_path(admin_path));
-    let html = ADMIN_LOGIN_HTML.replace(
-        "data-admin-path=\"/admin\"",
-        &format!("data-admin-path=\"/{}\"", clean_path),
-    );
-    apply_csp_nonce(&html, nonce)
+pub fn render_admin_login(nonce: Option<&str>, admin_path: &str, tr: &TranslationCache, lang: &str) -> String {
+    render_login(nonce, admin_path, tr, lang)
 }
 
-/// Renders the full 17-tab Admin Command Center with CSP nonce, secret admin path routing,
+/// Renders the full 18-tab Admin Command Center with CSP nonce, secret admin path routing,
 /// and authenticated operator identity bound via `data-*` attributes on `<body>`.
 pub fn render_admin_dashboard_full(
     nonce: Option<&str>,
     admin_path: &str,
     operator_email: &str,
     operator_role: &str,
+    tr: &TranslationCache,
+    lang: &str,
 ) -> String {
-    let clean_path = escape_attr(normalize_admin_path(admin_path));
-    let safe_email = escape_attr(operator_email.trim());
-    let safe_role = escape_attr(operator_role.trim());
-
-    let mut html = ADMIN_DASHBOARD_HTML.replace(
-        "/admin/tasarim",
-        &format!("/{}/tasarim", clean_path),
-    );
-    html = html.replace(
-        "data-admin-path=\"/admin\" data-operator-email=\"\" data-operator-role=\"\"",
-        &format!(
-            "data-admin-path=\"/{}\" data-operator-email=\"{}\" data-operator-role=\"{}\"",
-            clean_path, safe_email, safe_role
-        ),
-    );
-
-    apply_csp_nonce(&html, nonce)
+    render_dashboard(nonce, admin_path, operator_email, operator_role, tr, lang)
 }
 
 /// Renders the admin dashboard HTML with optional CSP nonce injection on `<script>` tags.
 pub fn render_admin_dashboard_with_nonce(nonce: Option<&str>) -> String {
-    render_admin_dashboard_full(nonce, "admin", "", "")
+    let tr = TranslationCache::new();
+    render_admin_dashboard_full(nonce, "podmin", "", "", &tr, "tr")
 }
 
 /// Legacy entry point without nonce support (for backward compatibility).
@@ -96,27 +41,31 @@ mod tests {
 
     #[test]
     fn login_view_injects_nonce_and_admin_path() {
-        let html = render_admin_login(Some("test-nonce-123"), "msi-komuta");
+        let tr = TranslationCache::new();
+        let html = render_admin_login(Some("test-nonce-123"), "podmin", &tr, "tr");
         assert!(html.contains("nonce=\"test-nonce-123\""));
         assert!(!html.contains("{nonce}"));
-        assert!(html.contains("data-admin-path=\"/msi-komuta\""));
+        assert!(html.contains("data-admin-path=\"/podmin\""));
         assert!(html.contains("noindex,nofollow,noarchive"));
     }
 
     #[test]
     fn dashboard_full_injects_nonce_path_and_operator_identity() {
+        let tr = TranslationCache::new();
         let html = render_admin_dashboard_full(
             Some("csp-999"),
-            "/msi-komuta/",
+            "/podmin/",
             "editor@msidergisi.com",
             "content_editor",
+            &tr,
+            "tr",
         );
         assert!(html.contains("nonce=\"csp-999\""));
         assert!(!html.contains("{nonce}"));
-        assert!(html.contains("href=\"/msi-komuta/tasarim\""));
+        assert!(html.contains("href=\"/podmin/tasarim\""));
         assert!(!html.contains("/admin/tasarim"));
         assert!(html.contains(
-            "data-admin-path=\"/msi-komuta\" data-operator-email=\"editor@msidergisi.com\" data-operator-role=\"content_editor\""
+            "data-admin-path=\"/podmin\" data-operator-email=\"editor@msidergisi.com\" data-operator-role=\"content_editor\""
         ));
     }
 }

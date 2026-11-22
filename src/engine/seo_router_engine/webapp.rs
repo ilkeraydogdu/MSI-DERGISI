@@ -38,7 +38,7 @@ impl CentralSeoEngine {
             "scope": "/",
             "display": "standalone",
             "background_color": "#f5f4f1",
-            "theme_color": "#c4122f",
+            "theme_color": "#cb382a",
             "lang": "tr-TR",
             "icons": [
                 {

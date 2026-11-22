@@ -68,11 +68,83 @@ impl Database {
         Some(rule)
     }
 
+    pub fn is_safe_seo_redirect_target(new_path: &str) -> bool {
+        let t = new_path.trim();
+        !t.is_empty()
+            && t.starts_with('/')
+            && !t.starts_with("//")
+            && !t.contains('\\')
+            && !t.chars().any(|c| c.is_control())
+    }
+
+    pub fn is_protected_admin_redirect_source(
+        old_path: &str,
+        active_admin_seg: Option<&str>,
+    ) -> bool {
+        let t = old_path.trim();
+        if t.is_empty() || !t.starts_with('/') {
+            return false;
+        }
+        let without_query = t.split(['?', '#']).next().unwrap_or(t);
+        let decoded = urlencoding::decode(without_query)
+            .unwrap_or(std::borrow::Cow::Borrowed(without_query));
+        let first_raw = without_query
+            .trim_start_matches('/')
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .trim();
+        let first_dec = decoded
+            .trim_start_matches('/')
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .trim();
+        let matches_admin_seg = |seg: &str| -> bool {
+            if seg.is_empty() {
+                return false;
+            }
+            if crate::config::is_retired_admin_segment(seg) || seg.eq_ignore_ascii_case("podmin") {
+                return true;
+            }
+            if let Some(active) = active_admin_seg {
+                let norm_active = crate::config::normalize_admin_path_secret(active);
+                if seg.eq_ignore_ascii_case(&norm_active) {
+                    return true;
+                }
+            }
+            false
+        };
+        matches_admin_seg(first_raw)
+            || matches_admin_seg(first_dec)
+            || crate::config::is_retired_admin_segment(without_query)
+            || crate::config::is_retired_admin_segment(&decoded)
+    }
+
     pub fn insert_seo_redirect(&self, rd: &SeoRedirectRule) -> rusqlite::Result<i64> {
         let old_p = rd.old_path.trim();
         let new_p = rd.new_path.trim();
-        if old_p.is_empty() || new_p.is_empty() || !old_p.starts_with('/') {
-            return Err(rusqlite::Error::InvalidParameterName("Geçersiz kaynak veya hedef yönlendirme yolu.".to_string()));
+        if old_p.is_empty()
+            || !old_p.starts_with('/')
+            || old_p.starts_with("//")
+            || old_p.contains('\\')
+            || old_p.chars().any(|c| c.is_control())
+        {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Geçersiz kaynak yönlendirme yolu.".to_string(),
+            ));
+        }
+        if !Self::is_safe_seo_redirect_target(new_p) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Hedef yol yalnızca güvenli site-içi göreli bir yol ('/' ile başlayan) olabilir."
+                    .to_string(),
+            ));
+        }
+        if Self::is_protected_admin_redirect_source(old_p, None) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Yönetim veya kullanımdan kaldırılmış admin rota adresleri yönlendirilemez."
+                    .to_string(),
+            ));
         }
         if old_p.eq_ignore_ascii_case(new_p) {
             return Err(rusqlite::Error::InvalidParameterName("Kaynak ve hedef yol aynı olamaz (yönlendirme döngüsü).".to_string()));

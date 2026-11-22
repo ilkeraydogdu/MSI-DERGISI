@@ -41,7 +41,8 @@ impl Database {
         let sql = format!(
             "SELECT id, session_id, user_id, organization_category, organization_name,
                     event_type, content_slug, ad_id, duration_sec, scroll_depth_pct,
-                    video_completed, is_true_read, ssb_tag, created_at
+                    video_completed, is_true_read, ssb_tag, created_at,
+                    COALESCE(video_watch_pct, 0)
              FROM analytics_events {} ORDER BY id DESC LIMIT ?{} OFFSET ?{}",
             where_clause,
             param_idx,
@@ -81,6 +82,7 @@ impl Database {
                 is_true_read: r.get::<_, i32>(11)? != 0,
                 ssb_tag: r.get(12)?,
                 created_at: r.get(13)?,
+                video_watch_pct: r.get::<_, i32>(14).unwrap_or(0),
             })
         });
         match rows {
@@ -215,12 +217,14 @@ impl Database {
 
     pub fn insert_analytics_event(&self, ev: &AnalyticsEvent) -> rusqlite::Result<i64> {
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let watch_pct = ev.video_watch_pct.clamp(0, 100);
+        let video_completed = ev.video_completed || watch_pct >= 95;
         conn.execute(
             "INSERT INTO analytics_events (
                 session_id, user_id, organization_category, organization_name,
                 event_type, content_slug, ad_id, duration_sec, scroll_depth_pct,
-                video_completed, is_true_read, ssb_tag, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                video_completed, is_true_read, ssb_tag, created_at, video_watch_pct
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 ev.session_id,
                 ev.user_id,
@@ -231,10 +235,11 @@ impl Database {
                 ev.ad_id,
                 ev.duration_sec,
                 ev.scroll_depth_pct,
-                if ev.video_completed { 1 } else { 0 },
+                if video_completed { 1 } else { 0 },
                 if ev.is_true_read { 1 } else { 0 },
                 ev.ssb_tag,
-                ev.created_at
+                ev.created_at,
+                watch_pct
             ],
         )?;
 
@@ -255,6 +260,109 @@ impl Database {
         }
 
         Ok(conn.last_insert_rowid())
+    }
+
+    /// Computes live B2B & subscriber metrics for a given `YYYY-MM` month (portable SQLite/PG SQL).
+    pub fn compute_subscriber_report(&self, month: Option<&str>) -> serde_json::Value {
+        let target_month = month
+            .map(|m| m.trim().chars().take(7).collect::<String>())
+            .filter(|m| m.len() == 7)
+            .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+        let users = self.get_all_users();
+        let mut total_users: i64 = 0;
+        let mut active_subscribers: i64 = 0;
+        let mut gov_verified_users: i64 = 0;
+        let mut new_registrations_month: i64 = 0;
+        let mut by_tier_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+        let mut by_inst_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+
+        for u in &users {
+            if u.role == "deleted" {
+                continue;
+            }
+            total_users += 1;
+            if u.is_gov_verified {
+                gov_verified_users += 1;
+            }
+            if u.created_at.starts_with(&target_month) {
+                new_registrations_month += 1;
+            }
+            let tier_lower = u.subscription_tier.trim().to_ascii_lowercase();
+            let is_paid_tier = !tier_lower.is_empty()
+                && !matches!(
+                    tier_lower.as_str(),
+                    "free"
+                        | "standart kayıtlı okur"
+                        | "standart kayitli okur"
+                        | "akademik / öğrenci okur"
+                        | "akademik / ogrenci okur"
+                        | "akademik okur"
+                );
+            let not_expired = u
+                .subscription_expires_at
+                .as_deref()
+                .map(|d| d.get(..10).unwrap_or(d) >= today.as_str())
+                .unwrap_or(true);
+            if u.is_gov_verified || (is_paid_tier && not_expired) {
+                active_subscribers += 1;
+            }
+            let tier_key = if u.subscription_tier.trim().is_empty() {
+                "free".to_string()
+            } else {
+                u.subscription_tier.trim().to_string()
+            };
+            *by_tier_map.entry(tier_key).or_insert(0) += 1;
+            let org_key = if u.organization_category.trim().is_empty() {
+                "Belirsiz".to_string()
+            } else {
+                u.organization_category.trim().to_string()
+            };
+            *by_inst_map.entry(org_key).or_insert(0) += 1;
+        }
+
+        let (monthly_paid_invoices, monthly_revenue_try): (i64, f64) = match self.open_conn() {
+            Ok(conn) => conn
+                .query_row(
+                    "SELECT COUNT(*), COALESCE(SUM(amount_try), 0.0)
+                     FROM order_invoices
+                     WHERE payment_status = 'paid' AND SUBSTR(created_at, 1, 7) = ?1",
+                    params![target_month],
+                    |r| Ok((r.get::<_, i64>(0)?, r.get::<_, f64>(1)?)),
+                )
+                .unwrap_or((0, 0.0)),
+            Err(_) => (0, 0.0),
+        };
+
+        let mut by_tier: Vec<serde_json::Value> = by_tier_map
+            .into_iter()
+            .map(|(tier, count)| serde_json::json!({ "tier": tier, "count": count }))
+            .collect();
+        by_tier.sort_by(|a, b| b["count"].as_i64().cmp(&a["count"].as_i64()));
+
+        let mut by_institution: Vec<serde_json::Value> = by_inst_map
+            .into_iter()
+            .map(|(organization_category, count)| {
+                serde_json::json!({
+                    "organization_category": organization_category,
+                    "count": count
+                })
+            })
+            .collect();
+        by_institution.sort_by(|a, b| b["count"].as_i64().cmp(&a["count"].as_i64()));
+
+        serde_json::json!({
+            "report_month": target_month,
+            "total_users": total_users,
+            "active_subscribers": active_subscribers,
+            "gov_verified_users": gov_verified_users,
+            "new_registrations_month": new_registrations_month,
+            "monthly_paid_invoices": monthly_paid_invoices,
+            "monthly_revenue_try": (monthly_revenue_try * 100.0).round() / 100.0,
+            "by_tier": by_tier,
+            "by_institution": by_institution
+        })
     }
 
 }

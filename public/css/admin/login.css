@@ -1,0 +1,608 @@
+/* ==========================================================================
+   MSI Podmin — 2026 Modern Editorial Bento Split-Screen Login
+   Sculpted Inset Cinema Window + Liquid-Glass Surface + Monochrome Signature CTA
+   ========================================================================== */
+
+:root,
+html[data-theme="light"] {
+  --lg-canvas: #f2f4f8;
+  --lg-card-bg: #ffffff;
+  --lg-card-border: rgba(15, 23, 42, 0.085);
+  --lg-card-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 18px 42px -12px rgba(15, 23, 42, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --lg-field-bg: #f7f9fc;
+  --lg-field-bg-focus: #ffffff;
+  --lg-field-border: rgba(15, 23, 42, 0.13);
+  --lg-field-border-focus: rgba(15, 23, 42, 0.42);
+  --lg-field-halo: rgba(15, 23, 42, 0.07);
+  --lg-cta-bg: #111622;
+  --lg-cta-bg-hover: #1d2436;
+  --lg-cta-fg: #ffffff;
+  --lg-cta-shadow: 0 10px 24px -6px rgba(17, 22, 34, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --lg-dot: rgba(15, 23, 42, 0.085);
+  --lg-keylight: radial-gradient(circle, rgba(59, 102, 196, 0.085) 0%, rgba(245, 158, 11, 0.04) 40%, transparent 72%);
+  --lg-bleed-opacity: 0.24;
+  --lg-muted-footer: #556377;
+}
+
+html[data-theme="dark"] {
+  --lg-canvas: #0e121a;
+  --lg-card-bg: rgba(21, 26, 37, 0.86);
+  --lg-card-border: rgba(255, 255, 255, 0.095);
+  --lg-card-shadow:
+    0 24px 64px -16px rgba(2, 6, 14, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  --lg-field-bg: rgba(11, 15, 23, 0.78);
+  --lg-field-bg-focus: rgba(14, 19, 29, 0.96);
+  --lg-field-border: rgba(226, 232, 240, 0.12);
+  --lg-field-border-focus: rgba(241, 245, 249, 0.42);
+  --lg-field-halo: rgba(241, 245, 249, 0.09);
+  --lg-cta-bg: #f1f5f9;
+  --lg-cta-bg-hover: #ffffff;
+  --lg-cta-fg: #0d1119;
+  --lg-cta-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --lg-dot: rgba(226, 232, 240, 0.065);
+  --lg-keylight: radial-gradient(circle, rgba(96, 165, 250, 0.10) 0%, rgba(251, 191, 36, 0.045) 42%, transparent 72%);
+  --lg-bleed-opacity: 0.42;
+  --lg-muted-footer: #94a3b8;
+}
+
+body {
+  position: relative;
+  min-height: 100vh;
+  background-color: var(--lg-canvas);
+  color: var(--adm-text);
+  overflow-x: hidden;
+}
+
+/* ── Architectural Studio Background Depth ───────────────────────────────── */
+.login-canvas-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.canvas-dot-mesh {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--lg-dot) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse 75% 75% at 76% 50%, #000 18%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 75% at 76% 50%, #000 18%, transparent 100%);
+}
+.canvas-keylight {
+  position: absolute;
+  width: 720px;
+  height: 720px;
+  top: -220px;
+  right: -180px;
+  border-radius: 50%;
+  background: var(--lg-keylight);
+  filter: blur(110px);
+}
+
+/* ── Modern 52/48 Inset Bento Split Layout ───────────────────────────────── */
+.login-split {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ── Left Half: Sculpted Inset Full-Height Fighter Cinema Window ─────────── */
+.login-showcase {
+  position: relative;
+  min-width: 0;
+  padding: 16px 8px 16px 16px;
+  display: flex;
+}
+
+/* Photographic ambient color bleed behind the sculpted cinema frame */
+.jet-ambient-bleed {
+  position: absolute;
+  inset: 28px 18px 28px 28px;
+  z-index: 0;
+  border-radius: 36px;
+  overflow: hidden;
+  filter: blur(46px) saturate(1.45);
+  opacity: var(--lg-bleed-opacity);
+  transform: scale(0.98) translate3d(8px, 6px, 0);
+  pointer-events: none;
+}
+.jet-bleed-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.jet-cinema-frame {
+  --glare-x: 50%;
+  --glare-y: 35%;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: calc(100vh - 32px);
+  border-radius: 26px;
+  overflow: hidden;
+  background-color: #0d1320;
+  box-shadow:
+    0 24px 60px -16px rgba(6, 10, 20, 0.42),
+    0 2px 8px rgba(6, 10, 20, 0.14);
+  isolation: isolate;
+}
+html[data-theme="dark"] .jet-cinema-frame {
+  box-shadow:
+    0 28px 70px -16px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.jet-media-track {
+  position: absolute;
+  inset: -4.5%;
+  will-change: transform;
+}
+
+.jet-visual-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+  display: block;
+  transform: scale(1.03);
+  will-change: transform;
+  filter: contrast(1.05) saturate(1.07);
+}
+
+.jet-atmosphere-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 72% 52% at 78% 74%, rgba(251, 191, 36, 0.16) 0%, transparent 62%),
+    radial-gradient(ellipse 64% 52% at 24% 18%, rgba(56, 189, 248, 0.13) 0%, transparent 64%),
+    linear-gradient(180deg, rgba(8, 12, 22, 0.14) 0%, transparent 22%, transparent 80%, rgba(8, 12, 22, 0.28) 100%);
+  animation: atmosphere-breathe 14s ease-in-out infinite alternate;
+}
+@keyframes atmosphere-breathe {
+  0% { opacity: 0.72; transform: translate3d(-1.2%, 0.8%, 0) scale(1); }
+  100% { opacity: 1; transform: translate3d(1.2%, -1.2%, 0) scale(1.05); }
+}
+
+/* Subtle interactive optical glass glare tracking pointer */
+.jet-glass-glare {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(
+    520px circle at var(--glare-x) var(--glare-y),
+    rgba(255, 255, 255, 0.11),
+    transparent 62%
+  );
+  opacity: 0.75;
+  transition: opacity 0.35s ease;
+}
+
+/* Crisp 1px optical sapphire-glass inner highlight */
+.jet-cinema-rim {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.jet-reveal-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background-color: #0b1019;
+  opacity: 0;
+}
+
+/* ── Right Half: Spacious Studio Column + Sculpted Liquid-Glass Surface ──── */
+.login-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px 36px 24px 28px;
+}
+
+.login-topbar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.login-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px 0 11px;
+  border-radius: var(--radius-full);
+  color: var(--adm-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+.login-back-link:hover {
+  color: var(--adm-text);
+  background-color: var(--adm-surface);
+  border-color: var(--adm-border);
+  transform: translateX(-2px);
+}
+
+.login-center {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+/* 2026 Sculpted Liquid-Glass Card */
+.login-card {
+  position: relative;
+  width: 100%;
+  max-width: 416px;
+  padding: 40px 36px 36px;
+  border-radius: 24px;
+  background-color: var(--lg-card-bg);
+  background-image: radial-gradient(
+    420px circle at var(--glow-x, -220px) var(--glow-y, -220px),
+    var(--adm-glow-spot),
+    transparent 65%
+  );
+  backdrop-filter: blur(26px) saturate(1.2);
+  -webkit-backdrop-filter: blur(26px) saturate(1.2);
+  border: 1px solid var(--lg-card-border);
+  box-shadow: var(--lg-card-shadow);
+  overflow: hidden;
+}
+
+/* Subtle top specular light hairline (Apple/Linear signature) */
+.login-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 24px auto 24px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+html[data-theme="light"] .login-card::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(15, 23, 42, 0.14) 50%,
+    transparent 100%
+  );
+}
+
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.login-brand-logo {
+  height: 28px;
+  width: auto;
+  max-width: 118px;
+  display: block;
+  object-fit: contain;
+}
+html[data-theme="dark"] .logo-for-light { display: none; }
+html[data-theme="light"] .logo-for-dark { display: none; }
+
+.login-title {
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--adm-text);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+/* Alert & Status Banners */
+.login-error,
+.login-success {
+  display: none;
+  padding: 11px 14px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.login-error { background: var(--adm-danger-subtle); border: 1px solid var(--adm-danger-border); color: var(--adm-danger); }
+.login-success { background: var(--adm-success-subtle); border: 1px solid var(--adm-success-border); color: var(--adm-success); }
+.login-error.visible,
+.login-success.visible { display: block; }
+
+/* 2026 Tactile Recessed Inputs (Zero Dated Prefix Icons) */
+.login-form .form-group { margin-bottom: 18px; }
+.login-form .form-group:last-of-type { margin-bottom: 26px; }
+.login-form .form-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--adm-text-secondary);
+  margin-bottom: 8px;
+}
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.form-label-row .form-label { margin-bottom: 0; }
+
+.login-form .form-control.login-field {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 16px;
+  font-size: 14.5px;
+  line-height: 1.35;
+  color: var(--adm-text);
+  background-color: var(--lg-field-bg);
+  border: 1px solid var(--lg-field-border);
+  border-radius: 13px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition:
+    border-color 0.2s var(--adm-ease),
+    background-color 0.2s var(--adm-ease),
+    box-shadow 0.2s var(--adm-ease);
+}
+.login-form .form-control.login-field::placeholder {
+  color: var(--adm-text-muted);
+  opacity: 0.82;
+}
+.login-form .form-control.login-field:hover {
+  border-color: var(--adm-border-strong);
+}
+.login-form .form-control.login-field:focus {
+  outline: none;
+  background-color: var(--lg-field-bg-focus);
+  border-color: var(--lg-field-border-focus);
+  box-shadow: 0 0 0 4px var(--lg-field-halo);
+}
+
+.login-otp-field {
+  font-size: 18px !important;
+  letter-spacing: 0.22em;
+  text-align: center;
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  color: var(--adm-accent-text);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.text-link:hover {
+  color: var(--adm-accent-text-hover);
+  text-decoration: underline;
+}
+
+.password-wrap { position: relative; }
+.password-wrap .form-control.login-field { padding-right: 48px; }
+.pw-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  color: var(--adm-text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+.pw-toggle-btn:hover {
+  color: var(--adm-text);
+  background-color: var(--adm-hover);
+}
+
+.step-hint {
+  font-size: 13.5px;
+  color: var(--adm-text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+/* ── 2026 Monochrome Signature Primary CTA (Specular Sheen + Gliding Arrow) */
+.login-form .login-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 49px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 13px;
+  background-color: var(--lg-cta-bg);
+  color: var(--lg-cta-fg);
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: var(--lg-cta-shadow);
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    background-color 0.22s var(--adm-ease),
+    transform 0.22s var(--adm-ease),
+    box-shadow 0.22s var(--adm-ease);
+}
+
+/* Subtle diagonal specular shimmer on hover */
+.login-form .login-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.22) 48%,
+    transparent 76%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+html[data-theme="dark"] .login-form .login-cta::after {
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    rgba(15, 23, 42, 0.14) 48%,
+    transparent 76%
+  );
+}
+.login-form .login-cta:hover {
+  background-color: var(--lg-cta-bg-hover);
+  transform: translateY(-1px);
+}
+.login-form .login-cta:hover::after {
+  transform: translateX(120%);
+}
+.login-form .login-cta:active {
+  transform: translateY(0) scale(0.988);
+}
+
+.login-cta .cta-arrow {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.24s var(--adm-ease);
+}
+.login-cta:hover .cta-arrow {
+  transform: translateX(3px);
+}
+
+.login-submit.loading { pointer-events: none; opacity: 0.72; }
+.login-submit.loading .adm-icon { animation: adm-login-spin 0.8s linear infinite; }
+@keyframes adm-login-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.login-secondary-btn {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  border-radius: 13px;
+  font-size: 13.5px;
+  font-weight: 500;
+  background-color: var(--lg-field-bg);
+  border-color: var(--lg-field-border);
+  color: var(--adm-text-secondary);
+}
+.login-secondary-btn:hover {
+  background-color: var(--lg-field-bg-focus);
+  border-color: var(--adm-border-strong);
+  color: var(--adm-text);
+}
+
+.login-bottom {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  font-size: 12px;
+  color: var(--lg-muted-footer);
+}
+
+/* ── Tablet & Mobile: Sculpted Top Cinema Card + Liquid-Glass Form ───────── */
+@media (max-width: 960px) {
+  .login-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .login-showcase {
+    padding: 12px 14px 0;
+  }
+  .jet-ambient-bleed {
+    inset: 18px 22px 6px;
+    border-radius: 26px;
+  }
+  .jet-cinema-frame {
+    min-height: 232px;
+    height: 31vh;
+    max-height: 310px;
+    border-radius: 22px;
+  }
+  .jet-visual-img {
+    object-position: center 28%;
+  }
+  .login-panel {
+    min-height: auto;
+    padding: 12px 14px 24px;
+    gap: 8px;
+  }
+  .login-center {
+    padding: 4px 0 12px;
+  }
+  .login-card {
+    max-width: 440px;
+    padding: 28px 24px 26px;
+    border-radius: 22px;
+  }
+  .login-brand {
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+  .login-title {
+    font-size: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jet-atmosphere-sheen { animation: none !important; }
+  .jet-visual-img,
+  .jet-media-track,
+  .login-cta::after { transform: none !important; transition: none !important; }
+  .jet-reveal-veil { display: none !important; }
+}

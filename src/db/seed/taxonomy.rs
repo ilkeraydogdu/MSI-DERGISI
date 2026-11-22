@@ -30,13 +30,78 @@ pub fn seed_categories(conn: &Connection) -> rusqlite::Result<()> {
         ("savunma-sanayii-tarihi", None, "Savunma Sanayii Tarihi", "Defence Industry History", "gelecek-faz", "Türk ve dünya savunma sanayii kronolojisi ve dokümantasyon arşivi.", "Chronology and archival documentation of Turkish and global defence history.", "ph-hourglass-high", 26, 1),
         ("yazarlar", None, "Yazarlar", "Columnists & Authors", "gelecek-faz", "Akademisyenler, emekli komutanlar ve savunma analistleri dizini.", "Directory of academics, retired commanders and defence analysts.", "ph-feather", 27, 1),
         ("ogrenci-kulupleri", None, "Öğrenci Kulüpleri", "University Defence Clubs", "gelecek-faz", "Üniversite savunma teknolojileri ve havacılık toplulukları ekosistemi.", "University defence technologies and aerospace societies ecosystem.", "ph-graduation-cap", 28, 1),
+        ("insan-kaynaklari", None, "İnsan Kaynakları", "Human Resources", "gelecek-faz", "Savunma ve havacılık ekosisteminde kariyer fırsatları, yetenek programları ve mühendislik istihdamı.", "Career opportunities, talent programmes and engineering recruitment in the defence and aerospace ecosystem.", "ph-briefcase", 29, 1),
     ];
 
     for c in categories {
         conn.execute(
-            "INSERT OR IGNORE INTO categories (slug, parent_slug, name_tr, name_en, group_type, description_tr, description_en, icon_class, sort_order, is_dynamic)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO categories (slug, parent_slug, name_tr, name_en, group_type, description_tr, description_en, icon_class, sort_order, is_dynamic)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(slug) DO NOTHING",
             params![c.0, c.1, c.2, c.3, c.4, c.5, c.6, c.7, c.8, c.9],
+        )?;
+    }
+    seed_option_b_email_groups(conn)?;
+    Ok(())
+}
+
+pub fn seed_option_b_categories(conn: &Connection) -> rusqlite::Result<()> {
+    let categories: &[(&str, Option<&str>, &str, &str, &str, &str, &str, &str, i32, i32)] = &[
+        ("savunma-sanayii-tarihi", None, "Savunma Sanayii Tarihi", "Defence Industry History", "gelecek-faz", "Türk ve dünya savunma sanayii kronolojisi ve dokümantasyon arşivi.", "Chronology and archival documentation of Turkish and global defence history.", "ph-hourglass-high", 26, 1),
+        ("yazarlar", None, "Yazarlar", "Columnists & Authors", "gelecek-faz", "Akademisyenler, emekli komutanlar ve savunma analistleri dizini.", "Directory of academics, retired commanders and defence analysts.", "ph-feather", 27, 1),
+        ("ogrenci-kulupleri", None, "Öğrenci Kulüpleri", "University Defence Clubs", "gelecek-faz", "Üniversite savunma teknolojileri ve havacılık toplulukları ekosistemi.", "University defence technologies and aerospace societies ecosystem.", "ph-graduation-cap", 28, 1),
+        ("insan-kaynaklari", None, "İnsan Kaynakları", "Human Resources", "gelecek-faz", "Savunma ve havacılık ekosisteminde kariyer fırsatları, yetenek programları ve mühendislik istihdamı.", "Career opportunities, talent programmes and engineering recruitment in the defence and aerospace ecosystem.", "ph-briefcase", 29, 1),
+    ];
+
+    for c in categories {
+        conn.execute(
+            "INSERT INTO categories (slug, parent_slug, name_tr, name_en, group_type, description_tr, description_en, icon_class, sort_order, is_dynamic)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(slug) DO NOTHING",
+            params![c.0, c.1, c.2, c.3, c.4, c.5, c.6, c.7, c.8, c.9],
+        )?;
+    }
+    seed_option_b_email_groups(conn)?;
+    Ok(())
+}
+
+pub fn seed_option_b_email_groups(conn: &Connection) -> rusqlite::Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let groups: &[(&str, &str, &str, &str, &str, i32)] = &[
+        (
+            "general",
+            "Genel Duyurular ve Haftalık Bülten",
+            "General Announcements & Weekly Newsletter",
+            "Haftalık savunma sanayii özeti ve genel editöryal duyurular.",
+            "Weekly defence industry digest and general editorial announcements.",
+            6,
+        ),
+        (
+            "edergi-releases",
+            "Yeni E-Dergi Sayı Bildirimleri",
+            "New E-Magazine Issue Alerts",
+            "Yeni MSI Dergisi ve MSI TDR dijital sayıları yayımlandığında bildirim alır.",
+            "Receives notifications whenever a new MSI Magazine or MSI TDR issue is published.",
+            7,
+        ),
+        (
+            "exhibition-alerts",
+            "Fuar ve Etkinlik Özel Dosyaları",
+            "Exhibition & Event Special Dossiers",
+            "IDEF, SAHA EXPO ve uluslararası fuar özel dosyaları hakkında bilgilendirme.",
+            "Updates on IDEF, SAHA EXPO and international defence exhibition dossiers.",
+            8,
+        ),
+    ];
+
+    for g in groups {
+        conn.execute(
+            "INSERT INTO email_groups (
+                code, name_tr, name_en, description_tr, description_en, filter_json, static_emails_json,
+                requires_marketing_consent, is_system, is_active, sort_order, created_by, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, '{}', '[]', 1, 0, 1, ?6, 'system', ?7)
+             ON CONFLICT(code) DO NOTHING",
+            params![g.0, g.1, g.2, g.3, g.4, g.5, now],
         )?;
     }
     Ok(())
@@ -62,11 +127,188 @@ pub fn seed_ssb_tags(conn: &Connection) -> rusqlite::Result<()> {
 
     for t in tags {
         conn.execute(
-            "INSERT OR IGNORE INTO ssb_tags (code, name_tr, name_en, category_group, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO ssb_tags (code, name_tr, name_en, category_group, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(code) DO NOTHING",
             params![t.0, t.1, t.2, t.3, t.4],
         )?;
     }
+    Ok(())
+}
+
+/// Idempotently seeds realistic, non-mock defense-sector operational defaults for
+/// `recommendation_rules` and `custom_fields` when those tables are empty.
+pub fn seed_operational_defaults(conn: &Connection) -> rusqlite::Result<()> {
+    let rec_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM recommendation_rules", [], |r| r.get(0))
+        .unwrap_or(0);
+    if rec_count == 0 {
+        let rules: &[(&str, &str, &str, &str, i32, i32)] = &[
+            (
+                "Hava Araçları & Veri Bağı Derin Analizi",
+                "hava-araclari",
+                "*",
+                "insansiz-hava-araci-veri-baglari-operasyonel-zorluklar-cozum-yontemleri-ve-akson-veri-bagi-sistemi-a2715649",
+                20,
+                1,
+            ),
+            (
+                "Deniz Kuvvetleri Deniz Sistemleri Önerisi",
+                "deniz-araclari",
+                "Dz.K.K.lığı",
+                "oramiral-tatlioglu-gelecegin-deniz-savaslari-insansiz-araclarla-yapilacaktir",
+                25,
+                1,
+            ),
+            (
+                "Deniz Platformları 76/62 mm Milli Top Dosyası",
+                "deniz-araclari",
+                "*",
+                "mke-yakin-hava-savunma-ve-deniz-topu-sistemleri",
+                15,
+                1,
+            ),
+            (
+                "Kara & Helikopter Silah Sistemleri Entegrasyonu",
+                "kara-araclari",
+                "*",
+                "sarsilmaz-ve-tr-mekatronik-20mm-burun-topu-entegrasyonu",
+                18,
+                1,
+            ),
+            (
+                "Hava Savunma ve Füze Testleri (MSB)",
+                "muhimmatlar-ve-fuze-sistemleri",
+                "MSB",
+                "hisar-a-otonom-jet-motorlu-hedefi-vurdu",
+                25,
+                1,
+            ),
+            (
+                "Radar & Elektronik Harp Kurumsal Performans Dosyası",
+                "radarlar-ve-sensorler",
+                "Sektör Kuruluşları",
+                "aselsan-2026ya-guclu-basladi-hasilat-343-milyar-tlye-ulasti",
+                20,
+                1,
+            ),
+            (
+                "Taktik Haberleşme & Sürü İDA Kapak Söyleşisi",
+                "haberlesme-ve-muharebe-destek-sistemleri",
+                "*",
+                "ctech-genel-muduru-dr-cuneyd-firat-f18da8ea",
+                18,
+                1,
+            ),
+        ];
+
+        for r in rules {
+            let slug_exists: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM contents WHERE slug = ?1 AND status = 'published' AND is_sponsored = 0)",
+                    params![r.3],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if slug_exists {
+                conn.execute(
+                    "INSERT INTO recommendation_rules
+                        (rule_name, source_tag_or_cat, target_institution, recommended_content_slug, priority, is_active)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![r.0, r.1, r.2, r.3, r.4, r.5],
+                )?;
+            }
+        }
+    }
+
+    let cf_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM custom_fields", [], |r| r.get(0))
+        .unwrap_or(0);
+    if cf_count == 0 {
+        let fields: &[(&str, &str, &str, &str, &str, i32, i64, &str)] = &[
+            (
+                "editorial_dossier_code",
+                "Editöryal Dosya Kodu",
+                "Editorial Dossier Code",
+                "text",
+                "[]",
+                0,
+                10,
+                "content",
+            ),
+            (
+                "security_clearance_tier",
+                "Kaynak Sınıflandırma Düzeyi",
+                "Source Classification Tier",
+                "select",
+                r#"[{"value":"acik_kaynak","label_tr":"Açık Kaynak","label_en":"Open Source"},{"value":"resmi_bulten","label_tr":"Resmî Kurum Bülteni","label_en":"Official Press Release"},{"value":"teknik_analiz","label_tr":"Hakemli Teknik Analiz","label_en":"Peer-Reviewed Technical Analysis"}]"#,
+                0,
+                20,
+                "content",
+            ),
+            (
+                "primary_platform_system",
+                "İlgili Ana Platform / Sistem",
+                "Primary Platform / System",
+                "text",
+                "[]",
+                0,
+                30,
+                "content",
+            ),
+            (
+                "ad_contract_reference",
+                "Reklam Sözleşme / PO Referansı",
+                "Ad Contract / PO Reference",
+                "text",
+                "[]",
+                0,
+                10,
+                "ad",
+            ),
+            (
+                "ad_sector_classification",
+                "Reklamveren Sektör Segmenti",
+                "Advertiser Sector Segment",
+                "select",
+                r#"[{"value":"ana_yuklenici","label_tr":"Ana Yüklenici","label_en":"Prime Contractor"},{"value":"alt_sistem","label_tr":"Alt Sistem Üreticisi","label_en":"Subsystem Supplier"},{"value":"fuar_etkinlik","label_tr":"Fuar & Etkinlik","label_en":"Exhibition & Event"},{"value":"kurum_ici","label_tr":"Platform Duyurusu","label_en":"In-House Announcement"}]"#,
+                0,
+                20,
+                "ad",
+            ),
+            (
+                "user_department_unit",
+                "Birim / Daire Başkanlığı",
+                "Department / Directorate",
+                "text",
+                "[]",
+                0,
+                10,
+                "user",
+            ),
+            (
+                "user_protocol_notes",
+                "Kurumsal Doğrulama ve Protokol Notu",
+                "Institutional Verification & Protocol Notes",
+                "textarea",
+                "[]",
+                0,
+                20,
+                "user",
+            ),
+        ];
+
+        for f in fields {
+            conn.execute(
+                "INSERT INTO custom_fields
+                    (field_key, label_tr, label_en, field_type, options_json, is_required, sort_order, applies_to)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(field_key) DO NOTHING",
+                params![f.0, f.1, f.2, f.3, f.4, f.5, f.6, f.7],
+            )?;
+        }
+    }
+
     Ok(())
 }
 

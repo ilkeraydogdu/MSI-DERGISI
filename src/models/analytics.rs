@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AnalyticsEvent {
  pub id: i64,
  pub session_id: String,
@@ -16,6 +16,8 @@ pub struct AnalyticsEvent {
  pub is_true_read: bool,
  pub ssb_tag: Option<String>,
  pub created_at: String,
+ #[serde(default)]
+ pub video_watch_pct: i32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -105,7 +105,7 @@ pub fn build_where_clause(filters: &[(&str, Option<&str>)]) -> (String, Vec<Stri
 /// Returns `(items, total_count)`. On any error returns `(Vec::new(), 0)`.
 ///
 /// Replaces the repeated open_conn → COUNT → prepare → query_map → filter_map boilerplate
-/// found in ~12 repo functions (reminders, redirects, newsletters, analytics, admin_misc…).
+/// found in repo functions (reminders, redirects, newsletters, analytics, custom_fields, roles…).
 ///
 /// # Example
 /// ```ignore

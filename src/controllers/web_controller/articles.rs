@@ -16,7 +16,10 @@ pub async fn render_article_detail(
             format!("/en/haberler/{}", slug),
         ] {
             if let Some(rule) = state.db.find_seo_redirect(&cand) {
-                return Redirect::permanent(&rule.new_path).into_response();
+                let target = rule.new_path.trim();
+                if crate::db::Database::is_safe_seo_redirect_target(target) {
+                    return Redirect::permanent(target).into_response();
+                }
             }
         }
         return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
@@ -29,19 +32,72 @@ pub async fn render_article_detail(
     if !content_service::is_publicly_visible(&item) && !is_staff {
         return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
     }
+    let inst_allowed =
+        content_service::user_matches_target_institutions(&item, user.as_ref(), &state.db);
     let purchased = user
         .as_ref()
         .map(|u| state.db.get_user_purchased_codes(&u.email))
         .unwrap_or_default();
-    let (body, locked, reason) =
+    let (mut body, mut locked, mut reason) =
         content_service::apply_paywall_view(&item, user.as_ref(), &purchased, &lang);
-    state.db.increment_content_view(&slug, !locked);
+    if !inst_allowed {
+        locked = true;
+        let raw = if lang.eq_ignore_ascii_case("en") && !item.body_en.trim().is_empty() {
+            &item.body_en
+        } else {
+            &item.body_tr
+        };
+        body = content_service::truncate_to_two_sentences_html(raw);
+        let inst_list = item.target_institutions.join(", ");
+        reason = if lang.eq_ignore_ascii_case("en") {
+            format!(
+                "Institution-Exclusive Dossier: This briefing is restricted to verified members of: {}.",
+                inst_list
+            )
+        } else {
+            format!(
+                "Kuruma Özel İçerik: Bu dosya yalnızca yetkili kurum personeline ({}) açıktır.",
+                inst_list
+            )
+        };
+    }
+    state.db.increment_content_view(&item.slug, !locked);
     let contents = state.db.get_all_contents();
-    let related: Vec<ContentItem> = content_service::select_related_articles(
+    let mut toc_html = String::new();
+    if !item.is_sponsored
+        && !item.content_type.eq_ignore_ascii_case("advertorial")
+        && !item.content_type.eq_ignore_ascii_case("advertorials")
+    {
+        if let Some(iss_no) = item.issue_number {
+            let pub_type = if item.source_group.eq_ignore_ascii_case("msi-tdr") {
+                "msi_tdr"
+            } else {
+                "msi"
+            };
+            if let Some(iss) = state.db.get_issue(pub_type, iss_no) {
+                let toc_entries = crate::engine::design::components::sections::dossier_toc_from_spreads(
+                    &iss.spreads,
+                    iss.issue_number,
+                    &lang,
+                );
+                if !toc_entries.is_empty() {
+                    toc_html = crate::engine::design::components::sections::render_dossier_toc(
+                        "Dosya İçindekiler",
+                        "Dossier Table of Contents",
+                        &toc_entries,
+                        &lang,
+                        Some(&state.translations),
+                    );
+                }
+            }
+        }
+    }
+    let related: Vec<ContentItem> = content_service::select_related_articles_authorized(
         &item,
         &contents,
         &state.db.get_recommendation_rules(),
         user.as_ref(),
+        &state.db,
         12,
     )
     .into_iter()
@@ -52,7 +108,7 @@ pub async fn render_article_detail(
             !c.source_group.eq_ignore_ascii_case("msi-tdr")
         }
     })
-    .take(5)
+    .take(8)
     .collect();
     let ads = ad_service::select_ads_for_context(
         &state.db.get_all_ads(),
@@ -60,7 +116,7 @@ pub async fn render_article_detail(
         Some(&item),
         user.as_ref(),
     );
-    let html = crate::engine::design::reader::article_with_translations(
+    let html = crate::engine::design::reader::article_with_toc_and_translations(
         &item,
         &body,
         locked,
@@ -68,6 +124,7 @@ pub async fn render_article_detail(
         &related,
         &ads,
         &lang,
+        (!toc_html.is_empty()).then_some(toc_html.as_str()),
         Some(&state.translations),
     );
     let title = crate::engine::design::components::localized(&lang, &item.title_tr, &item.title_en);
@@ -366,8 +423,47 @@ pub async fn render_category_page(
         ""
     };
 
+    let page_items_owned: Vec<ContentItem> = page_items.iter().map(|i| (*i).clone()).collect();
+    let dossier_toc_html = if matches!(
+        slug.as_str(),
+        "ozel-dosya"
+            | "ozel-dosyalar"
+            | "kapak-dosyasi"
+            | "kapak-dosyalari"
+            | "etkinlik-ozel-sayilari"
+            | "etkinlik-sonrasi-ozel-dosyalar"
+            | "savunma-sanayii-tarihi"
+    ) && !page_items_owned.is_empty()
+    {
+        let entries = crate::engine::design::components::sections::dossier_toc_from_contents(
+            &page_items_owned,
+            &lang,
+        );
+        crate::engine::design::components::sections::render_dossier_toc(
+            "Dosya İçindekiler",
+            "Dossier Table of Contents",
+            &entries,
+            &lang,
+            tr,
+        )
+    } else {
+        String::new()
+    };
+
+    let related_strip_html = crate::engine::design::components::sections::render_related_strip(
+        &snap_for_counts.data.contents,
+        &crate::engine::design::components::sections::RelatedStripOptions {
+            lang: &lang,
+            is_current_sponsored: false,
+            exclude_ids: &[],
+            limit: 4,
+            tr,
+            source_context: &slug,
+        },
+    );
+
     let body = format!(
-        r#"<section class="container section-space category-page"><div class="category-master-grid"><div class="category-main-col"><div class="msi-section-ribbon">{ribbon}</div><div class="page-heading"><h1>{title}</h1><p>{desc}</p></div>{sub_hub}<form class="filter-toolbar" method="get">{lang_hidden}<label for="category-topic">{topic_lbl}</label><select id="category-topic" name="ssb"><option value="">{all_topics_lbl}</option>{filters}</select><button class="button secondary">{filter_btn_lbl}</button><a href="{reset_href}" class="text-link">{reset_lbl}</a><span>{total} {count_suffix}</span></form>{cards}{pagination}</div>{sidebar}</div></section>"#,
+        r#"<section class="container section-space category-page"><div class="category-master-grid"><div class="category-main-col"><div class="msi-section-ribbon">{ribbon}</div><div class="page-heading"><h1>{title}</h1><p>{desc}</p></div>{sub_hub}{dossier_toc}<form class="filter-toolbar" method="get">{lang_hidden}<label for="category-topic">{topic_lbl}</label><select id="category-topic" name="ssb"><option value="">{all_topics_lbl}</option>{filters}</select><button class="button secondary">{filter_btn_lbl}</button><a href="{reset_href}" class="text-link">{reset_lbl}</a><span>{total} {count_suffix}</span></form>{cards}{pagination}</div>{sidebar}</div></section>{related_strip}"#,
         ribbon = esc(title),
         title = esc(title),
         desc = esc(localized(
@@ -376,6 +472,7 @@ pub async fn render_category_page(
             &category.description_en
         )),
         sub_hub = sub_hub_html,
+        dossier_toc = dossier_toc_html,
         lang_hidden = lang_hidden,
         topic_lbl = esc(&topic_lbl),
         all_topics_lbl = esc(&all_topics_lbl),
@@ -387,12 +484,12 @@ pub async fn render_category_page(
         count_suffix = esc(&count_suffix),
         cards = cards,
         pagination = pagination_html,
-        sidebar = sidebar
+        sidebar = sidebar,
+        related_strip = related_strip_html
     );
 
     let settings_map = state.db.get_setting_map(&lang);
     let brand_config = seo_router_engine::SeoBrandConfig::from_settings(&settings_map);
-    let page_items_owned: Vec<ContentItem> = page_items.iter().map(|i| (*i).clone()).collect();
     let mut seo = CentralSeoEngine::build_category_seo_meta(
         &state.config.public_url,
         &category,

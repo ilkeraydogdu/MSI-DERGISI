@@ -97,8 +97,9 @@ fn is_subscription_expired(expires_str: &str, user_id: i64) -> bool {
     if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
         return d < Utc::now().date_naive();
     }
-    if s.len() >= 10 {
-        if let Ok(d) = NaiveDate::parse_from_str(&s[..10], "%Y-%m-%d") {
+    let prefix = crate::services::ad_service::char_prefix(s, 10);
+    if prefix.chars().count() >= 10 {
+        if let Ok(d) = NaiveDate::parse_from_str(prefix, "%Y-%m-%d") {
             return d < Utc::now().date_naive();
         }
     }
@@ -252,11 +253,132 @@ pub fn apply_paywall_view(
     (preview_html, true, reason)
 }
 
+fn turkish_lowercase(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            'İ' => out.push('i'),
+            'I' => out.push('ı'),
+            _ => {
+                for lc in c.to_lowercase() {
+                    out.push(lc);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn fold_eq_tr(a: &str, b: &str) -> bool {
+    let a_t = a.trim();
+    let b_t = b.trim();
+    turkish_lowercase(a_t) == turkish_lowercase(b_t)
+        || a_t.to_lowercase() == b_t.to_lowercase()
+}
+
+/// Enforces `B13` institution-exclusive content gating (`target_institutions_json`).
+/// Returns `true` when `item.target_institutions` is empty OR when `user` is staff
+/// OR belongs to one of the targeted institutions / categories.
+pub fn user_matches_target_institutions(
+    item: &ContentItem,
+    user: Option<&UserAccount>,
+    db: &crate::db::Database,
+) -> bool {
+    if item.target_institutions.is_empty() {
+        return true;
+    }
+    let Some(u) = user else {
+        return false;
+    };
+    if crate::extractors::operator_user::is_staff_role(db, &u.role) {
+        return true;
+    }
+    let u_cat = u.organization_category.trim();
+    let u_name = u.organization_name.trim();
+    let u_role = u.role.trim();
+    let is_verified_public = u.is_gov_verified || fold_eq_tr(u_role, "subscriber_public");
+    let is_verified_corp = fold_eq_tr(u_role, "subscriber_corporate");
+    let categories = db.list_institution_categories(false);
+
+    let matches_category = |candidate: &str, cat: &crate::models::InstitutionCategory| -> bool {
+        !candidate.is_empty()
+            && (fold_eq_tr(candidate, &cat.code)
+                || fold_eq_tr(candidate, &cat.legacy_value)
+                || fold_eq_tr(candidate, &cat.label_tr)
+                || fold_eq_tr(candidate, &cat.label_en))
+    };
+
+    for raw_target in &item.target_institutions {
+        let t = raw_target.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if t == "*" || fold_eq_tr(t, "all") {
+            return true;
+        }
+        let matched_cat = categories.iter().find(|c| {
+            fold_eq_tr(&c.code, t)
+                || fold_eq_tr(&c.legacy_value, t)
+                || fold_eq_tr(&c.label_tr, t)
+                || fold_eq_tr(&c.label_en, t)
+        });
+        if let Some(cat) = matched_cat {
+            let eligible = if cat.is_public_sector {
+                is_verified_public
+            } else if cat.requires_verification {
+                is_verified_public || is_verified_corp
+            } else {
+                true
+            };
+            if eligible && (matches_category(u_cat, cat) || matches_category(u_name, cat)) {
+                return true;
+            }
+        } else {
+            let t_low = turkish_lowercase(t);
+            if t_low.contains("kamu") || t_low.contains("tsk") || fold_eq_tr(t, "public_sector") {
+                if is_verified_public {
+                    return true;
+                }
+            } else if (is_verified_public || is_verified_corp)
+                && ((!u_cat.is_empty() && fold_eq_tr(u_cat, t))
+                    || (!u_name.is_empty() && fold_eq_tr(u_name, t)))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Returns `true` when `item` is marked sponsored or has an `advertorial`/`advertorials` content type.
+pub fn is_sponsored_or_advertorial(item: &ContentItem) -> bool {
+    let ct = item.content_type.trim();
+    item.is_sponsored
+        || ct.eq_ignore_ascii_case("advertorial")
+        || ct.eq_ignore_ascii_case("advertorials")
+}
+
 /// Selects related articles for the article detail view.
 ///
 /// **STRICT COMPETITOR PROTECTION RULE**:
-/// If `current.is_sponsored` is `true`, immediately returns an empty `Vec::new()`
+/// If `current` is sponsored or advertorial, immediately returns an empty `Vec::new()`
 /// ("Sponsorlu içerik gösterilirken içerik önerisi yapılmaz").
+pub fn select_related_articles_authorized(
+    current: &ContentItem,
+    all_contents: &[ContentItem],
+    rules: &[RecommendationRule],
+    user: Option<&UserAccount>,
+    db: &crate::db::Database,
+    limit: usize,
+) -> Vec<ContentItem> {
+    let allowed: Vec<ContentItem> = all_contents
+        .iter()
+        .filter(|c| user_matches_target_institutions(c, user, db))
+        .cloned()
+        .collect();
+    select_related_articles(current, &allowed, rules, user, limit)
+}
+
 pub fn select_related_articles(
     current: &ContentItem,
     all_contents: &[ContentItem],
@@ -264,7 +386,7 @@ pub fn select_related_articles(
     user: Option<&UserAccount>,
     limit: usize,
 ) -> Vec<ContentItem> {
-    if current.is_sponsored || current.content_type.eq_ignore_ascii_case("advertorial") {
+    if is_sponsored_or_advertorial(current) {
         return Vec::new();
     }
 
@@ -277,6 +399,7 @@ pub fn select_related_articles(
         .iter()
         .filter(|candidate| {
             is_publicly_visible(candidate)
+                && !is_sponsored_or_advertorial(candidate)
                 && candidate.id != current.id
                 && candidate.slug != current.slug
         })
@@ -302,18 +425,14 @@ pub fn select_related_articles(
 
                     let inst_matches = rule.target_institution.is_empty()
                         || rule.target_institution == "*"
-                        || rule.target_institution.eq_ignore_ascii_case("all")
+                        || fold_eq_tr(&rule.target_institution, "all")
                         || (!user_institution.is_empty()
-                            && rule
-                                .target_institution
-                                .eq_ignore_ascii_case(user_institution));
+                            && fold_eq_tr(&rule.target_institution, user_institution));
 
                     if source_matches && inst_matches {
                         score += 120 + (rule.priority as i64 * 15);
                         if !user_institution.is_empty()
-                            && rule
-                                .target_institution
-                                .eq_ignore_ascii_case(user_institution)
+                            && fold_eq_tr(&rule.target_institution, user_institution)
                         {
                             score += 60;
                         }
@@ -484,6 +603,8 @@ mod tests {
             email_verified: true,
             marketing_emails_opted_in: true,
             totp_enabled: false,
+            tos_accepted_at: "2026-01-01T00:00:00Z".to_string(),
+            tos_version: "2026-01".to_string(),
         }
     }
 
@@ -503,5 +624,214 @@ mod tests {
 
         let op = make_user("site_operator", "Kurumsal Tam Yetki", Some("2030-12-31"));
         assert!(user_has_subscriber_access(&op));
+    }
+
+    #[test]
+    fn target_institutions_enforces_specific_agency_boundaries_and_preserves_umbrellas() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_path = std::env::temp_dir()
+            .join(format!("msi_cs_inst_{}_{}.db", std::process::id(), ts))
+            .to_string_lossy()
+            .to_string();
+        let db = crate::db::Database::new(&db_path).expect("test db");
+
+        let mut navy_user = make_user("subscriber_public", "Kamu & TSK", Some("2030-12-31"));
+        navy_user.is_gov_verified = true;
+        navy_user.organization_category = "Dz.K.K.lığı".to_string();
+        navy_user.organization_name = "Deniz Kuvvetleri Komutanlığı".to_string();
+
+        let mut airforce_user_legacy = navy_user.clone();
+        airforce_user_legacy.organization_category = "Hv.K.K.lığı".to_string();
+        airforce_user_legacy.organization_name = "Hava Kuvvetleri Komutanlığı".to_string();
+
+        let mut airforce_user_code = navy_user.clone();
+        airforce_user_code.organization_category = "hvkk".to_string();
+
+        let hvkk_item = ContentItem {
+            id: 1,
+            slug: "hvkk-only".to_string(),
+            target_institutions: vec!["Hv.K.K.lığı".to_string()],
+            ..ContentItem::default()
+        };
+        let diger_kamu_item = ContentItem {
+            id: 2,
+            slug: "diger-kamu-only".to_string(),
+            target_institutions: vec!["Diğer Kamu Kurumları".to_string()],
+            ..ContentItem::default()
+        };
+        let umbrella_kamu_tsk = ContentItem {
+            id: 3,
+            slug: "kamu-tsk-umbrella".to_string(),
+            target_institutions: vec!["Kamu & TSK".to_string()],
+            ..ContentItem::default()
+        };
+        let umbrella_kamu_ssb = ContentItem {
+            id: 4,
+            slug: "kamu-tsb-ssb-umbrella".to_string(),
+            target_institutions: vec!["Kamu / TSK / SSB".to_string()],
+            ..ContentItem::default()
+        };
+        let umbrella_public_sector = ContentItem {
+            id: 5,
+            slug: "public-sector-umbrella".to_string(),
+            target_institutions: vec!["public_sector".to_string()],
+            ..ContentItem::default()
+        };
+
+        assert!(
+            !user_matches_target_institutions(&hvkk_item, Some(&navy_user), &db),
+            "Dz.K.K.lığı .gov.tr user must NOT bypass Hv.K.K.lığı-only content"
+        );
+        assert!(
+            !user_matches_target_institutions(&diger_kamu_item, Some(&navy_user), &db),
+            "Dz.K.K.lığı .gov.tr user must NOT bypass Diğer Kamu Kurumları-only content"
+        );
+        assert!(user_matches_target_institutions(&hvkk_item, Some(&airforce_user_legacy), &db));
+        assert!(user_matches_target_institutions(&hvkk_item, Some(&airforce_user_code), &db));
+        assert!(user_matches_target_institutions(&umbrella_kamu_tsk, Some(&navy_user), &db));
+        assert!(user_matches_target_institutions(&umbrella_kamu_ssb, Some(&navy_user), &db));
+        assert!(user_matches_target_institutions(&umbrella_public_sector, Some(&navy_user), &db));
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(format!("{}-wal", db_path));
+        let _ = std::fs::remove_file(format!("{}-shm", db_path));
+    }
+
+    #[test]
+    fn target_institutions_turkish_uppercase_preserves_agency_isolation_and_allows_legitimate_users() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_path = std::env::temp_dir()
+            .join(format!("msi_cs_tr_case_{}_{}.db", std::process::id(), ts))
+            .to_string_lossy()
+            .to_string();
+        let db = crate::db::Database::new(&db_path).expect("test db");
+
+        let mut navy_user = make_user("subscriber_public", "Kamu & TSK", Some("2030-12-31"));
+        navy_user.is_gov_verified = true;
+        navy_user.organization_category = "Dz.K.K.lığı".to_string();
+        navy_user.organization_name = "Deniz Kuvvetleri Komutanlığı".to_string();
+
+        let mut airforce_user = navy_user.clone();
+        airforce_user.organization_category = "Hv.K.K.lığı".to_string();
+        airforce_user.organization_name = "Hava Kuvvetleri Komutanlığı".to_string();
+
+        let mut airforce_user_tr_upper = navy_user.clone();
+        airforce_user_tr_upper.organization_category = "HV.K.K.LIĞI".to_string();
+
+        let mut other_public_user = navy_user.clone();
+        other_public_user.organization_category = "Diğer Kamu Kurumları".to_string();
+        other_public_user.organization_name = "T.C. Ulaştırma Bakanlığı".to_string();
+
+        let mut mit_user = navy_user.clone();
+        mit_user.organization_category = "mit".to_string();
+
+        let diger_kamu_upper_item = ContentItem {
+            id: 101,
+            slug: "diger-kamu-upper".to_string(),
+            target_institutions: vec!["DİĞER KAMU KURUMLARI".to_string()],
+            ..ContentItem::default()
+        };
+        let hvkk_upper_padded_item = ContentItem {
+            id: 102,
+            slug: "hvkk-upper-padded".to_string(),
+            target_institutions: vec!["  HV.K.K.LIĞI  ".to_string()],
+            ..ContentItem::default()
+        };
+        let hvkk_canonical_item = ContentItem {
+            id: 103,
+            slug: "hvkk-canonical".to_string(),
+            target_institutions: vec!["Hv.K.K.lığı".to_string()],
+            ..ContentItem::default()
+        };
+        let mit_upper_item = ContentItem {
+            id: 104,
+            slug: "mit-upper".to_string(),
+            target_institutions: vec!["MİT".to_string()],
+            ..ContentItem::default()
+        };
+        let other_public_en_upper_item = ContentItem {
+            id: 105,
+            slug: "other-public-en-upper".to_string(),
+            target_institutions: vec!["OTHER PUBLIC INSTITUTIONS".to_string()],
+            ..ContentItem::default()
+        };
+
+        // Cross-agency denial: Dz.K.K.lığı user MUST be denied for "DİĞER KAMU KURUMLARI"
+        assert!(
+            !user_matches_target_institutions(&diger_kamu_upper_item, Some(&navy_user), &db),
+            "Dz.K.K.lığı .gov.tr user must NOT bypass DİĞER KAMU KURUMLARI-only content"
+        );
+        assert!(
+            user_matches_target_institutions(&diger_kamu_upper_item, Some(&other_public_user), &db),
+            "Diğer Kamu Kurumları user must match DİĞER KAMU KURUMLARI"
+        );
+
+        // Legitimate user allowance with Turkish uppercase & padding
+        assert!(
+            user_matches_target_institutions(&hvkk_upper_padded_item, Some(&airforce_user), &db),
+            "Hv.K.K.lığı user must match padded uppercase '  HV.K.K.LIĞI  '"
+        );
+        assert!(
+            !user_matches_target_institutions(&hvkk_upper_padded_item, Some(&navy_user), &db),
+            "Dz.K.K.lığı user must NOT match '  HV.K.K.LIĞI  '"
+        );
+        assert!(
+            user_matches_target_institutions(&hvkk_canonical_item, Some(&airforce_user_tr_upper), &db),
+            "User with organization_category='HV.K.K.LIĞI' must match 'Hv.K.K.lığı'"
+        );
+
+        // MİT & English label uppercase parity
+        assert!(user_matches_target_institutions(&mit_upper_item, Some(&mit_user), &db));
+        assert!(!user_matches_target_institutions(&mit_upper_item, Some(&navy_user), &db));
+        assert!(user_matches_target_institutions(&other_public_en_upper_item, Some(&other_public_user), &db));
+        assert!(!user_matches_target_institutions(&other_public_en_upper_item, Some(&navy_user), &db));
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(format!("{}-wal", db_path));
+        let _ = std::fs::remove_file(format!("{}-shm", db_path));
+    }
+
+    #[test]
+    fn select_related_articles_suppresses_and_excludes_advertorials_even_if_is_sponsored_false() {
+        let advertorial_plural = ContentItem {
+            id: 10,
+            slug: "adv-plural".to_string(),
+            content_type: "AdVeRtOrIaLs".to_string(),
+            is_sponsored: false,
+            status: "published".to_string(),
+            ..ContentItem::default()
+        };
+        let regular = ContentItem {
+            id: 11,
+            slug: "regular-news".to_string(),
+            content_type: "haberler".to_string(),
+            is_sponsored: false,
+            status: "published".to_string(),
+            ..ContentItem::default()
+        };
+        let organic_candidate = ContentItem {
+            id: 12,
+            slug: "organic-cand".to_string(),
+            content_type: "haberler".to_string(),
+            is_sponsored: false,
+            status: "published".to_string(),
+            ..ContentItem::default()
+        };
+
+        let all = vec![advertorial_plural.clone(), regular.clone(), organic_candidate.clone()];
+        assert!(select_related_articles(&advertorial_plural, &all, &[], None, 3).is_empty());
+
+        let related_for_regular = select_related_articles(&regular, &all, &[], None, 3);
+        assert!(related_for_regular.iter().any(|c| c.slug == "organic-cand"));
+        assert!(
+            !related_for_regular.iter().any(|c| c.slug == "adv-plural"),
+            "advertorials candidate must be excluded from organic related recommendations"
+        );
     }
 }

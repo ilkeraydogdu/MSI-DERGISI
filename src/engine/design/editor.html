@@ -3,32 +3,76 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>MSI · Tasarım stüdyosu</title>
+    <title>UMSA Komuta · Görsel Tasarım Stüdyosu</title>
     <meta name="robots" content="noindex,nofollow" />
-    <link rel="stylesheet" href="/css/msi-design-system.css?v=9" />
-    <link rel="stylesheet" href="/css/msi-design-editor.css?v=1" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png" />
+    <link rel="stylesheet" href="/css/admin/tokens.css?v=35" />
+    <link rel="stylesheet" href="/css/msi-design-editor.css?v=35" />
+    <script>
+      (function () {
+        try {
+          var m = document.cookie.match(/(?:^|;\s*)msi_admin_theme=([^;]+)/);
+          var c = m ? decodeURIComponent(m[1]) : "";
+          var s = localStorage.getItem("msi_admin_theme") || c || localStorage.getItem("msi_theme");
+          var t = s === "dark" || s === "light" ? s : "";
+          if (!t) {
+            var d = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+            var l = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)");
+            var h = new Date().getHours();
+            t = d && d.matches ? "dark" : l && l.matches ? "light" : (h >= 19 || h < 7 ? "dark" : "light");
+          }
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body class="design-editor">
     <header class="editor-header">
-      <a href="/" class="editor-brand">MSI <span>Tasarım stüdyosu</span></a>
+      <div class="editor-brand-group">
+        <a href="." id="editor-admin-link" class="editor-breadcrumb-link" title="Komuta Merkezine Dön">
+          <svg class="adm-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          <span>Komuta Merkezi</span>
+        </a>
+        <!-- STUDIO_EXTRA_NAV -->
+        <span class="editor-breadcrumb-sep" aria-hidden="true">/</span>
+        <a href="/" class="editor-brand">
+          <img src="/images/logo.svg" alt="MSI Dergisi" class="editor-brand-logo" width="86" height="32" />
+          <span class="editor-brand-copy">
+            <strong>Tasarım Stüdyosu</strong>
+            <small>Merkezi Yayın ve Görünüm Motoru</small>
+          </span>
+        </a>
+      </div>
       <div class="editor-actions">
-        <span id="save-state" role="status">Yükleniyor…</span
-        ><button class="button secondary" id="discard-draft" type="button">
-          Taslağı bırak</button
-        ><button class="button secondary" id="preview-button">Önizle</button
-        ><button class="button primary" id="save-button">
-          Kaydet ve uygula</button
-        ><a href="." id="editor-admin-link" class="button secondary">Yönetim</a>
+        <span id="save-state" class="editor-save-pill" role="status">Yükleniyor…</span>
+        <button
+          class="button secondary studio-theme-btn"
+          id="studio-theme-toggle"
+          type="button"
+          aria-pressed="false"
+          title="Stüdyo Açık / Koyu Tema"
+          aria-label="Stüdyo temasını değiştir"
+        >
+          <svg class="adm-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 8l5-3"/><path d="M12 13l6-3.5"/><path d="M12 18l4-2.5"/></svg>
+          <span class="studio-theme-label">Koyu Stüdyo</span>
+        </button>
+        <button class="button secondary" id="discard-draft" type="button">Taslağı Bırak</button>
+        <button class="button secondary" id="preview-button" type="button">Önizlemeyi Yenile</button>
+        <button class="button primary" id="save-button" type="button">Kaydet ve Yayına Uygula</button>
       </div>
     </header>
     <div class="editor-workspace">
+      <div class="mobile-studio-switcher" role="toolbar" aria-label="Mobil stüdyo görünümü">
+        <button type="button" class="mobile-view-btn" id="mobile-view-preview" data-mobile-view="preview" aria-pressed="false">Canlı Önizleme</button>
+        <button type="button" class="mobile-view-btn" id="mobile-view-controls" data-mobile-view="controls" aria-pressed="false">Kontroller</button>
+      </div>
       <aside class="editor-sidebar">
         <div class="editor-intro">
-          <div class="eyebrow">MERKEZİ TASARIM</div>
-          <h1>Bir sistem.<br />Tüm yayınlar.</h1>
+          <div class="eyebrow">MERKEZİ TASARIM SİSTEMİ</div>
+          <h1>Bir mimari.<br />Tüm yayınlar.</h1>
           <p>
-            Sayfaları ortak bölümlerle oluşturun. Renkler ve yazı ayarları tüm
-            okuyucu ekranlarına uygulanır.
+            Modüler yayın bölümlerini sıralayın; tipografi, renk kontrastı ve menü hiyerarşisini tüm okuyucu ekranlarına anında uygulayın.
           </p>
         </div>
         <div class="editor-tabs" role="tablist" aria-label="Tasarım ayarları">
@@ -48,7 +92,7 @@
             tabindex="-1"
             data-editor-tab="theme"
           >
-            Tema</button
+            Tema &amp; Renk</button
           ><button
             role="tab"
             aria-selected="false"
@@ -57,151 +101,142 @@
             tabindex="-1"
             data-editor-tab="navigation"
           >
-            Menü
+            Üst Menü
           </button>
         </div>
         <section id="pages-panel" role="tabpanel" aria-labelledby="pages-tab">
           <div class="ui-form">
-            <label>Sayfa<select id="page-select"></select></label>
+            <label>Düzenlenen Sayfa<select id="page-select"></select></label>
             <div class="editor-row">
-              <button class="button secondary" id="add-page">
-                + Yeni sayfa</button
-              ><button class="button secondary" id="duplicate-page">
-                Çoğalt
-              </button>
+              <button class="button secondary" id="add-page" type="button">+ Yeni Sayfa</button>
+              <button class="button secondary" id="duplicate-page" type="button">Çoğalt</button>
             </div>
-            <label>Sayfa başlığı<input id="page-title" maxlength="200" /></label
-            ><label
-              >Sayfa adresi<input id="page-slug" pattern="[a-z0-9-]+" /><span
-                id="page-url"
-                class="field-help"
-              ></span></label
-            ><label
-              >Açıklama<textarea
-                id="page-description"
-                rows="2"
-              ></textarea></label
-            ><label
-              >Yayın görünümü<select id="page-mode">
-                <option value="magazine">Dergi</option>
-                <option value="news">Haber</option>
-              </select></label
-            >
+            <label>Sayfa Başlığı<input id="page-title" maxlength="200" /></label>
+            <label>
+              Kalıcı Bağlantı Kodu
+              <input id="page-slug" pattern="[a-z0-9-]+" />
+              <span id="page-url" class="field-help"></span>
+            </label>
+            <label>
+              Meta Açıklaması
+              <textarea id="page-description" rows="3"></textarea>
+            </label>
+            <label>
+              Yayın Görünümü
+              <select id="page-mode">
+                <option value="magazine">Dergi Kipi</option>
+                <option value="news">Haber Portalı Kipi</option>
+              </select>
+            </label>
           </div>
           <div class="editor-section-heading">
-            <h2>Bölümler</h2>
-            <span>Sıralayın, düzenleyin, gizleyin.</span>
+            <h2>Sayfa Bölümleri</h2>
+            <span>Sıralayın, yapılandırın veya gizleyin.</span>
           </div>
           <div id="section-list"></div>
           <div class="ui-form editor-add">
-            <label>Yeni bölüm<select id="new-section-kind"></select></label
-            ><button class="button secondary" id="add-section">
-              + Bölüm ekle
-            </button>
+            <label>Yeni Bölüm Türü<select id="new-section-kind"></select></label>
+            <button class="button secondary" id="add-section" type="button">+ Bölüm Ekle</button>
           </div>
-          <button class="text-link danger" id="delete-page">
-            Bu sayfayı sil
-          </button>
+          <button class="text-link danger" id="delete-page" type="button">Bu sayfayı sil</button>
         </section>
-        <section
-          id="theme-panel"
-          role="tabpanel"
-          aria-labelledby="theme-tab"
-          hidden
-        >
+        <section id="theme-panel" role="tabpanel" aria-labelledby="theme-tab" hidden>
           <div class="ui-form">
-            <label
-              >Varsayılan görünüm<select id="theme-default">
-                <option value="light">Açık</option>
-                <option value="dark">Yumuşak koyu</option>
-                <option value="system">Cihaz tercihi</option>
-              </select></label
-            ><label
-              >İçerik genişliği (px)<input
-                id="theme-width"
-                type="number"
-                min="1000"
-                max="1600"
-                step="20" /></label
-            ><label
-              >Köşe yuvarlaklığı (px)<input
-                id="theme-radius"
-                type="number"
-                min="0"
-                max="16" /></label
-            ><label
-              >Temel yazı boyutu (px)<input
-                id="theme-font-size"
-                type="number"
-                min="15"
-                max="20"
-            /></label>
+            <label>
+              Varsayılan Okuyucu Teması
+              <select id="theme-default">
+                <option value="light">Açık Kağıt Görünümü</option>
+                <option value="dark">Yumuşak Koyu Görünüm</option>
+                <option value="system">Cihaz Tercihi</option>
+              </select>
+            </label>
+            <label>
+              Maksimum İçerik Genişliği (px)
+              <input id="theme-width" type="number" min="1000" max="1600" step="20" />
+            </label>
+            <label>
+              Köşe Yuvarlaklığı (px)
+              <input id="theme-radius" type="number" min="0" max="16" />
+            </label>
+            <label>
+              Temel Yazı Boyutu (px)
+              <input id="theme-font-size" type="number" min="15" max="20" />
+            </label>
           </div>
-          <div class="editor-section-heading"><h2>İçerik şablonları</h2></div>
+          <div class="editor-section-heading"><h2>İçerik Şablonları</h2></div>
           <div id="template-fields" class="ui-form"></div>
           <div id="palette-fields"></div>
           <p class="field-help">
-            Metin ve buton renkleri kaydedilirken en az 4.5:1 kontrast
-            kontrolünden geçer.
+            Metin ve aksiyon renkleri kaydedilirken otomatik WCAG 4.5:1 kontrast doğrulamasından geçirilir.
           </p>
         </section>
-        <section
-          id="navigation-panel"
-          role="tabpanel"
-          aria-labelledby="navigation-tab"
-          hidden
-        >
-          <h2>Ana menü</h2>
-          <p class="field-help">
-            Sayfa veya kategori adresi girin. Yeni sayfa adresleri /sayfa/adres
-            biçimindedir.
-          </p>
+        <section id="navigation-panel" role="tabpanel" aria-labelledby="navigation-tab" hidden>
+          <div class="editor-section-heading">
+            <h2>Ana Gezinme Menüsü</h2>
+            <span>Kategori veya özel sayfa bağlantıları (/sayfa/adres).</span>
+          </div>
           <div id="navigation-list"></div>
-          <button class="button secondary" id="add-navigation">
-            + Bağlantı ekle
-          </button>
+          <button class="button secondary" id="add-navigation" type="button">+ Menü Bağlantısı Ekle</button>
         </section>
         <details class="editor-tools">
-          <summary>Yedek ve gelişmiş işlemler</summary>
+          <summary>Yedekleme &amp; Sıfırlama İşlemleri</summary>
           <div class="editor-row">
-            <button class="button secondary" id="export-design">
-              JSON indir</button
-            ><label class="button secondary"
-              >JSON yükle<input
-                type="file"
-                accept="application/json,.json"
-                id="import-design"
-                hidden
-            /></label>
+            <button class="button secondary" id="export-design" type="button">JSON Dışa Aktar</button>
+            <label class="button secondary">
+              JSON İçe Aktar
+              <input type="file" accept="application/json,.json" id="import-design" hidden />
+            </label>
           </div>
-          <button class="text-link" id="restore-defaults">
-            Varsayılan tasarımı taslağa al
+          <button class="text-link" id="restore-defaults" type="button">
+            Varsayılan fabrika tasarımını taslağa yükle
           </button>
         </details>
       </aside>
       <main class="editor-preview">
         <div class="preview-toolbar">
-          <span>Önizleme · kaydedilmemiş taslak</span>
-          <div>
-            <button data-preview-width="100%" aria-pressed="true">
-              Masaüstü</button
-            ><button data-preview-width="390px" aria-pressed="false">
-              Mobil</button
-            ><button id="preview-theme" aria-pressed="false">Koyu tema</button>
+          <span class="preview-badge">
+            <svg class="adm-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+            Canlı Taslak Önizlemesi
+          </span>
+          <div class="preview-device-group">
+            <button data-preview-width="100%" aria-pressed="true" type="button">Masaüstü</button>
+            <button data-preview-width="768px" aria-pressed="false" type="button">Tablet (768px)</button>
+            <button data-preview-width="390px" aria-pressed="false" type="button">Mobil (390px)</button>
+            <button id="preview-theme" aria-pressed="false" type="button">Koyu Tema</button>
           </div>
-          <a id="open-page" href="/" target="_blank" rel="noopener"
-            >Sayfayı aç ↗</a
-          >
+          <a id="open-page" class="preview-open-link" href="/" target="_blank" rel="noopener">Canlı Sayfayı Aç ↗</a>
+        </div>
+        <div id="studio-readonly-banner" class="editor-readonly-banner" role="note" hidden>
+          <svg class="adm-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          <span>Salt okunur stüdyo erişimi (<code>settings:read</code>): Canlı önizleme yapabilirsiniz; kalıcı yayın kaydı için <strong>settings:write</strong> yetkisi gerekir.</span>
         </div>
         <div id="editor-feedback" role="status"></div>
-        <iframe
-          id="design-preview"
-          title="Sayfa tasarımı önizlemesi"
-          sandbox="allow-same-origin"
-          src="about:blank"
-        ></iframe>
+        <div class="preview-stage">
+          <iframe
+            id="design-preview"
+            title="Sayfa tasarımı önizlemesi"
+            sandbox="allow-same-origin"
+            src="about:blank"
+          ></iframe>
+        </div>
       </main>
     </div>
-    <script src="/js/msi-design-editor.js?v=1" defer></script>
+    <div id="studio-confirm-modal" class="studio-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="studio-confirm-title" aria-describedby="studio-confirm-message" hidden>
+      <div class="studio-modal-card">
+        <div class="studio-modal-header">
+          <h2 id="studio-confirm-title">İşlem Onayı</h2>
+          <button type="button" class="studio-modal-close" id="studio-confirm-close" aria-label="Kapat">
+            <svg class="adm-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+        <p id="studio-confirm-message" class="studio-modal-body"></p>
+        <div class="studio-modal-footer">
+          <button type="button" class="button secondary" id="studio-confirm-cancel">Vazgeç</button>
+          <button type="button" class="button primary" id="studio-confirm-accept">Onayla</button>
+        </div>
+      </div>
+    </div>
+    <script src="/js/vendor/gsap.min.js" defer></script>
+    <script src="/js/msi-design-editor.js?v=35" defer></script>
   </body>
 </html>

@@ -25,8 +25,8 @@ pub fn seed_site_settings_and_notifications(conn: &Connection) -> rusqlite::Resu
         ),
         (
             "primary_accent_color",
-            "#c91818",
-            "#c91818",
+            "#cb382a",
+            "#cb382a",
             "theme",
             "2026-11-07 10:00:00",
         ),
@@ -152,8 +152,8 @@ pub fn seed_site_settings_and_notifications(conn: &Connection) -> rusqlite::Resu
         ),
         (
             "publisher_logo_url",
-            "/images/logo.png",
-            "/images/logo.png",
+            "/images/logo.svg",
+            "/images/logo.svg",
             "seo",
             "2026-11-11 00:00:00",
         ),
@@ -286,5 +286,27 @@ pub fn seed_site_settings_and_notifications(conn: &Connection) -> rusqlite::Resu
         )?;
     }
 
+    Ok(())
+}
+
+/// Idempotently inserts missing seeded `site_settings` keys on existing databases
+/// and upgrades legacy default brand values (`/images/logo.png` -> `/images/logo.svg`,
+/// `#c91818`/`#c81623`/`#e63946` -> `#cb382a`) without overwriting custom operator overrides.
+pub fn sync_brand_site_settings(conn: &Connection) -> rusqlite::Result<()> {
+    seed_site_settings_and_notifications(conn)?;
+    conn.execute(
+        "UPDATE site_settings
+         SET value_tr = '/images/logo.svg', value_en = '/images/logo.svg'
+         WHERE key = 'publisher_logo_url'
+           AND (TRIM(value_tr) = '' OR value_tr = '/images/logo.png')",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE site_settings
+         SET value_tr = '#cb382a', value_en = '#cb382a'
+         WHERE key = 'primary_accent_color'
+           AND LOWER(TRIM(value_tr)) IN ('', '#c91818', '#c81623', '#e63946')",
+        [],
+    )?;
     Ok(())
 }

@@ -17,7 +17,7 @@ pub struct SystemNotification {
  pub created_at: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct NewsletterCampaign {
  pub id: i64,
  pub subject_tr: String,
@@ -29,5 +29,25 @@ pub struct NewsletterCampaign {
  pub sponsor_name: Option<String>,
  pub recipient_count: i64,
  pub status: String,
+ pub sent_at: String,
+ #[serde(default)]
+ pub scheduled_at: Option<String>,
+ #[serde(default)]
+ pub email_group_code: Option<String>,
+ #[serde(default)]
+ pub body_html: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct B2bMonthlyReport {
+ pub id: i64,
+ pub report_month: String,
+ pub report_type: String,
+ pub recipient_email: String,
+ #[serde(default)]
+ pub summary_json: String,
+ #[serde(default)]
+ pub status: String,
+ #[serde(default)]
  pub sent_at: String,
 }

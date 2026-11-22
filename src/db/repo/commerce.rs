@@ -251,17 +251,119 @@ impl Database {
         ))
     }
 
+    pub fn get_commerce_product_delivery_asset(&self, sku: &str) -> Option<(CommerceProduct, String)> {
+        let norm = sku.trim();
+        if norm.is_empty() {
+            return None;
+        }
+        crate::db::query_helpers::query_one(
+            self,
+            "SELECT id, sku, product_type, title_tr, title_en, author_or_source,
+                    description_tr, description_en, price_try, cover_image,
+                    file_resolution_or_pages, is_available, COALESCE(delivery_asset_url, '')
+             FROM commerce_products WHERE LOWER(sku) = LOWER(?1) LIMIT 1",
+            params![norm],
+            |r| {
+                let prod = CommerceProduct {
+                    id: r.get(0)?,
+                    sku: r.get(1)?,
+                    product_type: r.get(2)?,
+                    title_tr: r.get(3)?,
+                    title_en: r.get(4)?,
+                    author_or_source: r.get(5)?,
+                    description_tr: r.get(6)?,
+                    description_en: r.get(7)?,
+                    price_try: r.get(8)?,
+                    cover_image: r.get(9)?,
+                    file_resolution_or_pages: r.get(10)?,
+                    is_available: r.get::<_, i32>(11)? != 0,
+                };
+                let asset: String = r.get(12)?;
+                Ok((prod, asset))
+            },
+        )
+    }
+
+    pub fn user_has_purchased_item(&self, email: &str, code: &str) -> bool {
+        let target = code.trim();
+        if email.trim().is_empty() || target.is_empty() {
+            return false;
+        }
+        if self
+            .get_user_purchased_codes(email)
+            .into_iter()
+            .any(|c| {
+                c.eq_ignore_ascii_case(target)
+                    || c.split(&[',', ';'][..])
+                        .map(|tok| tok.trim().strip_prefix("product:").unwrap_or(tok.trim()))
+                        .any(|tok| tok.eq_ignore_ascii_case(target))
+            })
+        {
+            return true;
+        }
+        let Ok(conn) = self.open_conn() else {
+            return false;
+        };
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT item_code FROM order_invoices
+             WHERE LOWER(user_email) = LOWER(?1) AND payment_status = 'paid'",
+        ) else {
+            return false;
+        };
+        let Ok(rows) = stmt.query_map(params![email.trim()], |r| r.get::<_, String>(0)) else {
+            return false;
+        };
+        let matched = rows.filter_map(Result::ok).any(|raw| {
+            raw.split(&[',', ';'][..])
+                .map(|tok| {
+                    let t = tok.trim();
+                    t.strip_prefix("product:").unwrap_or(t)
+                })
+                .any(|tok| tok.eq_ignore_ascii_case(target))
+        });
+        matched
+    }
+
     pub fn activate_invoice_entitlements(&self, inv: &OrderInvoice) {
-        let _ = self.record_user_purchase(&inv.user_email, &inv.item_code);
-        if inv.item_type == "subscription" {
+        let mut sub_codes: Vec<(String, String)> = Vec::new();
+        if inv.item_type == "cart" {
+            for raw_tok in inv.item_code.split(&[',', ';'][..]) {
+                let tok = raw_tok.trim();
+                if tok.is_empty() {
+                    continue;
+                }
+                if let Some(sub_code) = tok.strip_prefix("subscription:") {
+                    sub_codes.push((sub_code.trim().to_string(), inv.item_title.clone()));
+                    let _ = self.record_user_purchase(&inv.user_email, sub_code.trim());
+                } else {
+                    let sku = tok.strip_prefix("product:").unwrap_or(tok).trim();
+                    if !sku.is_empty() {
+                        let _ = self.record_user_purchase(&inv.user_email, sku);
+                    }
+                }
+            }
+        } else {
+            let _ = self.record_user_purchase(&inv.user_email, &inv.item_code);
+            if inv.item_type == "subscription" {
+                sub_codes.push((inv.item_code.clone(), inv.item_title.clone()));
+            }
+        }
+
+        if let Some((sub_code, sub_title)) = sub_codes.into_iter().next() {
             let dynamic_exp = (chrono::Utc::now() + chrono::Duration::days(365))
                 .format("%Y-%m-%d")
                 .to_string();
-            let assigned_role = match inv.item_code.as_str() {
+            let assigned_role = match sub_code.as_str() {
                 "kurumsal" => "subscriber_corporate",
                 "basili-dijital" => "subscriber_print_digital",
                 _ => "subscriber_digital",
             };
+            let tier_title = self
+                .get_subscription_plans()
+                .into_iter()
+                .find(|p| p.code.eq_ignore_ascii_case(&sub_code))
+                .map(|p| p.name_tr)
+                .unwrap_or(sub_title);
             if let Ok(conn) = self.open_conn() {
                 if let Ok(tx) = conn.unchecked_transaction() {
                     let _ = tx.execute(
@@ -284,7 +386,7 @@ impl Database {
                             subscription_tier = ?2,
                             subscription_expires_at = ?3
                          WHERE LOWER(email) = LOWER(?4)",
-                        params![assigned_role, inv.item_title, dynamic_exp, inv.user_email],
+                        params![assigned_role, tier_title, dynamic_exp, inv.user_email],
                     );
                     let _ = tx.commit();
                 }
@@ -358,10 +460,32 @@ impl Database {
         target.payment_status = "paid".to_string();
         let now_rfc = chrono::Utc::now().to_rfc3339();
 
-        let _ = tx.execute(
-            "INSERT OR IGNORE INTO user_purchased_items (user_email, item_code, created_at) VALUES (?1, ?2, ?3)",
-            params![target.user_email.trim().to_lowercase(), target.item_code.trim(), now_rfc],
-        );
+        if target.item_type == "cart" {
+            for raw_tok in target.item_code.split(&[',', ';'][..]) {
+                let t = raw_tok.trim();
+                if t.is_empty() {
+                    continue;
+                }
+                let clean = t
+                    .strip_prefix("product:")
+                    .or_else(|| t.strip_prefix("subscription:"))
+                    .unwrap_or(t)
+                    .trim();
+                if !clean.is_empty() {
+                    let _ = tx.execute(
+                        "INSERT INTO user_purchased_items (user_email, item_code, created_at)
+                         VALUES (?1, ?2, ?3) ON CONFLICT(user_email, item_code) DO NOTHING",
+                        params![target.user_email.trim().to_lowercase(), clean, now_rfc],
+                    );
+                }
+            }
+        } else {
+            let _ = tx.execute(
+                "INSERT INTO user_purchased_items (user_email, item_code, created_at)
+                 VALUES (?1, ?2, ?3) ON CONFLICT(user_email, item_code) DO NOTHING",
+                params![target.user_email.trim().to_lowercase(), target.item_code.trim(), now_rfc],
+            );
+        }
 
         if tx.commit().is_err() {
             return None;
@@ -430,7 +554,8 @@ impl Database {
         let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
-            "INSERT OR IGNORE INTO user_purchased_items (user_email, item_code, created_at) VALUES (?1, ?2, ?3)",
+            "INSERT INTO user_purchased_items (user_email, item_code, created_at)
+             VALUES (?1, ?2, ?3) ON CONFLICT(user_email, item_code) DO NOTHING",
             params![email.trim().to_lowercase(), item_code.trim(), now],
         )?;
         Ok(())

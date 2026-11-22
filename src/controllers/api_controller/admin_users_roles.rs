@@ -1,13 +1,14 @@
 use super::*;
 
-pub async fn admin_me(operator: OperatorUser) -> Response {
+pub async fn admin_me(State(state): State<AppState>, operator: OperatorUser) -> Response {
     ApiResponse::ok(json!({
         "user_id": operator.user_id,
         "email": operator.email,
         "full_name": operator.full_name,
         "role": operator.role,
         "permissions": operator.permissions,
-        "is_wildcard": operator.has_permission("*")
+        "is_wildcard": operator.has_permission("*"),
+        "monitoring_enabled": state.config.monitoring_enabled && state.monitoring_cache.is_some()
     }))
     .into_response()
 }
@@ -69,7 +70,7 @@ pub struct AdminCreateUserPayload {
 }
 
 fn default_reader_role() -> String {
-    "subscriber_paid".to_string()
+    "registered".to_string()
 }
 
 #[derive(Deserialize)]

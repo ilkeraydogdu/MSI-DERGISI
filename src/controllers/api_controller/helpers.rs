@@ -23,26 +23,51 @@ pub(super) fn json_error(state: &AppState, status: StatusCode, msg_key: &'static
 }
 
 pub(super) fn extract_client_ip(headers: &HeaderMap) -> String {
-    headers
+    if let Some(real) = headers
+        .get("x-real-ip")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| s.parse::<std::net::IpAddr>().is_ok())
+    {
+        return real.to_string();
+    }
+    if let Some(xff) = headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .or_else(|| headers.get("x-real-ip").and_then(|v| v.to_str().ok()))
-        .unwrap_or("127.0.0.1")
-        .trim()
-        .to_string()
+        .and_then(|s| {
+            s.rsplit(',')
+                .map(str::trim)
+                .find(|p| p.parse::<std::net::IpAddr>().is_ok())
+        })
+    {
+        return xff.to_string();
+    }
+    "127.0.0.1".to_string()
+}
+
+pub(super) fn resolve_client_ip_with_forwarded(
+    resolved_ext: Option<&Extension<crate::engine::security_engine::ResolvedClientIp>>,
+    headers: &HeaderMap,
+) -> (String, bool) {
+    if let Some(Extension(res)) = resolved_ext {
+        return (res.ip.clone(), res.was_forwarded);
+    }
+    let has_proxy = headers.contains_key("x-real-ip") || headers.contains_key("x-forwarded-for");
+    (extract_client_ip(headers), has_proxy)
 }
 
 pub(super) fn extract_raw_session_cookie(headers: &HeaderMap) -> Option<&str> {
     headers
-        .get(header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|cookies| {
-            cookies
-                .split(';')
-                .find_map(|p| p.trim().strip_prefix("msi_session="))
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|cookies| cookies.split(';'))
+        .find_map(|p| {
+            p.trim()
+                .strip_prefix("msi_session=")
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
         })
-        .filter(|t| !t.trim().is_empty())
 }
 
 pub(super) fn cookie_secure_flag(headers: &HeaderMap, public_url: &str) -> &'static str {

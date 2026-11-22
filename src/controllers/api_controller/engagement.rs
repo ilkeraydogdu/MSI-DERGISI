@@ -2,8 +2,10 @@ use super::*;
 
 pub async fn faceted_search_api(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
+    let lang = params.get("lang").map(|s| s.as_str()).unwrap_or("tr");
     // Validate and sanitize pagination boundaries
     let (page, per_page) = crate::engine::validation_engine::validate_pagination(
         params.get("page").map(|s| s.as_str()),
@@ -26,7 +28,25 @@ pub async fn faceted_search_api(
     }
 
     let criteria = CentralContentQueryEngine::from_params(&validated_params);
-    let result = CentralContentQueryEngine::execute(&state.db, &criteria);
+    let mut result = CentralContentQueryEngine::execute(&state.db, &criteria);
+
+    let user_opt = auth_service::session_user(&state, &headers);
+    let purchased = user_opt
+        .as_ref()
+        .map(|u| state.db.get_user_purchased_codes(&u.email))
+        .unwrap_or_default();
+
+    for item in &mut result.items {
+        let inst_allowed =
+            content_service::user_matches_target_institutions(item, user_opt.as_ref(), &state.db);
+        let (_, is_locked, _) =
+            content_service::apply_paywall_view(item, user_opt.as_ref(), &purchased, lang);
+        if is_locked || !inst_allowed {
+            item.body_tr = content_service::truncate_to_two_sentences_html(&item.body_tr);
+            item.body_en = content_service::truncate_to_two_sentences_html(&item.body_en);
+        }
+    }
+
     Json(json!(result))
 }
 

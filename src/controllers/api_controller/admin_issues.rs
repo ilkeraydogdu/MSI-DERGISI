@@ -5,61 +5,55 @@ use crate::models::MagazineIssue;
 #[derive(Deserialize, Default)]
 pub struct AdminIssueQuery {
     pub publication_type: Option<String>,
+    pub auto_convert: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
 pub struct AdminDeleteIssueQuery {
     pub force: Option<String>,
+    pub publication_type: Option<String>,
 }
 
-pub async fn admin_list_issues(
-    operator: OperatorUser,
-    State(state): State<AppState>,
-    Query(query): Query<AdminIssueQuery>,
-) -> Response {
-    if let Err(resp) = require_any_perm(&operator, &["issues:read", "contents:read"]) {
-        return resp;
-    }
-    let mut issues = state.db.get_all_issues();
-    if let Some(pub_type) = query
-        .publication_type
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty() && *s != "all")
-    {
-        issues.retain(|i| i.publication_type.eq_ignore_ascii_case(pub_type));
-    }
-    ApiResponse::ok(json!(issues)).into_response()
+#[derive(Deserialize)]
+pub struct UpsertIssuePayload {
+    #[serde(flatten)]
+    pub issue: MagazineIssue,
+    #[serde(default)]
+    pub auto_convert: Option<bool>,
 }
 
-pub async fn admin_upsert_issue(
-    operator: OperatorUser,
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Query(query): Query<AdminIssueQuery>,
-    Json(mut issue): Json<MagazineIssue>,
-) -> Response {
-    if let Err(err) = check_permission(&operator, "issues:write") {
-        if check_permission(&operator, "issues:manage").is_err() {
-            return err.into_response();
+pub(crate) fn normalize_publication_type(raw: &str) -> Option<&'static str> {
+    let trimmed = raw.trim();
+    if trimmed.eq_ignore_ascii_case("msi") {
+        Some("msi")
+    } else if trimmed.eq_ignore_ascii_case("msi_tdr") || trimmed.eq_ignore_ascii_case("msi-tdr") {
+        Some("msi_tdr")
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn require_issues_write(operator: &OperatorUser) -> Result<(), Response> {
+    if let Err(err) = check_permission(operator, "issues:write") {
+        if check_permission(operator, "issues:manage").is_err() {
+            return Err(err.into_response());
         }
     }
-    if issue.issue_number <= 0 || issue.year < 1990 || issue.title_tr.trim().is_empty() {
-        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    Ok(())
+}
+
+#[allow(clippy::result_large_err)]
+fn require_issues_delete(operator: &OperatorUser) -> Result<(), Response> {
+    if let Err(err) = check_permission(operator, "issues:delete") {
+        if check_permission(operator, "issues:manage").is_err() {
+            return Err(err.into_response());
+        }
     }
+    Ok(())
+}
 
-    let raw_pub = query
-        .publication_type
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("all"))
-        .unwrap_or(issue.publication_type.trim());
-    issue.publication_type = if raw_pub.eq_ignore_ascii_case("msi_tdr") {
-        "msi_tdr".to_string()
-    } else {
-        "msi".to_string()
-    };
-
+fn prepare_issue_fields(issue: &mut MagazineIssue, edergi_dir: &str) {
     if issue.slug.trim().is_empty() {
         issue.slug = if issue.publication_type == "msi_tdr" {
             format!("msi-tdr-issue-{}", issue.issue_number)
@@ -74,8 +68,17 @@ pub async fn admin_upsert_issue(
     issue.publish_month_tr = issue.publish_month_tr.trim().to_string();
     issue.publish_month_en = issue.publish_month_en.trim().to_string();
 
+    if issue.cover_image.trim().is_empty() {
+        issue.cover_image = crate::db::constants::DEFAULT_ISSUE_COVER_PATH.to_string();
+    } else {
+        issue.cover_image = issue.cover_image.trim().to_string();
+    }
+
     if issue.pdf_path.trim().is_empty() {
-        issue.pdf_path = format!("/api/v1/edergi/{}/download-pdf", issue.issue_number);
+        issue.pdf_path = format!(
+            "/api/v1/edergi/{}/download-pdf?publication_type={}",
+            issue.issue_number, issue.publication_type
+        );
     }
     issue.uploaded_pdf_file = issue
         .uploaded_pdf_file
@@ -90,7 +93,7 @@ pub async fn admin_upsert_issue(
         });
 
     if let Some(ref pdf_filename) = issue.uploaded_pdf_file {
-        let candidate = FsPath::new(&state.config.edergi_dir).join(pdf_filename);
+        let candidate = FsPath::new(edergi_dir).join(pdf_filename);
         if let Ok(bytes) = std::fs::read(&candidate) {
             if let Some(detected_pages) = edergi_pdf_service::extract_pdf_page_count(&bytes) {
                 if detected_pages > 0 {
@@ -99,9 +102,138 @@ pub async fn admin_upsert_issue(
             }
         }
     }
+}
+
+async fn maybe_run_auto_convert(
+    state: &AppState,
+    operator: &OperatorUser,
+    client_ip: &str,
+    issue: &mut MagazineIssue,
+) -> Option<edergi_pdf_service::ConversionResult> {
+    let pdf_name = issue.uploaded_pdf_file.clone()?;
+    let edergi_dir = state.config.edergi_dir.clone();
+    let issue_clone = issue.clone();
+    let res = tokio::task::spawn_blocking(move || {
+        edergi_pdf_service::convert_issue_pdf(&edergi_dir, &issue_clone, &pdf_name)
+    })
+    .await
+    .ok()?
+    .ok()?;
+
+    issue.page_count = res.page_count;
+    issue.spreads = res.spreads.clone();
+    if !res.spreads.is_empty() {
+        issue.dossier_count = res.spreads.len() as i32;
+    }
+    let _ = state.db.upsert_issue(issue);
+    let _ = state.db.insert_audit_log(
+        &operator.email,
+        "convert_pdf",
+        "magazine_issue",
+        Some(i64::from(issue.issue_number)),
+        &json!({
+            "publication_type": issue.publication_type,
+            "issue_number": issue.issue_number,
+            "page_count": res.page_count,
+            "cached_pages_count": res.cached_pages_count,
+            "spreads_count": res.spreads.len(),
+            "auto_convert": true
+        })
+        .to_string(),
+        client_ip,
+    );
+    Some(res)
+}
+
+pub async fn admin_list_issues(
+    operator: OperatorUser,
+    State(state): State<AppState>,
+    Query(query): Query<AdminIssueQuery>,
+) -> Response {
+    if let Err(resp) = require_any_perm(&operator, &["issues:read", "issues:delete", "contents:read"]) {
+        return resp;
+    }
+    let mut issues = state.db.get_all_issues();
+    if let Some(pub_type) = query
+        .publication_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && *s != "all")
+    {
+        issues.retain(|i| i.publication_type.eq_ignore_ascii_case(pub_type));
+    }
+    ApiResponse::ok(json!(issues)).into_response()
+}
+
+pub async fn admin_get_issue_by_key(
+    operator: OperatorUser,
+    State(state): State<AppState>,
+    Path((publication_type, issue_number)): Path<(String, i32)>,
+) -> Response {
+    if let Err(resp) = require_any_perm(&operator, &["issues:read", "issues:delete", "contents:read"]) {
+        return resp;
+    }
+    let Some(pub_type) = normalize_publication_type(&publication_type) else {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    };
+    let Some(issue) = state.db.get_issue(pub_type, issue_number) else {
+        return json_error(&state, StatusCode::NOT_FOUND, msg_keys::ISSUE_NOT_FOUND);
+    };
+    ApiResponse::ok(json!(issue)).into_response()
+}
+
+pub async fn admin_upsert_issue(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<AdminIssueQuery>,
+    Json(payload): Json<UpsertIssuePayload>,
+) -> Response {
+    if let Err(resp) = require_issues_write(&operator) {
+        return resp;
+    }
+    let mut issue = payload.issue;
+    if issue.issue_number <= 0 || issue.year < 1990 || issue.title_tr.trim().is_empty() {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+
+    let query_pub = query
+        .publication_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("all"));
+
+    let pub_type = if let Some(qp) = query_pub {
+        let Some(norm) = normalize_publication_type(qp) else {
+            return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+        };
+        norm
+    } else if issue.publication_type.trim().is_empty() {
+        "msi"
+    } else {
+        let Some(norm) = normalize_publication_type(&issue.publication_type) else {
+            return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+        };
+        norm
+    };
+    issue.publication_type = pub_type.to_string();
+
+    let prev_pdf = state
+        .db
+        .get_issue(pub_type, issue.issue_number)
+        .and_then(|old| old.uploaded_pdf_file);
+
+    prepare_issue_fields(&mut issue, &state.config.edergi_dir);
 
     match state.db.upsert_issue(&issue) {
         Ok(num) => {
+            if prev_pdf != issue.uploaded_pdf_file {
+                edergi_pdf_service::clear_issue_pages_cache(
+                    &state.config.edergi_dir,
+                    &issue.publication_type,
+                    issue.issue_number,
+                );
+            }
             let client_ip = extract_client_ip(&headers);
             let _ = state.db.insert_audit_log(
                 &operator.email,
@@ -117,9 +249,19 @@ pub async fn admin_upsert_issue(
                 .to_string(),
                 &client_ip,
             );
+            let should_convert =
+                query.auto_convert.unwrap_or(false) || payload.auto_convert.unwrap_or(false);
+            let conversion = if should_convert {
+                maybe_run_auto_convert(&state, &operator, &client_ip, &mut issue).await
+            } else {
+                None
+            };
             ApiResponse::ok(json!({
                 "status": "saved",
                 "issue_number": num,
+                "publication_type": issue.publication_type,
+                "converted": conversion.is_some(),
+                "cached_pages_count": conversion.as_ref().map(|c| c.cached_pages_count).unwrap_or(0),
                 "issue": issue
             }))
             .into_response()
@@ -129,30 +271,96 @@ pub async fn admin_upsert_issue(
     }
 }
 
-pub async fn admin_delete_issue(
+pub async fn admin_update_issue_by_key(
     operator: OperatorUser,
     headers: HeaderMap,
     State(state): State<AppState>,
-    Path(issue_number): Path<i32>,
-    Query(query): Query<AdminDeleteIssueQuery>,
+    Path((publication_type, issue_number)): Path<(String, i32)>,
+    Query(query): Query<AdminIssueQuery>,
+    Json(payload): Json<UpsertIssuePayload>,
 ) -> Response {
-    if let Err(err) = check_permission(&operator, "issues:delete") {
-        if check_permission(&operator, "issues:manage").is_err() {
-            return err.into_response();
-        }
+    if let Err(resp) = require_issues_write(&operator) {
+        return resp;
     }
-
-    if state.db.get_issue_by_number(issue_number).is_none() {
+    let Some(pub_type) = normalize_publication_type(&publication_type) else {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    };
+    if issue_number <= 0 {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+    let Some(existing) = state.db.get_issue(pub_type, issue_number) else {
         return json_error(&state, StatusCode::NOT_FOUND, msg_keys::ISSUE_NOT_FOUND);
+    };
+    let prev_pdf = existing.uploaded_pdf_file;
+
+    let mut issue = payload.issue;
+    issue.publication_type = pub_type.to_string();
+    issue.issue_number = issue_number;
+    if issue.year < 1990 || issue.title_tr.trim().is_empty() {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
     }
 
-    let force = query
-        .force
-        .as_deref()
-        .map(str::trim)
-        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes"))
-        .unwrap_or(false);
+    prepare_issue_fields(&mut issue, &state.config.edergi_dir);
 
+    match state.db.upsert_issue(&issue) {
+        Ok(num) => {
+            if prev_pdf != issue.uploaded_pdf_file {
+                edergi_pdf_service::clear_issue_pages_cache(
+                    &state.config.edergi_dir,
+                    &issue.publication_type,
+                    issue.issue_number,
+                );
+            }
+            let client_ip = extract_client_ip(&headers);
+            let _ = state.db.insert_audit_log(
+                &operator.email,
+                "update",
+                "magazine_issue",
+                Some(i64::from(num)),
+                &json!({
+                    "issue_number": num,
+                    "publication_type": issue.publication_type,
+                    "page_count": issue.page_count,
+                    "uploaded_pdf_file": issue.uploaded_pdf_file,
+                })
+                .to_string(),
+                &client_ip,
+            );
+            let should_convert =
+                query.auto_convert.unwrap_or(false) || payload.auto_convert.unwrap_or(false);
+            let conversion = if should_convert {
+                maybe_run_auto_convert(&state, &operator, &client_ip, &mut issue).await
+            } else {
+                None
+            };
+            ApiResponse::ok(json!({
+                "status": "saved",
+                "issue_number": num,
+                "publication_type": issue.publication_type,
+                "converted": conversion.is_some(),
+                "cached_pages_count": conversion.as_ref().map(|c| c.cached_pages_count).unwrap_or(0),
+                "issue": issue
+            }))
+            .into_response()
+        }
+        Err(e) => ApiResponse::server_error(&state.translations, "tr", "admin_update_issue_by_key", &e)
+            .into_response(),
+    }
+}
+
+async fn delete_issue_inner(
+    state: &AppState,
+    operator: &OperatorUser,
+    headers: &HeaderMap,
+    pub_type: &str,
+    issue_number: i32,
+    force: bool,
+) -> Response {
+    if state.db.get_issue(pub_type, issue_number).is_none() {
+        return json_error(state, StatusCode::NOT_FOUND, msg_keys::ISSUE_NOT_FOUND);
+    }
+
+    let shared_number_count = state.db.get_issues_by_number(issue_number).len();
     let conn = match state.db.open_conn() {
         Ok(c) => c,
         Err(e) => {
@@ -166,11 +374,26 @@ pub async fn admin_delete_issue(
         }
     };
 
-    let ref_count: i64 = match conn.query_row(
-        "SELECT COUNT(*) FROM contents WHERE issue_number = ?1",
-        rusqlite::params![issue_number],
-        |r| r.get(0),
-    ) {
+    let (count_sql, detach_sql) = if shared_number_count > 1 {
+        if pub_type == "msi_tdr" {
+            (
+                "SELECT COUNT(*) FROM contents WHERE issue_number = ?1 AND LOWER(COALESCE(source_group, '')) = 'msi-tdr'",
+                "UPDATE contents SET issue_number = NULL WHERE issue_number = ?1 AND LOWER(COALESCE(source_group, '')) = 'msi-tdr'",
+            )
+        } else {
+            (
+                "SELECT COUNT(*) FROM contents WHERE issue_number = ?1 AND LOWER(COALESCE(source_group, '')) <> 'msi-tdr'",
+                "UPDATE contents SET issue_number = NULL WHERE issue_number = ?1 AND LOWER(COALESCE(source_group, '')) <> 'msi-tdr'",
+            )
+        }
+    } else {
+        (
+            "SELECT COUNT(*) FROM contents WHERE issue_number = ?1",
+            "UPDATE contents SET issue_number = NULL WHERE issue_number = ?1",
+        )
+    };
+
+    let ref_count: i64 = match conn.query_row(count_sql, rusqlite::params![issue_number], |r| r.get(0)) {
         Ok(c) => c,
         Err(e) => {
             return ApiResponse::server_error(
@@ -190,11 +413,12 @@ pub async fn admin_delete_issue(
                 "status": "error",
                 "error_code": error_codes::CONFLICT,
                 "message": format!(
-                    "Sayı #{} {} adet içerik tarafından referanslandığı için silinemez. Bağlantıları kaldırıp silmek için ?force=true kullanın.",
-                    issue_number, ref_count
+                    "Sayı #{} ({}) {} adet içerik tarafından referanslandığı için silinemez. Bağlantıları kaldırıp silmek için ?force=true kullanın.",
+                    issue_number, pub_type, ref_count
                 ),
                 "data": {
                     "issue_number": issue_number,
+                    "publication_type": pub_type,
                     "referenced_contents_count": ref_count
                 }
             }),
@@ -203,10 +427,7 @@ pub async fn admin_delete_issue(
     }
 
     if ref_count > 0 && force {
-        if let Err(e) = conn.execute(
-            "UPDATE contents SET issue_number = NULL WHERE issue_number = ?1",
-            rusqlite::params![issue_number],
-        ) {
+        if let Err(e) = conn.execute(detach_sql, rusqlite::params![issue_number]) {
             return ApiResponse::server_error(
                 &state.translations,
                 "tr",
@@ -221,15 +442,17 @@ pub async fn admin_delete_issue(
         drop(conn);
     }
 
-    match state.db.delete_issue(issue_number) {
+    match state.db.delete_issue_by_type(pub_type, issue_number) {
         Ok(true) => {
-            let client_ip = extract_client_ip(&headers);
+            edergi_pdf_service::clear_issue_pages_cache(&state.config.edergi_dir, pub_type, issue_number);
+            let client_ip = extract_client_ip(headers);
             let _ = state.db.insert_audit_log(
                 &operator.email,
                 "delete",
                 "magazine_issue",
                 Some(i64::from(issue_number)),
                 &json!({
+                    "publication_type": pub_type,
                     "force": force,
                     "detached_contents": if force { ref_count } else { 0 },
                 })
@@ -239,14 +462,204 @@ pub async fn admin_delete_issue(
             ApiResponse::ok(json!({
                 "status": "deleted",
                 "issue_number": issue_number,
+                "publication_type": pub_type,
                 "detached_contents": if force { ref_count } else { 0 }
             }))
             .into_response()
         }
-        Ok(false) => json_error(&state, StatusCode::NOT_FOUND, msg_keys::ISSUE_NOT_FOUND),
+        Ok(false) => json_error(state, StatusCode::NOT_FOUND, msg_keys::ISSUE_NOT_FOUND),
         Err(e) => ApiResponse::server_error(&state.translations, "tr", "admin_delete_issue", &e)
             .into_response(),
     }
+}
+
+pub async fn admin_delete_issue_by_key(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path((publication_type, issue_number)): Path<(String, i32)>,
+    Query(query): Query<AdminDeleteIssueQuery>,
+) -> Response {
+    if let Err(resp) = require_issues_delete(&operator) {
+        return resp;
+    }
+    let Some(pub_type) = normalize_publication_type(&publication_type) else {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    };
+    let force = query
+        .force
+        .as_deref()
+        .map(str::trim)
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
+    delete_issue_inner(&state, &operator, &headers, pub_type, issue_number, force).await
+}
+
+pub async fn admin_delete_issue(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(issue_number): Path<i32>,
+    Query(query): Query<AdminDeleteIssueQuery>,
+) -> Response {
+    if let Err(resp) = require_issues_delete(&operator) {
+        return resp;
+    }
+
+    let force = query
+        .force
+        .as_deref()
+        .map(str::trim)
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
+
+    if let Some(raw_pub) = query
+        .publication_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let Some(pub_type) = normalize_publication_type(raw_pub) else {
+            return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+        };
+        return delete_issue_inner(&state, &operator, &headers, pub_type, issue_number, force).await;
+    }
+
+    let matches = state.db.get_issues_by_number(issue_number);
+    match matches.len() {
+        0 => json_error(&state, StatusCode::NOT_FOUND, msg_keys::ISSUE_NOT_FOUND),
+        1 => {
+            let pub_type = matches[0].publication_type.clone();
+            delete_issue_inner(&state, &operator, &headers, &pub_type, issue_number, force).await
+        }
+        _ => {
+            let pub_types: Vec<String> = matches.iter().map(|i| i.publication_type.clone()).collect();
+            ApiResponse::raw(
+                StatusCode::CONFLICT,
+                json!({
+                    "status": "error",
+                    "error_code": error_codes::CONFLICT,
+                    "message": format!(
+                        "Sayı #{} birden fazla yayında ({}) mevcut. Silmek için publication_type belirtin.",
+                        issue_number,
+                        pub_types.join(", ")
+                    ),
+                    "data": {
+                        "issue_number": issue_number,
+                        "publication_types": pub_types
+                    }
+                }),
+            )
+            .into_response()
+        }
+    }
+}
+
+pub async fn admin_convert_issue_pdf(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path((publication_type, issue_number)): Path<(String, i32)>,
+) -> Response {
+    if let Err(resp) = require_issues_write(&operator) {
+        return resp;
+    }
+    let Some(pub_type) = normalize_publication_type(&publication_type) else {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    };
+    let Some(mut issue) = state.db.get_issue(pub_type, issue_number) else {
+        return json_error(&state, StatusCode::NOT_FOUND, msg_keys::ISSUE_NOT_FOUND);
+    };
+    let Some(pdf_filename) = issue
+        .uploaded_pdf_file
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return ApiResponse::raw(
+            StatusCode::BAD_REQUEST,
+            json!({
+                "status": "error",
+                "error_code": error_codes::BAD_REQUEST,
+                "message": "Bu sayıya bağlı yüklenmiş bir PDF dosyası bulunamadı."
+            }),
+        )
+        .into_response();
+    };
+
+    let edergi_dir = state.config.edergi_dir.clone();
+    let issue_clone = issue.clone();
+    let conv_res = tokio::task::spawn_blocking(move || {
+        edergi_pdf_service::convert_issue_pdf(&edergi_dir, &issue_clone, &pdf_name_sanitize(&pdf_filename))
+    })
+    .await;
+
+    let res = match conv_res {
+        Ok(Ok(r)) => r,
+        Ok(Err(msg)) => {
+            return ApiResponse::raw(
+                StatusCode::BAD_REQUEST,
+                json!({
+                    "status": "error",
+                    "error_code": error_codes::BAD_REQUEST,
+                    "message": msg
+                }),
+            )
+            .into_response();
+        }
+        Err(e) => {
+            return ApiResponse::server_error(&state.translations, "tr", "admin_convert_issue_pdf", &e)
+                .into_response();
+        }
+    };
+
+    issue.page_count = res.page_count;
+    issue.spreads = res.spreads.clone();
+    if !res.spreads.is_empty() {
+        issue.dossier_count = res.spreads.len() as i32;
+    }
+
+    if let Err(e) = state.db.upsert_issue(&issue) {
+        return ApiResponse::server_error(&state.translations, "tr", "admin_convert_issue_pdf_save", &e)
+            .into_response();
+    }
+
+    let client_ip = extract_client_ip(&headers);
+    let _ = state.db.insert_audit_log(
+        &operator.email,
+        "convert_pdf",
+        "magazine_issue",
+        Some(i64::from(issue_number)),
+        &json!({
+            "publication_type": res.publication_type,
+            "issue_number": res.issue_number,
+            "page_count": res.page_count,
+            "cached_pages_count": res.cached_pages_count,
+            "spreads_count": res.spreads.len(),
+        })
+        .to_string(),
+        &client_ip,
+    );
+
+    ApiResponse::ok(json!({
+        "publication_type": res.publication_type,
+        "issue_number": res.issue_number,
+        "page_count": res.page_count,
+        "cached_pages_count": res.cached_pages_count,
+        "spreads": res.spreads,
+        "converted": true,
+        "issue": issue
+    }))
+    .into_response()
+}
+
+fn pdf_name_sanitize(raw: &str) -> String {
+    FsPath::new(raw.trim())
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 pub async fn admin_preview_edergi_pdf(
@@ -403,7 +816,7 @@ mod tests {
             "publish_month_tr": "Kasim",
             "publish_month_en": "",
             "year": 2026,
-            "cover_image": "images/msi/default-cover.webp",
+            "cover_image": crate::db::constants::DEFAULT_ISSUE_COVER_PATH,
             "is_special_issue": false,
             "event_name": null,
             "page_count": 99,

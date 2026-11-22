@@ -12,12 +12,10 @@ use crate::db::Database;
 
 fn normalize_date_bound(raw: &str, default_val: &str) -> String {
     let trimmed = raw.trim();
-    if trimmed.len() >= 10 {
-        trimmed[..10].to_string()
-    } else if trimmed.is_empty() {
+    if trimmed.is_empty() {
         default_val.to_string()
     } else {
-        trimmed.to_string()
+        crate::services::ad_service::char_prefix(trimmed, 10).to_string()
     }
 }
 
@@ -570,4 +568,27 @@ pub fn get_advertiser_report(db: &Database, from: &str, to: &str) -> Result<Vec<
     });
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_date_bound_handles_multibyte_utf8_without_panic() {
+        assert_eq!(normalize_date_bound("", "2020-01-01"), "2020-01-01");
+        assert_eq!(normalize_date_bound("   ", "2099-12-31"), "2099-12-31");
+        assert_eq!(
+            normalize_date_bound(" 2026-01-0ğ123 ", "2020-01-01"),
+            "2026-01-0ğ"
+        );
+        assert_eq!(
+            normalize_date_bound("2026-01-0ğ", "2020-01-01"),
+            "2026-01-0ğ"
+        );
+        assert_eq!(
+            normalize_date_bound("2026-11-21T12:00:00Z", "2020-01-01"),
+            "2026-11-21"
+        );
+    }
 }

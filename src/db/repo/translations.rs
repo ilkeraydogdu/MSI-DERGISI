@@ -65,6 +65,42 @@ impl Database {
         Ok(())
     }
 
+    pub fn load_all_translations_paginated(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> (Vec<crate::engine::translation_engine::TranslationEntry>, u64) {
+        let conn = match self.open_conn() {
+            Ok(c) => c,
+            Err(_) => return (vec![], 0),
+        };
+        let total: u64 = conn
+            .query_row("SELECT COUNT(*) FROM translations", [], |r| r.get(0))
+            .unwrap_or(0);
+        let mut stmt = match conn.prepare(
+            "SELECT key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp FROM translations ORDER BY key ASC LIMIT ?1 OFFSET ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return (vec![], total),
+        };
+        let rows = match stmt.query_map(rusqlite::params![limit, offset], |row| {
+            Ok(crate::engine::translation_engine::TranslationEntry {
+                key: row.get(0)?,
+                value_tr: row.get(1)?,
+                value_en: row.get(2)?,
+                value_ar: row.get(3)?,
+                value_de: row.get(4)?,
+                value_ru: row.get(5)?,
+                value_fr: row.get(6)?,
+                group: row.get(7)?,
+            })
+        }) {
+            Ok(r) => r,
+            Err(_) => return (vec![], total),
+        };
+        (rows.filter_map(|r| r.ok()).collect(), total)
+    }
+
     // =========================================================================
     // ADVANCED ADMIN: Content Version History
 
@@ -391,6 +427,172 @@ impl Database {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    // =========================================================================
+    // TRANSLATION APPROVAL WORKFLOW (Migration 014)
+    // =========================================================================
+
+    /// Upsert a translation entry with full approval-workflow metadata.
+    pub fn upsert_translation_with_status(
+        &self,
+        entry: &crate::engine::translation_engine::TranslationEntry,
+        status: &str,
+        approved_by: Option<i64>,
+        auto_translated_at: Option<&str>,
+        source_lang: Option<&str>,
+    ) -> rusqlite::Result<()> {
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let now_str = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let approved_at_val = if status == "approved" && approved_by.is_some() {
+            Some(now_str.clone())
+        } else {
+            None
+        };
+        conn.execute(
+            "INSERT OR REPLACE INTO translations (key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp, status, approved_by, approved_at, auto_translated_at, source_lang)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params![
+                entry.key,
+                entry.value_tr,
+                entry.value_en,
+                entry.value_ar,
+                entry.value_de,
+                entry.value_ru,
+                entry.value_fr,
+                entry.group,
+                status,
+                approved_by,
+                approved_at_val,
+                auto_translated_at,
+                source_lang.unwrap_or("tr"),
+            ],
+        )?;
+        drop(conn);
+        self.refresh_l1_cache();
+        Ok(())
+    }
+
+    /// Approve a translation: sets status='approved', records who approved and when.
+    /// Returns `Ok(false)` when no row matches `key`.
+    pub fn approve_translation(&self, key: &str, user_id: i64) -> rusqlite::Result<bool> {
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let now_str = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let affected = conn.execute(
+            "UPDATE translations SET status = 'approved', approved_by = ?1, approved_at = ?2 WHERE key = ?3",
+            rusqlite::params![user_id, now_str, key],
+        )?;
+        drop(conn);
+        if affected > 0 {
+            self.refresh_l1_cache();
+        }
+        Ok(affected > 0)
+    }
+
+    /// Reject a translation back to draft status.
+    /// Returns `Ok(false)` when no row matches `key`.
+    pub fn reject_translation(&self, key: &str) -> rusqlite::Result<bool> {
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let affected = conn.execute(
+            "UPDATE translations SET status = 'draft', approved_by = NULL, approved_at = NULL WHERE key = ?1",
+            rusqlite::params![key],
+        )?;
+        drop(conn);
+        if affected > 0 {
+            self.refresh_l1_cache();
+        }
+        Ok(affected > 0)
+    }
+
+    /// List translations filtered by status with pagination.
+    /// Supports `""`/`"all"` (all rows), `"pending"` (`draft` + `auto_translated`), or exact status.
+    /// Returns (entries, total_count).
+    pub fn list_translations_by_status(
+        &self,
+        status_filter: &str,
+        page: i64,
+        per_page: i64,
+    ) -> (Vec<serde_json::Value>, u64) {
+        let conn = match self.open_conn() {
+            Ok(c) => c,
+            Err(_) => return (vec![], 0),
+        };
+        let safe_page = page.max(1);
+        let safe_per_page = per_page.clamp(1, 200);
+        let offset = (safe_page - 1) * safe_per_page;
+        let norm_status = status_filter.trim();
+
+        let (count_sql, list_sql, bind_status): (&str, &str, Option<&str>) =
+            if norm_status.is_empty() || norm_status == "all" {
+                (
+                    "SELECT COUNT(*) FROM translations",
+                    "SELECT key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp,
+                            COALESCE(status,'approved'), COALESCE(approved_by,0), COALESCE(approved_at,''),
+                            COALESCE(auto_translated_at,''), COALESCE(source_lang,'tr')
+                     FROM translations ORDER BY key ASC LIMIT ?1 OFFSET ?2",
+                    None,
+                )
+            } else if norm_status == "pending" {
+                (
+                    "SELECT COUNT(*) FROM translations WHERE status IN ('draft', 'auto_translated')",
+                    "SELECT key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp,
+                            COALESCE(status,'approved'), COALESCE(approved_by,0), COALESCE(approved_at,''),
+                            COALESCE(auto_translated_at,''), COALESCE(source_lang,'tr')
+                     FROM translations WHERE status IN ('draft', 'auto_translated')
+                     ORDER BY key ASC LIMIT ?1 OFFSET ?2",
+                    None,
+                )
+            } else {
+                (
+                    "SELECT COUNT(*) FROM translations WHERE status = ?1",
+                    "SELECT key, value_tr, value_en, value_ar, value_de, value_ru, value_fr, grp,
+                            COALESCE(status,'approved'), COALESCE(approved_by,0), COALESCE(approved_at,''),
+                            COALESCE(auto_translated_at,''), COALESCE(source_lang,'tr')
+                     FROM translations WHERE status = ?3 ORDER BY key ASC LIMIT ?1 OFFSET ?2",
+                    Some(norm_status),
+                )
+            };
+
+        let total: u64 = match bind_status {
+            Some(st) => conn.query_row(count_sql, rusqlite::params![st], |r| r.get(0)),
+            None => conn.query_row(count_sql, [], |r| r.get(0)),
+        }
+        .unwrap_or(0);
+
+        fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<serde_json::Value> {
+            Ok(serde_json::json!({
+                "key": row.get::<_, String>(0)?,
+                "value_tr": row.get::<_, String>(1)?,
+                "value_en": row.get::<_, String>(2)?,
+                "value_ar": row.get::<_, String>(3)?,
+                "value_de": row.get::<_, String>(4)?,
+                "value_ru": row.get::<_, String>(5)?,
+                "value_fr": row.get::<_, String>(6)?,
+                "group": row.get::<_, String>(7)?,
+                "status": row.get::<_, String>(8)?,
+                "approved_by": row.get::<_, i64>(9)?,
+                "approved_at": row.get::<_, String>(10)?,
+                "auto_translated_at": row.get::<_, String>(11)?,
+                "source_lang": row.get::<_, String>(12)?,
+            }))
+        }
+
+        let mut stmt = match conn.prepare(list_sql) {
+            Ok(s) => s,
+            Err(_) => return (vec![], total),
+        };
+        let items: Vec<serde_json::Value> = match bind_status {
+            Some(st) => stmt
+                .query_map(rusqlite::params![safe_per_page, offset, st], map_row)
+                .map(|iter| iter.filter_map(Result::ok).collect())
+                .unwrap_or_default(),
+            None => stmt
+                .query_map(rusqlite::params![safe_per_page, offset], map_row)
+                .map(|iter| iter.filter_map(Result::ok).collect())
+                .unwrap_or_default(),
+        };
+
+        (items, total)
     }
 
     // =========================================================================

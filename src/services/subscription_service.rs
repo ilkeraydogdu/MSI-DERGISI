@@ -269,6 +269,8 @@ mod tests {
             email_verified: true,
             marketing_emails_opted_in: true,
             totp_enabled: false,
+            tos_accepted_at: "2026-01-01T00:00:00Z".to_string(),
+            tos_version: "2026-01".to_string(),
         }
     }
 

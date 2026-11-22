@@ -16,6 +16,8 @@ impl Database {
         let subscription_plans = self.load_subscription_plans_db();
         let commerce_products = self.load_commerce_products_db();
         let users = self.load_users_db();
+        let institution_categories = self.load_institution_categories_db(false);
+        let recommendation_rules = self.load_recommendation_rules_db();
         let elapsed_us = start.elapsed().as_micros().max(1);
 
         if let Ok(mut guard) = self.l1_cache.write() {
@@ -31,6 +33,8 @@ impl Database {
                 subscription_plans,
                 commerce_products,
                 users,
+                institution_categories,
+                recommendation_rules,
                 last_refreshed_us: elapsed_us,
             });
         }
@@ -39,7 +43,8 @@ impl Database {
     /// Selectively reload only the named L1 cache sections.
     /// Supported section names: "categories", "ssb_tags", "contents", "issues",
     /// "ads", "site_settings", "notifications", "seo_redirects",
-    /// "subscription_plans", "commerce_products", "users".
+    /// "subscription_plans", "commerce_products", "users",
+    /// "institution_categories", "recommendation_rules".
     pub fn refresh_l1_sections(&self, sections: &[&str]) {
         // Clone current snapshot; if none exists, do a full refresh instead.
         let mut snap = match self.l1_cache.read() {
@@ -80,6 +85,12 @@ impl Database {
                 "subscription_plans" => snap.subscription_plans = self.load_subscription_plans_db(),
                 "commerce_products" => snap.commerce_products = self.load_commerce_products_db(),
                 "users" => snap.users = self.load_users_db(),
+                "institution_categories" => {
+                    snap.institution_categories = self.load_institution_categories_db(false)
+                }
+                "recommendation_rules" => {
+                    snap.recommendation_rules = self.load_recommendation_rules_db()
+                }
                 _ => {}
             }
         }

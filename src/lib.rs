@@ -1,15 +1,31 @@
+pub mod editorial;
+
+#[cfg(feature = "server")]
 pub mod app_state;
+#[cfg(feature = "server")]
 pub mod cli;
+#[cfg(feature = "server")]
 pub mod config;
+#[cfg(feature = "server")]
 pub mod controllers;
+#[cfg(feature = "server")]
 pub mod db;
+#[cfg(feature = "server")]
 pub mod engine;
+#[cfg(feature = "server")]
 pub mod extractors;
+#[cfg(feature = "server")]
 pub mod middleware;
+#[cfg(feature = "server")]
 pub mod models;
+#[cfg(feature = "server")]
 pub mod routes;
+#[cfg(feature = "server")]
 pub mod services;
+#[cfg(feature = "server")]
 pub mod utils;
+#[cfg(feature = "server")]
 pub mod workers;
 
+#[cfg(feature = "server")]
 pub use crate::engine::security_engine::CspNonce;

@@ -60,8 +60,8 @@ pub const CACHE_TTL_SECONDS: u64 = 5;
 // =========================================================================
 pub const MAX_UPLOAD_SIZE_BYTES: usize = 25 * 1024 * 1024; // 25 MB
 pub const ALLOWED_UPLOAD_EXTENSIONS: &[&str] = &[".webp", ".png", ".jpg", ".jpeg", ".svg", ".pdf", ".mp4"];
-pub const DEFAULT_ISSUE_COVER_PATH: &str = "images/msi/default-cover.webp";
-pub const DEFAULT_AD_SIDEBAR_PATH: &str = "images/msi/default-ad-sidebar.webp";
+pub const DEFAULT_ISSUE_COVER_PATH: &str = crate::services::media_service::DEFAULT_ISSUE_COVER;
+pub const DEFAULT_AD_SIDEBAR_PATH: &str = crate::services::media_service::DEFAULT_AD_SIDEBAR;
 
 // =========================================================================
 // SECURITY & RATE LIMITING

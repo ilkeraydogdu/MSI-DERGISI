@@ -489,6 +489,122 @@ pub async fn admin_delete_custom_field(
     }
 }
 
+pub async fn admin_get_custom_field_values(
+    operator: OperatorUser,
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let entity_type = params.get("entity_type").map(|s| s.trim()).unwrap_or("");
+    let entity_id = params.get("entity_id").map(|s| s.trim()).unwrap_or("");
+    if !matches!(entity_type, "content" | "ad" | "user") || entity_id.is_empty() {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+
+    let perm_check = match entity_type {
+        "content" => require_any_perm(&operator, &["contents:read", "settings:read"]),
+        "ad" => require_any_perm(&operator, &["ads:read", "settings:read"]),
+        "user" => require_any_perm(&operator, &["users:read", "settings:read"]),
+        _ => unreachable!(),
+    };
+    if let Err(resp) = perm_check {
+        return resp;
+    }
+
+    let values = state.db.get_custom_field_values(entity_type, entity_id);
+    ApiResponse::ok(json!({
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "values": values
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct CustomFieldValueItemPayload {
+    pub field_id: i64,
+    #[serde(default)]
+    pub value_text: String,
+}
+
+#[derive(Deserialize)]
+pub struct CustomFieldValuesPutPayload {
+    pub entity_type: String,
+    pub entity_id: String,
+    #[serde(default)]
+    pub values: Vec<CustomFieldValueItemPayload>,
+}
+
+pub async fn admin_put_custom_field_values(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<CustomFieldValuesPutPayload>,
+) -> Response {
+    let entity_type = payload.entity_type.trim();
+    let entity_id = payload.entity_id.trim();
+    if !matches!(entity_type, "content" | "ad" | "user") || entity_id.is_empty() {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+
+    let perm_check = match entity_type {
+        "content" => require_any_perm(&operator, &["contents:write", "settings:write"]),
+        "ad" => require_any_perm(&operator, &["ads:write", "settings:write"]),
+        "user" => require_any_perm(&operator, &["users:write", "settings:write"]),
+        _ => unreachable!(),
+    };
+    if let Err(resp) = perm_check {
+        return resp;
+    }
+
+    let items: Vec<(i64, String)> = payload
+        .values
+        .into_iter()
+        .map(|v| (v.field_id, v.value_text))
+        .collect();
+
+    match state
+        .db
+        .upsert_custom_field_values(entity_type, entity_id, &items)
+    {
+        Ok(updated_count) => {
+            let client_ip = extract_client_ip(&headers);
+            let _ = state.db.insert_audit_log(
+                &operator.email,
+                "upsert",
+                "custom_field_values",
+                None,
+                &json!({
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "updated_count": updated_count,
+                })
+                .to_string(),
+                &client_ip,
+            );
+            let updated_values = state.db.get_custom_field_values(entity_type, entity_id);
+            ApiResponse::ok(json!({
+                "status": "saved",
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "updated_count": updated_count,
+                "values": updated_values
+            }))
+            .into_response()
+        }
+        Err(msg) => ApiResponse::raw(
+            StatusCode::BAD_REQUEST,
+            json!({
+                "status": "error",
+                "error_code": error_codes::BAD_REQUEST,
+                "error": msg,
+                "message": msg,
+                "data": null
+            }),
+        )
+        .into_response(),
+    }
+}
+
 pub async fn admin_list_cache_operations(
     operator: OperatorUser,
     State(state): State<AppState>,
@@ -543,7 +659,7 @@ pub async fn admin_system_health(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_any_perm(&operator, &["settings:read", "analytics:read"]) {
+    if let Err(resp) = require_any_perm(&operator, &["settings:read", "analytics:read", "system:read"]) {
         return resp;
     }
     Json(state.db.get_system_health()).into_response()

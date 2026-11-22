@@ -94,13 +94,10 @@ fn permission_matches(granted_raw: &str, required_raw: &str) -> bool {
     }
 }
 
-/// Returns `true` if `role` is an administrative or RBAC-enabled staff role.
-/// Excludes non-staff reader/subscriber roles (`reader`, `registered`, `subscriber*`, `deleted`)
-/// while accepting `admin`, `site_operator`, `super_admin`, or any role with non-empty
-/// permissions in `user_roles`.
-pub fn is_staff_role(db: &crate::db::Database, role: &str) -> bool {
+/// Returns `true` if `role` is explicitly a non-staff reader, subscriber, or guest role.
+pub fn is_non_staff_role_name(role: &str) -> bool {
     let norm = role.trim().to_ascii_lowercase();
-    if norm.is_empty()
+    norm.is_empty()
         || matches!(
             norm.as_str(),
             "reader"
@@ -110,11 +107,41 @@ pub fn is_staff_role(db: &crate::db::Database, role: &str) -> bool {
                 | "deleted"
                 | "free"
                 | "guest"
+                | "member"
         )
         || norm.starts_with("subscriber_")
-    {
+}
+
+/// Checks whether a role code grants a specific permission via `user_roles`.
+pub fn role_has_permission(db: &crate::db::Database, role: &str, required: &str) -> bool {
+    if is_non_staff_role_name(role) {
         return false;
     }
+    let norm = role.trim().to_ascii_lowercase();
+    if norm == "super_admin" {
+        return true;
+    }
+    let perms = db
+        .get_role_permissions(role.trim())
+        .or_else(|| db.get_role_permissions(&norm))
+        .unwrap_or_default();
+    if perms.is_empty() && matches!(norm.as_str(), "admin" | "site_operator") {
+        return true;
+    }
+    perms
+        .iter()
+        .any(|granted| permission_matches(granted, required))
+}
+
+/// Returns `true` if `role` is an administrative or RBAC-enabled staff role.
+/// Excludes non-staff reader/subscriber roles (`reader`, `registered`, `subscriber*`, `deleted`)
+/// while accepting `admin`, `site_operator`, `super_admin`, or any role with non-empty
+/// permissions in `user_roles`.
+pub fn is_staff_role(db: &crate::db::Database, role: &str) -> bool {
+    if is_non_staff_role_name(role) {
+        return false;
+    }
+    let norm = role.trim().to_ascii_lowercase();
 
     if matches!(norm.as_str(), "admin" | "site_operator" | "super_admin") {
         return true;

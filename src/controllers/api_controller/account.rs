@@ -27,18 +27,51 @@ pub async fn update_account_profile(
         return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
     }
 
-    let org_cat = payload
+    let raw_org_cat = payload
         .organization_category
         .as_deref()
         .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(&user.organization_category);
-    let org_name = payload
+        .filter(|s| !s.is_empty());
+    let raw_org_name = payload
         .organization_name
         .as_deref()
         .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(&user.organization_name);
+        .filter(|s| !s.is_empty());
+
+    let is_verified_institution_account = !is_staff_role(&state.db, &user.role)
+        && (user.is_gov_verified
+            || user.role.eq_ignore_ascii_case("subscriber_public")
+            || user.role.eq_ignore_ascii_case("subscriber_corporate"));
+
+    if is_verified_institution_account {
+        let cat_changed = raw_org_cat
+            .is_some_and(|c| !c.eq_ignore_ascii_case(user.organization_category.trim()));
+        let name_changed = raw_org_name
+            .is_some_and(|n| !n.eq_ignore_ascii_case(user.organization_name.trim()));
+        if cat_changed || name_changed {
+            return ApiResponse::raw(
+                StatusCode::FORBIDDEN,
+                json!({
+                    "status": "error",
+                    "error_code": error_codes::FORBIDDEN,
+                    "message": "Doğrulanmış kurum kimliği profil üzerinden değiştirilemez. Kurum değişikliği için lütfen destek ekibiyle iletişime geçin.",
+                    "data": null
+                }),
+            )
+            .into_response();
+        }
+    }
+
+    let org_cat = if is_verified_institution_account {
+        user.organization_category.as_str()
+    } else {
+        raw_org_cat.unwrap_or(&user.organization_category)
+    };
+    let org_name = if is_verified_institution_account {
+        user.organization_name.as_str()
+    } else {
+        raw_org_name.unwrap_or(&user.organization_name)
+    };
     let job_title = payload
         .job_title
         .as_deref()
@@ -63,6 +96,32 @@ pub async fn update_account_profile(
     ) {
         return ApiResponse::server_error(&state.translations, "tr", "update_account_profile", &e)
             .into_response();
+    }
+
+    if consent != user.email_consent || consent != user.marketing_emails_opted_in {
+        let client_ip = extract_client_ip(&headers);
+        let now_iso = chrono::Utc::now().to_rfc3339();
+        let consent_hash = auth_service::generate_kvkk_consent_hash(
+            &user.email,
+            &client_ip,
+            &now_iso,
+            &state.config.session_secret,
+        );
+        let _ = state.db.insert_kvkk_consent_log(&crate::models::KvkkConsentLog {
+            id: 0,
+            user_id: Some(user.id),
+            email: user.email.clone(),
+            consent_type: "etk".to_string(),
+            consent_version: if user.tos_version.is_empty() {
+                "2026-01".to_string()
+            } else {
+                user.tos_version.clone()
+            },
+            accepted: consent,
+            ip_address: client_ip,
+            consent_hash,
+            created_at: now_iso,
+        });
     }
 
     let updated = state.db.get_user_by_id(user.id).unwrap_or(user);
@@ -146,25 +205,27 @@ pub async fn delete_account(
     };
 
     let parsed: DeleteAccountPayload = serde_json::from_slice(&body).unwrap_or_default();
-    if let Some(pw) = parsed.password.as_deref().filter(|s| !s.is_empty()) {
-        let valid = state
-            .db
-            .get_user_by_email(&user.email)
-            .map(|(_, hash)| auth_service::verify_password(pw, &state.config.session_secret, &hash))
-            .unwrap_or(false);
-        if !valid {
-            return json_error(&state, StatusCode::UNAUTHORIZED, msg_keys::LOGIN_FAILED);
-        }
+    let Some((_, pw_hash)) = state.db.get_user_by_email(&user.email) else {
+        return json_error(&state, StatusCode::UNAUTHORIZED, msg_keys::AUTH_REQUIRED);
+    };
+    if auth_service::is_deleted_or_erased_user(&user) || pw_hash.trim().is_empty() {
+        return json_error(&state, StatusCode::UNAUTHORIZED, msg_keys::AUTH_REQUIRED);
     }
-
-    if let Some(raw_token) = extract_raw_session_cookie(&headers) {
-        auth_service::revoke_session_token(raw_token);
+    let Some(pw) = parsed.password.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::LOGIN_FAILED);
+    };
+    if !auth_service::verify_password(pw, &state.config.session_secret, &pw_hash) {
+        return json_error(&state, StatusCode::UNAUTHORIZED, msg_keys::LOGIN_FAILED);
     }
 
     let client_ip = extract_client_ip(&headers);
     if let Err(e) = state.db.delete_user_account(user.id, &client_ip) {
         return ApiResponse::server_error(&state.translations, "tr", "delete_account", &e)
             .into_response();
+    }
+
+    if let Some(raw_token) = extract_raw_session_cookie(&headers) {
+        auth_service::revoke_session_token_db(&state.db, raw_token);
     }
 
     let secure = cookie_secure_flag(&headers, &state.config.public_url);

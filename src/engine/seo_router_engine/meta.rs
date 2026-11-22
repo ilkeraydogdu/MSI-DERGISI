@@ -252,7 +252,11 @@ impl CentralSeoEngine {
         };
 
         let json_ld = serde_json::to_string(&json_ld_val).unwrap_or_else(|_| "{}".to_string());
-        let robots = if clean_path.starts_with("/hesabim") || clean_path.starts_with("/admin") {
+        let clean_lower = clean_path.to_ascii_lowercase();
+        let robots = if clean_lower.starts_with("/hesabim")
+            || clean_lower.starts_with("/podmin")
+            || clean_lower.starts_with("/admin")
+        {
             "noindex, nofollow".to_string()
         } else {
             "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1".to_string()
@@ -580,6 +584,36 @@ impl CentralSeoEngine {
         let rss_title_en = escape_html(&brand.rss_title_en);
         let search_title = escape_html(&format!("{} Arama", brand.opensearch_short_name));
 
+        let is_noindex = safe_robots.to_ascii_lowercase().contains("noindex");
+        let canonical_and_alternates_html = if is_noindex || safe_canon.is_empty() {
+            String::new()
+        } else {
+            let mut tags = format!("    <link rel=\"canonical\" href=\"{}\" />\n", safe_canon);
+            if !safe_tr.is_empty() {
+                tags.push_str(&format!("    <link rel=\"alternate\" hreflang=\"tr\" href=\"{}\" />\n", safe_tr));
+            }
+            if !safe_en.is_empty() {
+                tags.push_str(&format!("    <link rel=\"alternate\" hreflang=\"en\" href=\"{}\" />\n", safe_en));
+            }
+            tags.push_str(&format!("    <link rel=\"alternate\" hreflang=\"x-default\" href=\"{}\" />\n", safe_canon));
+            tags
+        };
+        let og_url_html = if is_noindex || safe_canon.is_empty() {
+            String::new()
+        } else {
+            format!("    <meta property=\"og:url\" content=\"{}\" />\n", safe_canon)
+        };
+        let json_ld_html = if meta.json_ld.trim().is_empty() {
+            String::new()
+        } else {
+            let safe_ld = meta
+                .json_ld
+                .replace('<', "\\u003c")
+                .replace('>', "\\u003e")
+                .replace('&', "\\u0026");
+            format!("    <script type=\"application/ld+json\">{}</script>", safe_ld)
+        };
+
         format!(
             r#"<meta name="description" content="{desc}" />
 {kw_tag}    <meta name="robots" content="{robots}" />
@@ -587,11 +621,7 @@ impl CentralSeoEngine {
     <meta name="yandex" content="{robots}" />
     <meta name="bingbot" content="{robots}" />
     <meta name="format-detection" content="telephone=no" />
-    <link rel="canonical" href="{canon}" />
-    <link rel="alternate" hreflang="tr" href="{tr}" />
-    <link rel="alternate" hreflang="en" href="{en}" />
-    <link rel="alternate" hreflang="x-default" href="{canon}" />
-    <link rel="alternate" type="application/rss+xml" title="{rss_tr}" href="/rss.xml?lang=tr" />
+{canonical_and_alternates_html}    <link rel="alternate" type="application/rss+xml" title="{rss_tr}" href="/rss.xml?lang=tr" />
     <link rel="alternate" type="application/rss+xml" title="{rss_en}" href="/rss.xml?lang=en" />
     <link rel="alternate" type="application/feed+json" title="{short_name} JSON Feed" href="/feed.json" />
     <link rel="search" type="application/opensearchdescription+xml" title="{search_title}" href="/opensearch.xml" />
@@ -602,8 +632,7 @@ impl CentralSeoEngine {
     <meta property="og:site_name" content="{site_name}" />
     <meta property="og:title" content="{title}" />
     <meta property="og:description" content="{desc}" />
-    <meta property="og:url" content="{canon}" />
-    <meta property="og:type" content="{og_type}" />
+{og_url_html}    <meta property="og:type" content="{og_type}" />
     <meta property="og:image" content="{og_img}" />
     <meta property="og:image:alt" content="{og_alt}" />
     <meta property="og:image:width" content="1200" />
@@ -615,25 +644,20 @@ impl CentralSeoEngine {
     <meta name="twitter:description" content="{desc}" />
     <meta name="twitter:image" content="{og_img}" />
     <meta name="twitter:image:alt" content="{og_alt}" />
-{extra_tags}    <script type="application/ld+json">{json_ld}</script>"#,
+{extra_tags}{json_ld_html}"#,
             title = safe_title,
             desc = safe_desc,
             kw_tag = kw_tag,
             robots = safe_robots,
-            canon = safe_canon,
-            tr = safe_tr,
-            en = safe_en,
+            canonical_and_alternates_html = canonical_and_alternates_html,
             og_locale = og_locale,
             og_alt_locale = og_alt_locale,
+            og_url_html = og_url_html,
             og_type = safe_og_type,
             og_img = safe_og_img,
             og_alt = safe_og_alt,
             extra_tags = extra_tags,
-            json_ld = meta
-                .json_ld
-                .replace('<', "\\u003c")
-                .replace('>', "\\u003e")
-                .replace('&', "\\u0026"),
+            json_ld_html = json_ld_html,
             tw = twitter_handle,
             site_name = site_name,
             rss_tr = rss_title_tr,
@@ -641,5 +665,130 @@ impl CentralSeoEngine {
             short_name = escape_html(&brand.opensearch_short_name),
             search_title = search_title,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn private_routes_emit_noindex_nofollow_case_insensitively() {
+        let brand = SeoBrandConfig::from_settings(&HashMap::new());
+        for path in [
+            "/podmin",
+            "/Podmin",
+            "/PODMIN/tasarim",
+            "/hesabim",
+            "/Hesabim",
+            "/admin",
+            "/Admin/login",
+        ] {
+            let meta = CentralSeoEngine::build_seo_meta(
+                "https://msidergisi.com",
+                path,
+                "Panel",
+                "Panel",
+                "",
+                "website",
+                "tr",
+                None,
+                &brand,
+                "msidergisi.com",
+                "savunmahaber.com",
+            );
+            assert_eq!(
+                meta.robots, "noindex, nofollow",
+                "path {} must emit noindex, nofollow",
+                path
+            );
+        }
+
+        let public_meta = CentralSeoEngine::build_seo_meta(
+            "https://msidergisi.com",
+            "/icerik/savunma-raporu",
+            "Savunma Raporu",
+            "Analiz",
+            "",
+            "article",
+            "tr",
+            None,
+            &brand,
+            "msidergisi.com",
+            "savunmahaber.com",
+        );
+        assert!(
+            public_meta.robots.starts_with("index, follow"),
+            "public path must remain indexable, got {}",
+            public_meta.robots
+        );
+    }
+
+    #[test]
+    fn noindex_and_empty_canonical_omit_canonical_hreflang_and_og_url() {
+        let brand = SeoBrandConfig::from_settings(&HashMap::new());
+        let noindex_meta = SeoMetaBundle {
+            title: "404 Sayfa Bulunamadı".to_string(),
+            description: "Sayfa bulunamadı".to_string(),
+            canonical_url: String::new(),
+            hreflang_tr: String::new(),
+            hreflang_en: String::new(),
+            og_type: "website".to_string(),
+            og_image: "/images/logo.svg".to_string(),
+            robots: "noindex, nofollow".to_string(),
+            json_ld: String::new(),
+            ..Default::default()
+        };
+        let head = CentralSeoEngine::render_seo_head_tags(&noindex_meta, None, &brand);
+        assert!(head.contains("<meta name=\"robots\" content=\"noindex, nofollow\" />"));
+        assert!(!head.contains("rel=\"canonical\""));
+        assert!(!head.contains("hreflang="));
+        assert!(!head.contains("og:url"));
+        assert!(!head.contains("application/ld+json"));
+
+        // Even if a caller leaves canonical_url populated on a noindex page (e.g. /hesabim),
+        // canonical/hreflang/og:url must be omitted.
+        let auth_noindex = CentralSeoEngine::build_seo_meta(
+            "https://msidergisi.com",
+            "/hesabim",
+            "Hesabım",
+            "Kullanıcı Paneli",
+            "",
+            "website",
+            "tr",
+            None,
+            &brand,
+            "msidergisi.com",
+            "savunmahaber.com",
+        );
+        let auth_head = CentralSeoEngine::render_seo_head_tags(&auth_noindex, None, &brand);
+        assert!(auth_head.contains("<meta name=\"robots\" content=\"noindex, nofollow\" />"));
+        assert!(!auth_head.contains("rel=\"canonical\""));
+        assert!(!auth_head.contains("hreflang="));
+        assert!(!auth_head.contains("og:url"));
+        assert!(auth_head.contains("application/ld+json"));
+
+        // Indexable public pages preserve canonical, hreflang, og:url, and JSON-LD.
+        let public_meta = CentralSeoEngine::build_seo_meta(
+            "https://msidergisi.com",
+            "/",
+            "MSI Dergisi",
+            "Savunma ve Havacılık",
+            "",
+            "website",
+            "tr",
+            None,
+            &brand,
+            "msidergisi.com",
+            "savunmahaber.com",
+        );
+        let public_head = CentralSeoEngine::render_seo_head_tags(&public_meta, None, &brand);
+        assert!(public_head.contains("<link rel=\"canonical\" href=\"https://msidergisi.com/\" />"));
+        assert!(public_head.contains("hreflang=\"tr\""));
+        assert!(public_head.contains("hreflang=\"en\""));
+        assert!(public_head.contains("hreflang=\"x-default\""));
+        assert!(public_head.contains("property=\"og:url\""));
+        assert!(public_head.contains("application/ld+json"));
     }
 }

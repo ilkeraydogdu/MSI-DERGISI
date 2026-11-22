@@ -3,13 +3,15 @@ use axum::{routing::get, Router};
 use crate::controllers::{api_controller, web_controller, AppState};
 
 pub fn build(state: &AppState) -> Router<AppState> {
-    let admin_root = format!("/{}", state.config.admin_path_secret);
+    let seg = crate::config::normalize_admin_path_secret(&state.config.admin_path_secret);
+    let admin_root = format!("/{}", seg);
 
-    Router::new()
+    let router = Router::new()
         // ── Public SSR Pages ────────────────────────────────────────────
         .route("/", get(web_controller::render_home))
         .route("/index.html", get(web_controller::render_home))
         .route("/en", get(web_controller::render_en_home))
+        .route("/css/design-tokens.css", get(web_controller::render_design_tokens_css))
         .route("/switch/:locale", get(web_controller::switch_locale))
         .route("/arama", get(web_controller::render_search_page))
         .route("/search", get(web_controller::render_search_page))
@@ -67,6 +69,21 @@ pub fn build(state: &AppState) -> Router<AppState> {
         .route("/sayfa/:slug", get(web_controller::render_designed_page))
         .route("/icerik/:slug", get(web_controller::render_article_detail))
         .route("/yazar/:slug", get(web_controller::render_author_profile))
+        .route("/yazarlar", get(web_controller::render_authors_directory))
+        .route("/en/authors", get(web_controller::render_en_authors_directory))
+        .route("/savunma-sanayii-tarihi", get(web_controller::render_history_hub))
+        .route(
+            "/en/defence-industry-history",
+            get(web_controller::render_en_history_hub),
+        )
+        .route(
+            "/en/defense-industry-history",
+            get(web_controller::render_en_history_hub),
+        )
+        .route("/ogrenci-kulupleri", get(web_controller::render_student_clubs_hub))
+        .route("/en/student-clubs", get(web_controller::render_en_student_clubs_hub))
+        .route("/etkinlikler", get(web_controller::render_events_hub_page))
+        .route("/en/events", get(web_controller::render_en_events_hub_page))
         .route("/haberler/:slug", get(web_controller::redirect_legacy_haber_tr))
         .route("/en/haberler/:slug", get(web_controller::redirect_legacy_haber_en))
         .route("/kategori/:slug", get(web_controller::render_category_page))
@@ -77,11 +94,75 @@ pub fn build(state: &AppState) -> Router<AppState> {
         .route("/e-dergi", get(web_controller::render_edergi_kiosk))
         .route("/abonelik-ve-satis", get(web_controller::render_subscriptions_and_store))
         .route("/kurumsal/:slug", get(web_controller::render_corporate_page))
-        // ── Hidden Enterprise Command Gateway (/{ADMIN_PATH_SECRET}) ───
+        .route("/en/kurumsal/:slug", get(web_controller::render_en_corporate_page))
+        // ── Enterprise Command Gateway (/{ADMIN_PATH_SECRET}, e.g. /podmin) ───
         .route(&admin_root, get(web_controller::render_admin))
+        .route(
+            &format!("{}/", admin_root),
+            get({
+                let target = admin_root.clone();
+                move || async move { axum::response::Redirect::permanent(&target) }
+            }),
+        )
         .route(&format!("{}/tasarim", admin_root), get(crate::engine::design::editor::view))
+        .route(
+            &format!("{}/tasarim/", admin_root),
+            get({
+                let target = format!("{}/tasarim", admin_root);
+                move || async move { axum::response::Redirect::permanent(&target) }
+            }),
+        )
         .route(
             &format!("{}/tasarim/onizleme", admin_root),
             axum::routing::post(crate::engine::design::editor::preview),
+        );
+
+    let router = mount_editorial_studio_routes(router, &admin_root);
+
+    if !seg.eq_ignore_ascii_case("podmin") {
+        let router = router
+            .route("/podmin", get(web_controller::render_podmin_gateway))
+            .route(
+                "/podmin/",
+                get(|| async { axum::response::Redirect::permanent("/podmin") }),
+            )
+            .route("/podmin/tasarim", get(crate::engine::design::editor::view))
+            .route(
+                "/podmin/tasarim/",
+                get(|| async { axum::response::Redirect::permanent("/podmin/tasarim") }),
+            )
+            .route(
+                "/podmin/tasarim/onizleme",
+                axum::routing::post(crate::engine::design::editor::preview),
+            );
+        mount_editorial_studio_routes(router, "/podmin")
+    } else {
+        router
+    }
+}
+
+fn mount_editorial_studio_routes(
+    router: axum::Router<crate::app_state::AppState>,
+    prefix: &str,
+) -> axum::Router<crate::app_state::AppState> {
+    let editor_path = format!("{prefix}/editor");
+    let editor_slash = format!("{prefix}/editor/");
+    let editor_target = editor_path.clone();
+    router
+        .route(
+            &editor_path,
+            get(crate::controllers::api_controller::render_editorial_studio),
+        )
+        .route(
+            &editor_slash,
+            get(move || async move { axum::response::Redirect::permanent(&editor_target) }),
+        )
+        .route(
+            &format!("{prefix}/editor/studio.js"),
+            get(crate::controllers::api_controller::editorial_studio_js),
+        )
+        .route(
+            &format!("{prefix}/editor/studio.wasm"),
+            get(crate::controllers::api_controller::editorial_studio_wasm),
         )
 }

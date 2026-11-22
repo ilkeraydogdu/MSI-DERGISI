@@ -1,9 +1,30 @@
 use super::*;
 use crate::engine::design::{
-    components::{render_page, PageData},
-    labels_helper::{lang_href, localize_section_copy, tr_text},
+    components::{
+        render_page,
+        sections::{
+            dossier_toc_from_contents, render_dossier_toc, render_events_hub,
+            render_newsletter_trigger_band, render_related_strip, EventsHubData, RelatedStripOptions,
+        },
+        PageData,
+    },
+    labels_helper::{is_en_content_ready, lang_href, localize_section_copy, tr_text},
 };
 use crate::engine::security_engine::escape_html as esc;
+
+pub async fn render_design_tokens_css(State(state): State<AppState>) -> Response {
+    let settings = state.db.get_setting_map("tr");
+    let css = crate::engine::design::config::load(&settings).css();
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=60"),
+        ],
+        css,
+    )
+        .into_response()
+}
 
 pub async fn render_designed_page(
     State(state): State<AppState>,
@@ -60,7 +81,18 @@ pub(crate) fn render_configured_page_with_headers(
             .get("current_featured_issue")
             .and_then(|s| s.parse().ok()),
     };
-    let body = render_page(page, &data);
+    let mut body = render_page(page, &data);
+    body.push_str(&render_related_strip(
+        &snap.contents,
+        &RelatedStripOptions {
+            lang,
+            is_current_sponsored: false,
+            exclude_ids: &[],
+            limit: 4,
+            tr: Some(&state.translations),
+            source_context: &page.slug,
+        },
+    ));
     let path = crate::engine::url_builder::designed_page_url(&page.slug);
     let brand_config = seo_router_engine::SeoBrandConfig::from_settings(settings);
     let seo_title = localize_section_copy(lang, &page.title);
@@ -149,7 +181,7 @@ pub async fn render_coming_soon(
         r##"<section class="coming-soon-page">
   <div class="coming-soon-container">
     <div class="coming-soon-logo">
-      <img src="/images/logo.svg" alt="{brand}">
+      <img src="/images/logo.svg" alt="{brand}" width="240" height="89" decoding="async">
     </div>
     <h1 class="coming-soon-title">{title}</h1>
     <p class="coming-soon-message">{message}</p>
@@ -162,57 +194,7 @@ pub async fn render_coming_soon(
       <p>&copy; {year} {brand}. ISSN 1306-0309</p>
     </div>
   </div>
-</section>
-<style>
-.coming-soon-page {{
-  min-height: 80vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
-}}
-.coming-soon-container {{
-  text-align: center;
-  max-width: 640px;
-  margin: 0 auto;
-}}
-.coming-soon-logo img {{
-  height: 72px;
-  width: auto;
-  margin-bottom: 2rem;
-}}
-.coming-soon-title {{
-  font-size: clamp(2rem, 5vw, 3.5rem);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  margin-bottom: 1.25rem;
-  color: var(--msi-text-primary, #1a1a1a);
-}}
-.coming-soon-message {{
-  font-size: 1.125rem;
-  line-height: 1.6;
-  color: var(--msi-text-muted, #555);
-  margin-bottom: 2.5rem;
-}}
-.coming-soon-actions {{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 3rem;
-}}
-.coming-soon-actions .text-link {{
-  font-size: 0.95rem;
-}}
-.coming-soon-footer {{
-  font-size: 0.8rem;
-  color: var(--msi-text-muted, #999);
-  border-top: 1px solid var(--msi-border, #e5e5e5);
-  padding-top: 1.5rem;
-}}
-</style>"##,
+</section>"##,
         brand = esc(brand_name),
         title = esc(&title),
         message = esc(&message),
@@ -251,6 +233,115 @@ pub async fn render_coming_soon(
         Some(&headers),
         None,
         None,
+    ))
+    .into_response()
+}
+
+pub async fn render_events_hub_page(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
+) -> Response {
+    render_events_hub_for_lang(&state, &params, &headers, &csp_nonce.0, None).await
+}
+
+pub async fn render_en_events_hub_page(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+    Extension(csp_nonce): Extension<CspNonce>,
+) -> Response {
+    render_events_hub_for_lang(&state, &params, &headers, &csp_nonce.0, Some("en")).await
+}
+
+async fn render_events_hub_for_lang(
+    state: &AppState,
+    params: &HashMap<String, String>,
+    headers: &HeaderMap,
+    csp_nonce: &str,
+    forced_lang: Option<&str>,
+) -> Response {
+    let lang = forced_lang
+        .map(str::to_string)
+        .unwrap_or_else(|| detect_language(params, headers));
+    let is_en = lang.eq_ignore_ascii_case("en");
+    let snap = CentralQueryEngine::snapshot(&state.db).data;
+
+    let mut body = render_events_hub(&EventsHubData {
+        lang: &lang,
+        categories: &snap.categories,
+        issues: &snap.issues,
+        contents: &snap.contents,
+        tr: Some(&state.translations),
+    });
+
+    if !body.contains("id=\"dossier-toc\"") {
+        let fallback_items: Vec<ContentItem> = snap
+            .contents
+            .iter()
+            .filter(|c| {
+                content_service::is_publicly_visible(c)
+                    && !c.is_sponsored
+                    && (!is_en || is_en_content_ready(c))
+                    && (is_en || !c.source_group.eq_ignore_ascii_case("msi-tdr"))
+            })
+            .take(5)
+            .cloned()
+            .collect();
+        let toc_entries = dossier_toc_from_contents(&fallback_items, &lang);
+        if !toc_entries.is_empty() {
+            let toc_html = render_dossier_toc(
+                "Etkinlik ve Dosya Dizini",
+                "Event & Dossier Table of Contents",
+                &toc_entries,
+                &lang,
+                Some(&state.translations),
+            );
+            body.push_str(&format!("<div class=\"container section-space\">{}</div>", toc_html));
+        }
+    }
+
+    body.push_str(&render_newsletter_trigger_band(
+        &lang,
+        Some(&state.translations),
+    ));
+    body.push_str(&render_related_strip(
+        &snap.contents,
+        &RelatedStripOptions {
+            lang: &lang,
+            is_current_sponsored: false,
+            exclude_ids: &[],
+            limit: 4,
+            tr: Some(&state.translations),
+            source_context: "etkinlikler",
+        },
+    ));
+
+    let page_title = tr_text(
+        Some(&state.translations),
+        &lang,
+        "events.page_title",
+        "Etkinlikler ve Fuar Özel Dosyaları",
+        "Defence Events & Post-Event Dossiers",
+    );
+    let canonical = if forced_lang == Some("en") {
+        "/en/events"
+    } else {
+        "/etkinlikler"
+    };
+
+    Html(home::render_shared_shell_with_request(
+        state,
+        &lang,
+        &page_title,
+        &body,
+        Some(canonical),
+        None,
+        false,
+        Some(csp_nonce),
+        Some(headers),
+        Some("etkinlikler"),
     ))
     .into_response()
 }

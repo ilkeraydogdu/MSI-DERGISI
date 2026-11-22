@@ -8,21 +8,21 @@
       "text": "#1e2024",
       "muted": "#59534c",
       "border": "#ddd5c8",
-      "accent": "#c91818"
+      "accent": "#cb382a"
     },
     "dark": {
       "background": "#1d222c",
       "surface": "#262c38",
       "subtle": "#303846",
       "text": "#dadde4",
-      "muted": "#a2aab8",
+      "muted": "#b2bac8",
       "border": "#3f4a5c",
       "accent": "#d42020"
     },
     "width": 1280,
     "radius": 2,
     "font_size": 16,
-    "default_mode": "light"
+    "default_mode": "system"
   },
   "navigation": [
     {
@@ -369,6 +369,20 @@
           "eyebrow": "KURUMSAL KİMLİK · 2004'TEN BUGÜNE",
           "title": "Türk savunma ve havacılık sanayisinin küresel referans sesi",
           "description": "Türk savunma ve havacılık sektörünü, yurt içinde ve yurt dışında etkin bir şekilde tanıtacak referans yayınları okuyucularımızla buluşturmak hedefiyle 2004 yılında attığımız ilk adımla başlayan yolculuğumuz, yeni yayınlar ve yeni yapılanmalarla gelişerek ve güçlenerek bugünlere ulaştı.\n\nDolu dolu geçen 22 yılın ve okuyucusu ile buluşan 400'ü aşkın dergi sayısının ardından, yolumuza emin ve güçlü adımlarla devam ediyoruz.\n\n• 2004 — MSI Dergisi (ISSN 1306-0309) yayın hayatına başladı.\n• 2014 — İngilizce uluslararası edisyonumuz MSI Turkish Defence Review (MSI TDR) yayına başladı.\n• 2015 — Türkiye'de görev yapan yabancı ülke askerî ataşelerinin resmî yayını AMAC Magazine yayın ailesine katıldı.\n• 2019 — Savunma ve havacılık iletişim ajansımız KasabaWorks kuruldu.\n\nSektördeki gelişmelere dair birinci kaynaklardan elde ettiğimiz bilgilerle oluşturduğumuz içerikleri; basılı dergilerimiz, internet haber sitemiz (msidergisi.com / savunmahaber.com), dijital E-Dergi kütüphanemiz ve sosyal medya kanallarımız aracılığıyla karar vericilere, tedarik makamlarına, silahlı kuvvetler personeline, akademisyenlere ve sanayi paydaşlarına ulaştırıyoruz."
+        }
+      ]
+    },
+    {
+      "slug": "kurumsal-biz-kimiz",
+      "title": "Biz Kimiz? — Bağımsız Savunma Gazeteciliği İlkelerimiz",
+      "description": "MSI Dergisi ve MSI Turkish Defence Review yayın grubunun editoryal bağımsızlık, birinci kaynak doğrulama ve sektörel hafıza misyonu.",
+      "mode": "magazine",
+      "sections": [
+        {
+          "kind": "text",
+          "eyebrow": "EDİTORYAL KİMLİK · BAĞIMSIZ SAVUNMA YAYINCILIĞI",
+          "title": "Savunma ve havacılık ekosisteminin güvenilir bilgi kaynağı",
+          "description": "MSI Dergisi (UMSA Prodüksiyon Basım ve Yayıncılık Ltd. Şti.), savunma, havacılık, uzay ve güvenlik teknolojileri alanında 2004 yılında kurulan ve sektörü mühendislik derinliğiyle belgeleyen bağımsız ihtisas yayın organıdır.\n\nYayın İlkelerimiz ve Farkımız:\n• Birinci Kaynaktan Doğrulama: Haber, söyleşi ve teknik dosyalarımızı Millî Savunma Bakanlığı (MSB), Savunma Sanayii Başkanlığı (SSB), Türk Silahlı Kuvvetleri kuvvet komutanlıkları, ana yükleniciler ve KOBİ ölçeğindeki alt sistem geliştiricileri nezdinde yürütülen doğrudan saha çalışmalarıyla hazırlarız.\n• Editoryal Bağımsızlık: Yazı işleri kadromuz reklam, sponsorluk ve ticari ilişkilerden mutlak biçimde ayrıştırılmıştır; ticari iş birliği içerikleri okuyucuya her zaman açık yasal etiketle sunulur.\n• Okuyucu Profilimiz: Basılı sayılarımız, dijital E-Dergi kütüphanemiz ve uluslararası İngilizce edisyonumuz (MSI TDR) aracılığıyla karar vericilere, tedarik makamlarına, askerî ataşeliklere, mühendislere, akademisyenlere ve sektör profesyonellerine ulaşırız.\n• Kalıcı Sektörel Hafıza: Günlük haber akışının ötesine geçerek, Türk savunma ve havacılık sanayisinin teknoloji kazanımlarını, uluslararası fuar performansını ve ihracat atılımlarını kalıcı bir kurumsal arşive dönüştürürüz."
         }
       ]
     },

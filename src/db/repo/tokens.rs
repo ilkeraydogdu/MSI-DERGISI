@@ -213,4 +213,57 @@ impl Database {
         Ok(())
     }
 
+    // =========================================================================
+    // Persistent Revoked Session / Pending-2FA Tokens (016_spec_parity_and_security.sql)
+    // =========================================================================
+
+    pub fn revoke_token_hash(&self, token_hash: &str, expires_at: &str) -> Result<(), String> {
+        let hash = token_hash.trim();
+        if hash.is_empty() {
+            return Ok(());
+        }
+        let conn = self
+            .open_conn()
+            .map_err(|e| format!("DB connection error: {}", e))?;
+        let revoked_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        conn.execute(
+            "INSERT INTO revoked_tokens (token_hash, expires_at, revoked_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(token_hash) DO UPDATE SET
+                expires_at = excluded.expires_at,
+                revoked_at = excluded.revoked_at",
+            params![hash, expires_at.trim(), revoked_at],
+        )
+        .map_err(|e| format!("Failed to persist revoked token: {}", e))?;
+        Ok(())
+    }
+
+    pub fn is_token_hash_revoked(&self, token_hash: &str) -> bool {
+        let hash = token_hash.trim();
+        if hash.is_empty() {
+            return false;
+        }
+        let Ok(conn) = self.open_conn() else {
+            return false;
+        };
+        conn.query_row(
+            "SELECT 1 FROM revoked_tokens WHERE token_hash = ?1 LIMIT 1",
+            params![hash],
+            |r| r.get::<_, i64>(0),
+        )
+        .is_ok()
+    }
+
+    pub fn cleanup_expired_revoked_tokens(&self) -> usize {
+        let Ok(conn) = self.open_conn() else {
+            return 0;
+        };
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        conn.execute(
+            "DELETE FROM revoked_tokens WHERE expires_at <= ?1",
+            params![now],
+        )
+        .unwrap_or(0)
+    }
+
 }

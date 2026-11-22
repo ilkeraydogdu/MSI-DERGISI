@@ -35,21 +35,73 @@ fn host_matches_domain(origin_host: &str, domain: &str) -> bool {
     oh == dom || oh.ends_with(&format!(".{dom}"))
 }
 
-pub fn validate_csrf(req: &Request, config: &AppConfig) -> Option<Response> {
-    // Origin verification
+fn origin_matches_allowed(raw_origin: &str, req: &Request, config: &AppConfig) -> bool {
+    let req_host = req
+        .headers()
+        .get(axum::http::header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let origin_host = extract_url_host(raw_origin);
+    !origin_host.is_empty()
+        && (host_matches_domain(origin_host, req_host)
+            || host_matches_domain(origin_host, &config.public_url)
+            || host_matches_domain(origin_host, &config.primary_domain)
+            || host_matches_domain(origin_host, &config.news_domain))
+}
+
+/// Validates same-origin `Origin` or `Referer` header when present on state-changing
+/// cookie-authenticated reader endpoints (e.g. `/api/v1/account/*`).
+pub fn validate_same_origin(req: &Request, config: &AppConfig) -> Option<Response> {
     if let Some(origin) = req.headers().get("origin").and_then(|v| v.to_str().ok()) {
-        let req_host = req
-            .headers()
-            .get(axum::http::header::HOST)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let origin_host = extract_url_host(origin);
-        let allowed = !origin_host.is_empty()
-            && (host_matches_domain(origin_host, req_host)
-                || host_matches_domain(origin_host, &config.public_url)
-                || host_matches_domain(origin_host, &config.primary_domain)
-                || host_matches_domain(origin_host, &config.news_domain));
-        if !allowed {
+        if !origin_matches_allowed(origin, req, config) {
+            return Some(
+                (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "status": "error",
+                        "code": "CSRF_ORIGIN",
+                        "message": "Geçersiz istek kaynağı."
+                    })),
+                )
+                    .into_response(),
+            );
+        }
+    } else if let Some(referer) = req.headers().get("referer").and_then(|v| v.to_str().ok()) {
+        if !origin_matches_allowed(referer, req, config) {
+            return Some(
+                (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "status": "error",
+                        "code": "CSRF_ORIGIN",
+                        "message": "Geçersiz istek kaynağı."
+                    })),
+                )
+                    .into_response(),
+            );
+        }
+    }
+    None
+}
+
+pub fn validate_csrf(req: &Request, config: &AppConfig) -> Option<Response> {
+    // Origin / Referer verification
+    if let Some(origin) = req.headers().get("origin").and_then(|v| v.to_str().ok()) {
+        if !origin_matches_allowed(origin, req, config) {
+            return Some(
+                (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "status": "error",
+                        "code": "CSRF_ORIGIN",
+                        "message": "Geçersiz istek kaynağı."
+                    })),
+                )
+                    .into_response(),
+            );
+        }
+    } else if let Some(referer) = req.headers().get("referer").and_then(|v| v.to_str().ok()) {
+        if !origin_matches_allowed(referer, req, config) {
             return Some(
                 (
                     StatusCode::FORBIDDEN,
@@ -112,11 +164,16 @@ fn csrf_error_response() -> Response {
 fn cookie_value<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
     let prefix = format!("{}=", name);
     req.headers()
-        .get(axum::http::header::COOKIE)
-        .and_then(|v| v.to_str().ok())?
-        .split(';')
-        .map(str::trim)
-        .find_map(|p| p.strip_prefix(prefix.as_str()))
+        .get_all(axum::http::header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|cookies| cookies.split(';'))
+        .find_map(|p| {
+            p.trim()
+                .strip_prefix(prefix.as_str())
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+        })
 }
 
 #[cfg(test)]

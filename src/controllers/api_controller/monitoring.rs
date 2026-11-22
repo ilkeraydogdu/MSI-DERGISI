@@ -6,7 +6,7 @@ pub async fn admin_monitoring_bundle(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_perm(&operator, "settings:read") {
+    if let Err(resp) = require_any_perm(&operator, &["monitoring:read", "system:read"]) {
         return resp;
     }
     match &state.monitoring_cache {
@@ -33,7 +33,7 @@ pub async fn admin_monitoring_system(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_perm(&operator, "settings:read") {
+    if let Err(resp) = require_any_perm(&operator, &["monitoring:read", "system:read"]) {
         return resp;
     }
     match &state.monitoring_cache {
@@ -57,7 +57,7 @@ pub async fn admin_monitoring_domains(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_perm(&operator, "settings:read") {
+    if let Err(resp) = require_any_perm(&operator, &["monitoring:read", "system:read"]) {
         return resp;
     }
     match &state.monitoring_cache {
@@ -78,7 +78,7 @@ pub async fn admin_monitoring_traffic(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_perm(&operator, "settings:read") {
+    if let Err(resp) = require_any_perm(&operator, &["monitoring:read", "system:read"]) {
         return resp;
     }
     match &state.monitoring_cache {
@@ -98,7 +98,7 @@ pub async fn admin_monitoring_attacks(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_perm(&operator, "settings:read") {
+    if let Err(resp) = require_any_perm(&operator, &["monitoring:read", "system:read"]) {
         return resp;
     }
     let db_attacks = state.db.get_recent_attack_events(100);
@@ -121,7 +121,7 @@ pub async fn admin_monitoring_services(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_perm(&operator, "settings:read") {
+    if let Err(resp) = require_any_perm(&operator, &["monitoring:read", "system:read"]) {
         return resp;
     }
     match &state.monitoring_cache {
@@ -143,7 +143,7 @@ pub async fn admin_monitoring_seo(
     operator: OperatorUser,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(resp) = require_perm(&operator, "settings:read") {
+    if let Err(resp) = require_any_perm(&operator, &["monitoring:read", "system:read"]) {
         return resp;
     }
     match &state.monitoring_cache {

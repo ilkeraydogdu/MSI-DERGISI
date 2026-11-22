@@ -245,8 +245,18 @@ const output = process.env.MSI_TEST_OUTPUT || "storage/artifacts/design-review";
       ).status() === 401,
     );
     if (process.env.MSI_QA_USER && process.env.MSI_QA_PASSWORD) {
+      const rawAdminSeg = String(process.env.ADMIN_PATH_SECRET || "podmin")
+        .trim()
+        .replace(/^\/+|\/+$/g, "")
+        .trim();
       const adminPath =
-        "/" + (process.env.ADMIN_PATH_SECRET || "msi-komuta").replace(/^\/+/, "");
+        "/" +
+        (!rawAdminSeg ||
+        rawAdminSeg.includes("/") ||
+        rawAdminSeg.toLowerCase().replace(/%20|%2d|%5f|[-\s_]+/g, "") === "msikomuta" ||
+        rawAdminSeg.toLowerCase() === "podmin"
+          ? "podmin"
+          : rawAdminSeg);
       const csrfHeaders = async () => {
         const cookies = await context.cookies();
         const c = cookies.find((item) => item.name === "csrf_token");

@@ -62,6 +62,7 @@ impl CentralSecurityFilter {
             || path.starts_with("/css/")
             || path.starts_with("/js/")
             || path.starts_with("/fonts/")
+            || path.starts_with("/uploads/")
             || path == "/favicon.ico";
 
         if !is_static_asset {
@@ -274,8 +275,22 @@ impl CentralSecurityFilter {
             builder.add_tags([tag]);
         }
 
-        let generic_attrs: HashSet<&str> =
-            ["class", "lang", "dir", "title"].into_iter().collect();
+        let generic_attrs: HashSet<&str> = [
+            "class",
+            "lang",
+            "dir",
+            "title",
+            "data-gallery-title",
+            "data-caption",
+            "data-article-id",
+            "data-slug",
+            "data-img",
+            "data-callout-kind",
+            "data-live-time",
+            "data-author",
+        ]
+        .into_iter()
+        .collect();
         builder.add_generic_attributes(generic_attrs);
 
         let mut tag_attrs: HashMap<&str, HashSet<&str>> = HashMap::new();
@@ -325,11 +340,11 @@ impl CentralSecurityFilter {
     pub fn security_headers_list(exec_us: u128, nonce: Option<&str>) -> Vec<(&'static str, String)> {
         let csp = if let Some(n) = nonce {
             format!(
-                "default-src 'self' https: data: blob:; script-src 'self' 'nonce-{}'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';",
+                "default-src 'self' https: data: blob:; script-src 'self' 'nonce-{}' 'wasm-unsafe-eval'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';",
                 n
             )
         } else {
-            "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';".to_string()
+            "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' https: 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' https: data:; frame-src 'self' https://www.paytr.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';".to_string()
         };
         vec![
             ("X-Content-Type-Options", "nosniff".to_string()),
@@ -523,12 +538,27 @@ pub fn check_form_timing(rendered_ts: Option<i64>) -> FormSpamResult {
     FormSpamResult::Passed
 }
 
+/// Client IP resolved by `waf_telemetry` with peer awareness.
+#[derive(Clone, Debug)]
+pub struct ResolvedClientIp {
+    pub ip: String,
+    pub was_forwarded: bool,
+}
+
 /// Checks per-form-type rate limiting for a given client IP.
 pub fn check_form_rate_limit(form_type: &str, client_ip: &str) -> FormSpamResult {
+    check_form_rate_limit_with_forwarded(form_type, client_ip, false)
+}
+
+/// Checks per-form-type rate limiting for a given client IP, never exempting forwarded loopback IPs.
+pub fn check_form_rate_limit_with_forwarded(
+    form_type: &str,
+    client_ip: &str,
+    was_forwarded: bool,
+) -> FormSpamResult {
     if client_ip.is_empty()
         || client_ip == "unknown"
-        || client_ip == "127.0.0.1"
-        || client_ip == "::1"
+        || (!was_forwarded && (client_ip == "127.0.0.1" || client_ip == "::1"))
     {
         return FormSpamResult::Passed;
     }
@@ -586,6 +616,24 @@ pub fn validate_form_submission(
     honeypot_value: Option<&str>,
     rendered_timestamp: Option<i64>,
 ) -> FormSpamResult {
+    validate_form_submission_with_forwarded(
+        form_type,
+        client_ip,
+        false,
+        honeypot_value,
+        rendered_timestamp,
+    )
+}
+
+/// Comprehensive form spam check with forwarded-IP awareness so spoofed `X-Forwarded-For: 127.0.0.1`
+/// cannot bypass per-form rate limits.
+pub fn validate_form_submission_with_forwarded(
+    form_type: &str,
+    client_ip: &str,
+    was_forwarded: bool,
+    honeypot_value: Option<&str>,
+    rendered_timestamp: Option<i64>,
+) -> FormSpamResult {
     // 1. Honeypot check (silent — don't reveal to attacker)
     if check_honeypot(honeypot_value) {
         return FormSpamResult::HoneypotTriggered;
@@ -596,7 +644,7 @@ pub fn validate_form_submission(
         return timing;
     }
     // 3. Rate limit check
-    check_form_rate_limit(form_type, client_ip)
+    check_form_rate_limit_with_forwarded(form_type, client_ip, was_forwarded)
 }
 
 static LOGIN_ATTEMPT_STORE: OnceCell<Mutex<HashMap<String, (u32, i64)>>> = OnceCell::new();
@@ -718,6 +766,21 @@ mod tests {
         assert!(clean.contains("<strong>KAAN</strong>"));
         assert!(clean.contains("src=\"images/msi/kaan.webp\""));
         assert!(!clean.contains("onerror"));
+        assert!(!clean.contains("<script"));
+        assert!(!clean.contains("javascript:"));
+    }
+
+    #[test]
+    fn sanitize_rich_html_preserves_editorial_blocks_and_blocks_xss() {
+        let dirty = r#"<section class="hf-gallery" data-gallery-title="Savunma"><figure class="hf-figure" data-caption="KAAN"><img src="/uploads/editorial/a.webp" alt="KAAN" onerror="alert(1)"></figure></section><aside class="hf-related-card" data-article-id="12" data-slug="kaan"><a href="javascript:alert(9)" onclick="steal()">Link</a><script>evil()</script></aside>"#;
+        let clean = sanitize_rich_html(dirty);
+        assert!(clean.contains("class=\"hf-gallery\""));
+        assert!(clean.contains("data-gallery-title=\"Savunma\""));
+        assert!(clean.contains("data-caption=\"KAAN\""));
+        assert!(clean.contains("data-article-id=\"12\""));
+        assert!(clean.contains("data-slug=\"kaan\""));
+        assert!(!clean.contains("onerror"));
+        assert!(!clean.contains("onclick"));
         assert!(!clean.contains("<script"));
         assert!(!clean.contains("javascript:"));
     }

@@ -17,13 +17,13 @@ pub use analytics::{
     AdAnalyticsReport, AnalyticsEvent, ContentAnalyticsReport, InstitutionBreakdownItem,
     ReaderAnalyticsReport,
 };
-pub use category::{CategoryNode, SsbInterestTag};
+pub use category::{CategoryNode, InstitutionCategory, SsbInterestTag};
 pub use commerce::{CommerceProduct, OrderInvoice, SubscriptionPlan};
 pub use content::{ApprovalRequest, ContentItem, ContentQueryResult};
 pub use magazine::{MagazineIssue, MagazinePageSpread};
-pub use notification::{NewsletterCampaign, SystemNotification};
+pub use notification::{B2bMonthlyReport, NewsletterCampaign, SystemNotification};
 pub use search::{FacetBucket, SearchFacetResponse, SearchFilterQuery};
 pub use security::SecurityAuditLog;
 pub use seo::{SeoMetaBundle, SeoRedirectRule};
 pub use settings::{RecommendationRule, RenewalReminderLog, SiteSetting};
-pub use user::{CorporateVerificationRequest, UserAccount};
+pub use user::{CorporateVerificationRequest, KvkkConsentLog, UserAccount};

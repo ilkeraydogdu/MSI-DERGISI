@@ -84,8 +84,21 @@ async fn render_search_page_for_lang(
         &snap.data.site_settings,
     );
 
-    let body_html = design_engine::render_search_and_filter_page(
+    let mut body_html = design_engine::render_search_and_filter_page(
         &lang, &facet_res, &q, &cat, &ssb, iss, &src, &sort, &state.translations,
+    );
+    body_html.push_str(
+        &crate::engine::design::components::sections::render_related_strip(
+            &snap.data.contents,
+            &crate::engine::design::components::sections::RelatedStripOptions {
+                lang: &lang,
+                is_current_sponsored: false,
+                exclude_ids: &[],
+                limit: 4,
+                tr: Some(&state.translations),
+                source_context: "search",
+            },
+        ),
     );
     let seo_title = tr_text(
         Some(&state.translations),
@@ -161,45 +174,87 @@ pub async fn render_account_page(
     );
     let ssb_tags = state.db.get_all_ssb_tags();
 
-    let admin_path_opt = if crate::extractors::operator_user::is_staff_role(&state.db, &user.role) {
-        Some(state.config.admin_path_secret.as_str())
-    } else {
-        None
-    };
+    let is_staff = crate::extractors::operator_user::is_staff_role(&state.db, &user.role);
+    let normalized_admin = is_staff
+        .then(|| crate::config::normalize_admin_path_secret(&state.config.admin_path_secret));
+    let admin_path_opt = normalized_admin.as_deref();
+    let can_access_design_studio = is_staff
+        && (crate::extractors::operator_user::role_has_permission(
+            &state.db,
+            &user.role,
+            "settings:read",
+        ) || crate::extractors::operator_user::role_has_permission(
+            &state.db,
+            &user.role,
+            "settings:write",
+        ));
 
     let institutions = crate::engine::design::labels_helper::institution_choices_from_db(&state.db);
-    let body_html = crate::engine::design::account::render_with_context(
-        &lang,
-        &user,
-        &reminders,
-        &invoices,
-        &notifications,
-        &ssb_tags,
-        admin_path_opt,
-        Some(tr),
-        &institutions,
-    );
-    let logged_title = tr_text(
-        Some(tr),
-        &lang,
-        "account.page_title_logged_in",
-        "Okuyucu & Abone Kontrol Merkezi",
-        "Reader & Subscriber Control Center",
-    );
+    let kvkk_logs = state.db.list_kvkk_consent_logs_for_user(user.id, &user.email);
+    let snap = CentralQueryEngine::snapshot(&state.db).data;
+    let allowed_contents: Vec<ContentItem> = snap
+        .contents
+        .iter()
+        .filter(|c| content_service::user_matches_target_institutions(c, Some(&user), &state.db))
+        .cloned()
+        .collect();
+    let mut issues = snap.issues.clone();
+    issues.sort_by(|a, b| {
+        b.issue_number
+            .cmp(&a.issue_number)
+            .then_with(|| b.year.cmp(&a.year))
+    });
+    let corporate_requests: Vec<crate::models::CorporateVerificationRequest> = state
+        .db
+        .get_corporate_requests()
+        .into_iter()
+        .filter(|r| r.user_id == user.id || r.email.eq_ignore_ascii_case(&user.email))
+        .collect();
+    let purchased_codes = state.db.get_user_purchased_codes(&user.email);
+    let has_subscriber_access = content_service::user_has_subscriber_access(&user);
+    let can_download_edergi = has_subscriber_access && (user.email_verified || is_staff);
 
-    Html(home::render_shared_shell_with_request(
-        &state,
-        &lang,
-        &logged_title,
-        &body_html,
-        Some("/hesabim"),
-        None,
-        true,
-        Some(&csp_nonce.0),
-        Some(&headers),
-        None,
-    ))
-    .into_response()
+    let payment_success = params
+        .get("payment")
+        .map(|v| v.eq_ignore_ascii_case("success"))
+        .unwrap_or(false);
+    let payment_oid = params.get("oid").map(String::as_str);
+    let verify_email_prompt = params
+        .get("verify_email")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    let next_url = params.get("next").map(String::as_str);
+    let active_tab = params.get("tab").map(String::as_str);
+
+    let ctx = crate::engine::design::account::AccountPortalContext {
+        lang: &lang,
+        user: &user,
+        reminders: &reminders,
+        invoices: &invoices,
+        notifications: &notifications,
+        tags: &ssb_tags,
+        admin_path_opt,
+        tr: Some(tr),
+        institutions: &institutions,
+        kvkk_logs: &kvkk_logs,
+        contents: &allowed_contents,
+        issues: &issues,
+        corporate_requests: &corporate_requests,
+        purchased_codes: &purchased_codes,
+        can_download_edergi,
+        has_subscriber_access,
+        can_access_design_studio,
+        hints: crate::engine::design::account::PortalQueryHints {
+            payment_success,
+            payment_oid,
+            verify_email_prompt,
+            next_url,
+            active_tab,
+        },
+        csp_nonce: Some(&csp_nonce.0),
+    };
+
+    Html(crate::engine::design::account::render_portal_document(&ctx)).into_response()
 }
 
 pub async fn render_reset_password_page(
@@ -258,6 +313,44 @@ pub async fn render_reset_password_page(
         "Şifre Sıfırlama",
         "Reset Password",
     );
+    let pw_hint = tr_text(
+        tr,
+        &lang,
+        "auth.reset_pw_hint",
+        "En az 8 karakter kullanın; büyük/küçük harf ve rakam önerilir.",
+        "Use at least 8 characters; mixing upper/lowercase letters and numbers is recommended.",
+    );
+    let missing_token_title = tr_text(
+        tr,
+        &lang,
+        "auth.reset_missing_token_title",
+        "Sıfırlama bağlantısı eksik veya geçersiz",
+        "Reset token missing or incomplete",
+    );
+    let missing_token_desc = tr_text(
+        tr,
+        &lang,
+        "auth.reset_missing_token_desc",
+        "E-postanızdaki şifre sıfırlama bağlantısına tıklayarak devam edin veya Hesabım sayfasından yeni bir sıfırlama bağlantısı isteyin.",
+        "Open this page using the reset link in your email, or request a new reset link from My Account.",
+    );
+    let back_account_lbl = tr_text(
+        tr,
+        &lang,
+        "auth.reset_back_account",
+        "← Hesabım / Giriş sayfasına dön",
+        "← Back to My Account / Sign in",
+    );
+    let account_href = crate::engine::design::labels_helper::lang_href("/hesabim", &lang);
+    let token_banner = if raw_token.is_empty() {
+        format!(
+            r#"<div class="auth-step-banner is-warning" role="note"><strong>{title}</strong><p>{desc}</p></div>"#,
+            title = esc(&missing_token_title),
+            desc = esc(&missing_token_desc),
+        )
+    } else {
+        String::new()
+    };
 
     let body_html = format!(
         r#"<section class="container section-space">
@@ -265,22 +358,30 @@ pub async fn render_reset_password_page(
     <div class="eyebrow">{eyebrow}</div>
     <h1>{heading}</h1>
     <p>{desc}</p>
+    {token_banner}
     <form id="reset-password-form" class="ui-form">
       <input type="hidden" name="token" value="{escaped_token}">
-      <label>{new_pw_lbl}<input type="password" name="new_password" required minlength="8" autocomplete="new-password" placeholder="••••••••"></label>
+      <label>{new_pw_lbl}<input type="password" name="new_password" required minlength="8" autocomplete="new-password" placeholder="••••••••"><small class="auth-field-hint">{pw_hint}</small></label>
       <label>{confirm_pw_lbl}<input type="password" name="confirm_password" required minlength="8" autocomplete="new-password" placeholder="••••••••"></label>
       <p class="form-feedback" data-feedback role="status"></p>
       <button type="submit" class="button primary">{submit_lbl}</button>
     </form>
+    <div class="reset-password-footer">
+      <a href="{account_href}" class="text-link">{back_account_lbl}</a>
+    </div>
   </div>
 </section>"#,
         eyebrow = esc(&eyebrow),
         heading = esc(&heading),
         desc = esc(&desc),
+        token_banner = token_banner,
         escaped_token = escaped_token,
         new_pw_lbl = esc(&new_pw_lbl),
+        pw_hint = esc(&pw_hint),
         confirm_pw_lbl = esc(&confirm_pw_lbl),
         submit_lbl = esc(&submit_lbl),
+        account_href = esc(&account_href),
+        back_account_lbl = esc(&back_account_lbl),
     );
 
     Html(home::render_shared_shell_with_request(

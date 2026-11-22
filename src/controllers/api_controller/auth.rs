@@ -13,6 +13,10 @@ pub struct RegisterPayload {
     pub request_message: Option<String>,
     pub kvkk_acknowledged: Option<bool>,
     pub kvkk_consent: Option<bool>,
+    #[serde(default)]
+    pub tos_accepted: Option<bool>,
+    #[serde(default)]
+    pub tos_version: Option<String>,
     pub email_consent: Option<bool>,
     pub ssb_interests: Option<Vec<String>>,
     /// Honeypot field — must be empty. Hidden from real users via CSS.
@@ -25,16 +29,18 @@ pub struct RegisterPayload {
 
 pub async fn register_user(
     State(state): State<AppState>,
+    opt_ip: Option<Extension<security_engine::ResolvedClientIp>>,
     headers: HeaderMap,
     Json(payload): Json<RegisterPayload>,
 ) -> Response {
     let lang = "tr";
-    let client_ip = extract_client_ip(&headers);
+    let (client_ip, was_forwarded) = resolve_client_ip_with_forwarded(opt_ip.as_ref(), &headers);
 
     // ── Form Spam Protection (honeypot + timing + per-form rate limit) ──
-    let spam_result = security_engine::validate_form_submission(
+    let spam_result = security_engine::validate_form_submission_with_forwarded(
         "register",
         &client_ip,
+        was_forwarded,
         payload.website_url.as_deref(),
         payload._form_ts,
     );
@@ -100,11 +106,18 @@ pub async fn register_user(
             .into_response()
         }
     };
+    let has_explicit_tos_version = payload
+        .tos_version
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|s| !s.is_empty());
     if matches!(
         validation_engine::validate_required_text(&payload.full_name),
         validation_engine::TextFieldValidation::Empty
     ) || payload.kvkk_consent != Some(true)
         || payload.kvkk_acknowledged == Some(false)
+        || payload.tos_accepted == Some(false)
+        || (payload.tos_accepted.is_none() && has_explicit_tos_version)
     {
         return ApiResponse::error(
             &state.translations,
@@ -131,7 +144,6 @@ pub async fn register_user(
 
     let now = chrono::Utc::now();
     let now_iso = now.to_rfc3339();
-    let client_ip = extract_client_ip(&headers);
     let kvkk_hash = auth_service::generate_kvkk_consent_hash(
         &email,
         &client_ip,
@@ -147,6 +159,13 @@ pub async fn register_user(
     };
 
     let user_email_consent = payload.email_consent.unwrap_or(false);
+    let tos_ver = payload
+        .tos_version
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("2026-01")
+        .to_string();
     let mut user = UserAccount {
         id: 0,
         email: email.clone(),
@@ -160,14 +179,16 @@ pub async fn register_user(
         subscription_expires_at: sub_expires,
         reminders_halted: false,
         kvkk_consent_at: now_iso.clone(),
-        kvkk_consent_ip: client_ip,
-        kvkk_consent_hash: kvkk_hash,
+        kvkk_consent_ip: client_ip.clone(),
+        kvkk_consent_hash: kvkk_hash.clone(),
         email_consent: user_email_consent,
         ssb_interests: payload.ssb_interests.unwrap_or_default(),
         created_at: now_iso[..10].to_string(),
         email_verified: false,
         marketing_emails_opted_in: user_email_consent,
         totp_enabled: false,
+        tos_accepted_at: now_iso.clone(),
+        tos_version: tos_ver.clone(),
     };
 
     let uid = match state.db.create_or_update_user(&user, &pw_hash) {
@@ -184,6 +205,24 @@ pub async fn register_user(
         }
     };
     user.id = uid;
+
+    for (consent_type, accepted) in [
+        ("kvkk", true),
+        ("tos", payload.tos_accepted.unwrap_or(true)),
+        ("etk", user_email_consent),
+    ] {
+        let _ = state.db.insert_kvkk_consent_log(&crate::models::KvkkConsentLog {
+            id: 0,
+            user_id: Some(uid),
+            email: email.clone(),
+            consent_type: consent_type.to_string(),
+            consent_version: tos_ver.clone(),
+            accepted,
+            ip_address: client_ip.clone(),
+            consent_hash: kvkk_hash.clone(),
+            created_at: now_iso.clone(),
+        });
+    }
 
     let req_msg = payload.request_message.unwrap_or_default();
     let mut verification_queued = false;
@@ -285,15 +324,17 @@ pub struct LoginPayload {
 
 pub async fn login_user(
     State(state): State<AppState>,
+    opt_ip: Option<Extension<security_engine::ResolvedClientIp>>,
     headers: HeaderMap,
     Json(payload): Json<LoginPayload>,
 ) -> Response {
-    let client_ip = extract_client_ip(&headers);
+    let (client_ip, was_forwarded) = resolve_client_ip_with_forwarded(opt_ip.as_ref(), &headers);
 
     // ── Form Spam Protection (honeypot + timing + per-form rate limit) ──
-    let spam_result = security_engine::validate_form_submission(
+    let spam_result = security_engine::validate_form_submission_with_forwarded(
         "login",
         &client_ip,
+        was_forwarded,
         payload.website_url.as_deref(),
         payload._form_ts,
     );
@@ -311,6 +352,17 @@ pub async fn login_user(
             .into_response();
         }
         security_engine::FormSpamResult::TimingViolation(_) | security_engine::FormSpamResult::RateLimited { .. } => {
+            let _ = state.db.insert_security_audit_log(&crate::models::SecurityAuditLog {
+                id: 0,
+                client_ip: client_ip.clone(),
+                request_path: "/api/v1/auth/login".to_string(),
+                event_type: "AUTH_RATE_LIMITED".to_string(),
+                threat_level: "high".to_string(),
+                details: json!({ "scope": "login_form" }).to_string(),
+                blocked: true,
+                created_at: chrono::Utc::now().to_rfc3339(),
+            });
+            let _ = crate::services::security_anomaly_service::evaluate_and_emit_anomalies(&state.db);
             return ApiResponse::error(
                 &state.translations,
                 "tr",
@@ -324,7 +376,7 @@ pub async fn login_user(
 
     let norm_email = payload.email.trim().to_lowercase();
     let ip_email_key = format!("ip:{}:{}", client_ip, norm_email);
-    let is_loopback = client_ip == "127.0.0.1" || client_ip == "::1";
+    let is_loopback = !was_forwarded && (client_ip == "127.0.0.1" || client_ip == "::1");
     let ip_global_key = format!("ip_global:{}", client_ip);
 
     // 1. Brute-force lockout enforcement (email + IP)
@@ -345,6 +397,21 @@ pub async fn login_user(
             attempts,
         } = security_engine::check_login_allowed(check_key)
         {
+            let _ = state.db.insert_security_audit_log(&crate::models::SecurityAuditLog {
+                id: 0,
+                client_ip: client_ip.clone(),
+                request_path: "/api/v1/auth/login".to_string(),
+                event_type: "AUTH_ACCOUNT_LOCKED".to_string(),
+                threat_level: "high".to_string(),
+                details: json!({
+                    "attempts": attempts,
+                    "remaining_secs": remaining_secs
+                })
+                .to_string(),
+                blocked: true,
+                created_at: chrono::Utc::now().to_rfc3339(),
+            });
+            let _ = crate::services::security_anomaly_service::evaluate_and_emit_anomalies(&state.db);
             return (
                 StatusCode::TOO_MANY_REQUESTS,
                 Json(json!({
@@ -433,6 +500,18 @@ pub async fn login_user(
     if !is_loopback {
         security_engine::record_failed_login(&ip_global_key);
     }
+    let email_domain = norm_email.split('@').nth(1).unwrap_or("");
+    let _ = state.db.insert_security_audit_log(&crate::models::SecurityAuditLog {
+        id: 0,
+        client_ip,
+        request_path: "/api/v1/auth/login".to_string(),
+        event_type: "AUTH_LOGIN_FAILED".to_string(),
+        threat_level: "medium".to_string(),
+        details: json!({ "email_domain": email_domain }).to_string(),
+        blocked: false,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    });
+    let _ = crate::services::security_anomaly_service::evaluate_and_emit_anomalies(&state.db);
 
     ApiResponse::error(
         &state.translations,
@@ -447,7 +526,7 @@ pub async fn login_user(
 
 pub async fn logout_user(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if let Some(raw_token) = extract_raw_session_cookie(&headers) {
-        auth_service::revoke_session_token(raw_token);
+        auth_service::revoke_session_token_db(&state.db, raw_token);
     }
     let secure = cookie_secure_flag(&headers, &state.config.public_url);
     let cookie = format!(

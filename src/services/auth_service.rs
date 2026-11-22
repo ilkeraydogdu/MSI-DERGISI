@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::RwLock;
 
 use argon2::{
@@ -19,9 +19,11 @@ type HmacSha256 = Hmac<Sha256>;
 /// Time-to-live (in seconds) for dedicated TOTP 2FA pending challenge tokens (5 minutes).
 const TOTP_PENDING_TTL_SECS: i64 = 300;
 
-/// In-memory store of revoked session tokens for server-side logout enforcement.
-/// Cleared if the set exceeds 10,000 entries (tokens expire naturally after 24h).
-static REVOKED_TOKENS: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
+/// In-memory L1 cache of SHA-256 revoked token hashes -> expiration unix timestamp.
+/// Overflow evicts ONLY already-expired entries (never clears active revocations),
+/// and SQLite `revoked_tokens` serves as the durable backing store across restarts.
+static REVOKED_TOKEN_HASHES: Lazy<RwLock<HashMap<String, i64>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Legacy seed secret retained strictly for transparent migration of pre-Argon2id hashes on login.
 fn legacy_seed_secret() -> String {
@@ -214,26 +216,131 @@ pub fn generate_session_token(user: &UserAccount, secret: &str) -> String {
     format!("{}.{}", payload, sig)
 }
 
-/// Revokes a session (or pending 2FA) token so it can no longer be used for authentication.
+fn extract_token_expiry_ts(trimmed: &str) -> i64 {
+    let now = Utc::now().timestamp();
+    let parts: Vec<&str> = trimmed.split('.').collect();
+    if parts.len() == 5 {
+        if let Ok(issued_ts) = parts[2].parse::<i64>() {
+            return issued_ts.saturating_add(86_400);
+        }
+    } else if parts.len() == 4 {
+        if let Ok(issued_ts) = parts[1].parse::<i64>() {
+            return issued_ts.saturating_add(TOTP_PENDING_TTL_SECS);
+        }
+    }
+    now.saturating_add(86_400)
+}
+
+fn cache_revoked_token_hash(token_hash: String, expires_ts: i64) {
+    if let Ok(mut map) = REVOKED_TOKEN_HASHES.write() {
+        if map.len() >= 10_000 {
+            let now = Utc::now().timestamp();
+            map.retain(|_, exp| *exp > now);
+        }
+        map.insert(token_hash, expires_ts);
+    }
+}
+
+/// Clears only the in-memory revocation cache (useful for testing DB persistence across restarts).
+pub fn clear_in_memory_revocation_cache() {
+    if let Ok(mut map) = REVOKED_TOKEN_HASHES.write() {
+        map.clear();
+    }
+}
+
+/// Revokes a session (or pending 2FA) token in memory so it can no longer be used for authentication.
 pub fn revoke_session_token(token: &str) {
     let trimmed = token.trim();
     if trimmed.is_empty() {
         return;
     }
-    if let Ok(mut set) = REVOKED_TOKENS.write() {
-        if set.len() >= 10_000 {
-            set.clear();
-        }
-        set.insert(trimmed.to_string());
-    }
+    let token_hash = crate::utils::crypto::sha256_hex(trimmed);
+    let expires_ts = extract_token_expiry_ts(trimmed);
+    cache_revoked_token_hash(token_hash, expires_ts);
 }
 
-/// Returns `true` if the given token has been explicitly revoked via `revoke_session_token`.
+/// Revokes a session (or pending 2FA) token persistently in SQLite (`revoked_tokens`)
+/// and updates the in-memory hash cache, opportunistically pruning expired rows.
+pub fn revoke_session_token_db(db: &crate::db::Database, token: &str) {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    let token_hash = crate::utils::crypto::sha256_hex(trimmed);
+    let expires_ts = extract_token_expiry_ts(trimmed);
+    cache_revoked_token_hash(token_hash.clone(), expires_ts);
+
+    let expires_at = chrono::DateTime::<Utc>::from_timestamp(expires_ts, 0)
+        .unwrap_or_else(Utc::now)
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let _ = db.revoke_token_hash(&token_hash, &expires_at);
+    let _ = db.cleanup_expired_revoked_tokens();
+}
+
+/// Returns `true` if the given token has been explicitly revoked in the in-memory cache.
 pub fn is_token_revoked(token: &str) -> bool {
-    REVOKED_TOKENS
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let token_hash = crate::utils::crypto::sha256_hex(trimmed);
+    REVOKED_TOKEN_HASHES
         .read()
-        .map(|set| set.contains(token.trim()))
+        .map(|map| map.contains_key(&token_hash))
         .unwrap_or(false)
+}
+
+/// Returns `true` if the given token has been revoked in memory or in SQLite `revoked_tokens`.
+pub fn is_token_revoked_db(db: &crate::db::Database, token: &str) -> bool {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if is_token_revoked(trimmed) {
+        return true;
+    }
+    let token_hash = crate::utils::crypto::sha256_hex(trimmed);
+    if db.is_token_hash_revoked(&token_hash) {
+        cache_revoked_token_hash(token_hash, extract_token_expiry_ts(trimmed));
+        return true;
+    }
+    false
+}
+
+/// Returns `true` when the account has been soft-deleted / KVKK-erased and must
+/// never be allowed to authenticate (including via pre-existing sibling cookies).
+pub fn is_deleted_or_erased_user(user: &UserAccount) -> bool {
+    let role = user.role.trim();
+    let email = user.email.trim();
+    role.eq_ignore_ascii_case("deleted")
+        || email.is_empty()
+        || email.to_ascii_lowercase().ends_with("@erased.local")
+}
+
+/// Verifies a signed session token against both in-memory cache and SQLite `revoked_tokens`.
+pub fn verify_session_token_db(db: &crate::db::Database, token: &str, secret: &str) -> Option<i64> {
+    if is_token_revoked_db(db, token) {
+        return None;
+    }
+    let uid = verify_session_token(token, secret)?;
+    if let Some(user) = db.get_user_by_id(uid) {
+        if is_deleted_or_erased_user(&user) {
+            return None;
+        }
+    }
+    Some(uid)
+}
+
+/// Verifies a signed TOTP pending token against both in-memory cache and SQLite `revoked_tokens`.
+pub fn verify_totp_pending_token_db(
+    db: &crate::db::Database,
+    token: &str,
+    secret: &str,
+) -> Option<String> {
+    if is_token_revoked_db(db, token) {
+        return None;
+    }
+    verify_totp_pending_token(token, secret)
 }
 
 /// Verifies a signed session token and returns `Some(user_id)` if authentic, untampered,
@@ -332,14 +439,22 @@ pub fn session_user(
     headers: &axum::http::HeaderMap,
 ) -> Option<UserAccount> {
     let token = headers
-        .get(axum::http::header::COOKIE)?
-        .to_str()
-        .ok()?
-        .split(';')
-        .find_map(|p| p.trim().strip_prefix("msi_session="))?;
-    state
-        .db
-        .get_user_by_id(verify_session_token(token, &state.config.session_secret)?)
+        .get_all(axum::http::header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|cookies| cookies.split(';'))
+        .find_map(|p| {
+            p.trim()
+                .strip_prefix("msi_session=")
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+        })?;
+    let user_id = verify_session_token_db(&state.db, token, &state.config.session_secret)?;
+    let user = state.db.get_user_by_id(user_id)?;
+    if is_deleted_or_erased_user(&user) {
+        return None;
+    }
+    Some(user)
 }
 
 /// Determines the initial `(role, subscription_tier, is_gov_verified)` tuple for a newly registering user.
@@ -549,6 +664,8 @@ mod tests {
             email_verified: true,
             marketing_emails_opted_in: true,
             totp_enabled: true,
+            tos_accepted_at: "2026-01-01T00:00:00Z".to_string(),
+            tos_version: "2026-01".to_string(),
         }
     }
 
@@ -607,5 +724,116 @@ mod tests {
         // Critical security invariant: session token MUST fail pending 2FA verification
         let session_tok = generate_session_token(&user, secret);
         assert_eq!(verify_totp_pending_token(&session_tok, secret), None);
+    }
+
+    #[test]
+    fn persistent_token_revocation_survives_cache_clear_and_cleans_expired_rows() {
+        let db_path = format!(
+            "/tmp/msi_test_revoked_{}_{}.db",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap_or(1)
+        );
+        let db = crate::db::Database::new(&db_path).expect("test db");
+        let secret = "persistent-revocation-secret";
+        let user = sample_user();
+        let tok = generate_session_token(&user, secret);
+        let tok_hash = crate::utils::crypto::sha256_hex(&tok);
+
+        assert_eq!(verify_session_token_db(&db, &tok, secret), Some(42));
+        revoke_session_token_db(&db, &tok);
+        assert_eq!(verify_session_token_db(&db, &tok, secret), None);
+
+        // Simulate process restart: wipe in-memory cache and reopen DB handle
+        clear_in_memory_revocation_cache();
+        drop(db);
+
+        let db2 = crate::db::Database::new(&db_path).expect("reopened db");
+        assert_eq!(verify_session_token_db(&db2, &tok, secret), None);
+
+        // Verify SHA-256 hash stored (never raw token)
+        let conn = db2.open_conn().unwrap();
+        let stored_by_hash: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM revoked_tokens WHERE token_hash = ?1",
+                rusqlite::params![tok_hash],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let stored_raw: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM revoked_tokens WHERE token_hash = ?1",
+                rusqlite::params![tok],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored_by_hash, 1);
+        assert_eq!(stored_raw, 0);
+        drop(conn);
+
+        // Expired row cleanup removes only expired tokens
+        db2.revoke_token_hash("expired_hash_test", "2020-01-01T00:00:00Z")
+            .unwrap();
+        let cleaned = db2.cleanup_expired_revoked_tokens();
+        assert_eq!(cleaned, 1);
+        assert!(!db2.is_token_hash_revoked("expired_hash_test"));
+        assert!(db2.is_token_hash_revoked(&tok_hash));
+
+        drop(db2);
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(format!("{}-wal", db_path));
+        let _ = std::fs::remove_file(format!("{}-shm", db_path));
+    }
+
+    #[test]
+    fn deleted_account_invalidates_sibling_sessions_immediately_and_across_reopen() {
+        let scratch_dir = std::env::temp_dir().join(format!(
+            "msi_test_sibling_erasure_{}_{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap_or(1)
+        ));
+        let _ = std::fs::create_dir_all(&scratch_dir);
+        let db_path = scratch_dir.join("test.db").to_string_lossy().to_string();
+        let db = crate::db::Database::new(&db_path).expect("test db");
+        let secret = "sibling-erasure-test-secret";
+
+        let mut new_user = sample_user();
+        new_user.id = 0;
+        new_user.email = "sibling-kvkk@example.com".to_string();
+        new_user.role = "registered".to_string();
+        let pw_hash = hash_password("StrongPass!2026", secret);
+        let uid = db.create_or_update_user(&new_user, &pw_hash).expect("create user");
+        let db_user = db.get_user_by_id(uid).expect("user exists");
+        assert!(!is_deleted_or_erased_user(&db_user));
+
+        let tok_a = generate_session_token(&db_user, secret);
+        let tok_b = generate_session_token(&db_user, secret);
+        assert_ne!(tok_a, tok_b);
+        assert_eq!(verify_session_token_db(&db, &tok_a, secret), Some(uid));
+        assert_eq!(verify_session_token_db(&db, &tok_b, secret), Some(uid));
+
+        // Browser B deletes account and revokes tok_b; sibling tok_a was never explicitly revoked
+        db.delete_user_account(uid, "127.0.0.1")
+            .expect("delete_user_account");
+        revoke_session_token_db(&db, &tok_b);
+
+        // Database::get_user_by_id must keep returning anonymized row (option_b_api_test:544-546)
+        let erased = db.get_user_by_id(uid).expect("anonymized row preserved");
+        assert_eq!(erased.role, "deleted");
+        assert!(erased.email.ends_with("@erased.local"));
+        assert!(is_deleted_or_erased_user(&erased));
+
+        // Both tok_a (sibling) and tok_b (revoked) are rejected immediately
+        assert_eq!(verify_session_token_db(&db, &tok_a, secret), None);
+        assert_eq!(verify_session_token_db(&db, &tok_b, secret), None);
+
+        // Across cache clear & SQLite reopen from disk, both remain rejected
+        clear_in_memory_revocation_cache();
+        drop(db);
+        let db2 = crate::db::Database::new(&db_path).expect("reopened db");
+        assert_eq!(verify_session_token_db(&db2, &tok_a, secret), None);
+        assert_eq!(verify_session_token_db(&db2, &tok_b, secret), None);
+
+        drop(db2);
+        let _ = std::fs::remove_dir_all(&scratch_dir);
     }
 }

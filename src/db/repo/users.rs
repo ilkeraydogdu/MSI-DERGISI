@@ -11,7 +11,9 @@ impl Database {
                     email_consent, ssb_interests_json, created_at,
                     COALESCE(email_verified, 0),
                     COALESCE(marketing_emails_opted_in, 1),
-                    CASE WHEN totp_secret IS NOT NULL AND totp_secret != '' THEN 1 ELSE 0 END
+                    CASE WHEN totp_secret IS NOT NULL AND totp_secret != '' THEN 1 ELSE 0 END,
+                    COALESCE(tos_accepted_at, ''),
+                    COALESCE(tos_version, '2026-01')
              FROM users ORDER BY id ASC",
             [],
             |r| {
@@ -38,6 +40,8 @@ impl Database {
                     email_verified: r.get::<_, i32>(17)? != 0,
                     marketing_emails_opted_in: r.get::<_, i32>(18)? != 0,
                     totp_enabled: r.get::<_, i32>(19)? != 0,
+                    tos_accepted_at: r.get(20)?,
+                    tos_version: r.get(21)?,
                 })
             },
         )
@@ -88,7 +92,9 @@ impl Database {
                             email_consent, ssb_interests_json, created_at,
                             COALESCE(email_verified, 0),
                             COALESCE(marketing_emails_opted_in, 1),
-                            CASE WHEN totp_secret IS NOT NULL AND totp_secret != '' THEN 1 ELSE 0 END
+                            CASE WHEN totp_secret IS NOT NULL AND totp_secret != '' THEN 1 ELSE 0 END,
+                            COALESCE(tos_accepted_at, ''),
+                            COALESCE(tos_version, '2026-01')
                      FROM users WHERE LOWER(email) = ?1",
                     params![norm.as_str()],
                     |r| {
@@ -115,6 +121,8 @@ impl Database {
                             email_verified: r.get::<_, i32>(17)? != 0,
                             marketing_emails_opted_in: r.get::<_, i32>(18)? != 0,
                             totp_enabled: r.get::<_, i32>(19)? != 0,
+                            tos_accepted_at: r.get(20)?,
+                            tos_version: r.get(21)?,
                         })
                     },
                 );
@@ -242,6 +250,8 @@ impl Database {
             Err(_) => vec![],
         };
 
+        let kvkk_logs = self.list_kvkk_consent_logs_for_user(user_id, &user.email);
+
         Some(serde_json::json!({
             "exported_at": chrono::Utc::now().to_rfc3339(),
             "data_controller": "UMSA Prodüksiyon - MSI Dergisi",
@@ -260,14 +270,19 @@ impl Database {
                 "ssb_interests": user.ssb_interests,
                 "email_verified": user.email_verified,
                 "totp_enabled": user.totp_enabled,
+                "tos_accepted_at": user.tos_accepted_at,
+                "tos_version": user.tos_version,
                 "created_at": user.created_at
             },
             "consent_records": {
                 "kvkk_consent_at": user.kvkk_consent_at,
                 "kvkk_consent_ip": user.kvkk_consent_ip,
                 "kvkk_consent_hash": user.kvkk_consent_hash,
+                "tos_accepted_at": user.tos_accepted_at,
+                "tos_version": user.tos_version,
                 "email_consent": user.email_consent,
-                "marketing_emails_opted_in": user.marketing_emails_opted_in
+                "marketing_emails_opted_in": user.marketing_emails_opted_in,
+                "kvkk_consent_logs": kvkk_logs
             },
             "orders": orders,
             "purchased_item_codes": purchased_codes,
@@ -275,6 +290,68 @@ impl Database {
             "corporate_verification_requests": corporate_requests,
             "renewal_reminders": renewal_reminders
         }))
+    }
+
+    pub fn insert_kvkk_consent_log(&self, log: &crate::models::KvkkConsentLog) -> rusqlite::Result<i64> {
+        let conn = self.open_conn().map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+        let norm_email = log.email.trim().to_lowercase();
+        let version = if log.consent_version.trim().is_empty() {
+            "2026-01"
+        } else {
+            log.consent_version.trim()
+        };
+        let created_at = if log.created_at.trim().is_empty() {
+            chrono::Utc::now().to_rfc3339()
+        } else {
+            log.created_at.trim().to_string()
+        };
+        let accepted_int: i32 = if log.accepted { 1 } else { 0 };
+        conn.execute(
+            "INSERT INTO kvkk_consent_logs (
+                user_id, email, consent_type, consent_version, accepted, ip_address, consent_hash, created_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                log.user_id,
+                norm_email,
+                log.consent_type.trim(),
+                version,
+                accepted_int,
+                log.ip_address.trim(),
+                log.consent_hash.trim(),
+                created_at
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn list_kvkk_consent_logs_for_user(
+        &self,
+        user_id: i64,
+        email: &str,
+    ) -> Vec<crate::models::KvkkConsentLog> {
+        let norm_email = email.trim().to_lowercase();
+        crate::db::query_helpers::query_all(
+            self,
+            "SELECT id, user_id, email, consent_type, consent_version, accepted, ip_address, consent_hash, created_at
+             FROM kvkk_consent_logs
+             WHERE user_id = ?1 OR (email != '' AND LOWER(email) = ?2)
+             ORDER BY created_at DESC, id DESC
+             LIMIT 100",
+            params![user_id, norm_email],
+            |r| {
+                Ok(crate::models::KvkkConsentLog {
+                    id: r.get(0)?,
+                    user_id: r.get(1)?,
+                    email: r.get(2)?,
+                    consent_type: r.get(3)?,
+                    consent_version: r.get(4)?,
+                    accepted: r.get::<_, i32>(5)? != 0,
+                    ip_address: r.get(6)?,
+                    consent_hash: r.get(7)?,
+                    created_at: r.get(8)?,
+                })
+            },
+        )
     }
 
     pub fn create_or_update_user(
@@ -286,13 +363,19 @@ impl Database {
         let ssb_json =
             serde_json::to_string(&user.ssb_interests).unwrap_or_else(|_| "[]".to_string());
         let norm_email = user.email.trim().to_lowercase();
+        let tos_ver = if user.tos_version.trim().is_empty() {
+            "2026-01"
+        } else {
+            user.tos_version.trim()
+        };
         conn.execute(
             "INSERT INTO users (
                 email, password_hash, full_name, role, organization_category, organization_name,
                 job_title, is_gov_verified, subscription_tier, subscription_expires_at,
                 reminders_halted, kvkk_consent_at, kvkk_consent_ip, kvkk_consent_hash,
-                email_consent, ssb_interests_json, created_at, email_verified, marketing_emails_opted_in
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+                email_consent, ssb_interests_json, created_at, email_verified, marketing_emails_opted_in,
+                tos_accepted_at, tos_version
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
             ON CONFLICT(email) DO UPDATE SET
                 password_hash = excluded.password_hash,
                 full_name = excluded.full_name,
@@ -307,7 +390,9 @@ impl Database {
                 email_consent = excluded.email_consent,
                 ssb_interests_json = excluded.ssb_interests_json,
                 email_verified = excluded.email_verified,
-                marketing_emails_opted_in = excluded.marketing_emails_opted_in",
+                marketing_emails_opted_in = excluded.marketing_emails_opted_in,
+                tos_accepted_at = CASE WHEN excluded.tos_accepted_at != '' THEN excluded.tos_accepted_at ELSE users.tos_accepted_at END,
+                tos_version = CASE WHEN excluded.tos_version != '' THEN excluded.tos_version ELSE users.tos_version END",
             params![
                 norm_email,
                 password_hash,
@@ -327,7 +412,9 @@ impl Database {
                 ssb_json,
                 user.created_at,
                 if user.email_verified { 1 } else { 0 },
-                if user.marketing_emails_opted_in { 1 } else { 0 }
+                if user.marketing_emails_opted_in { 1 } else { 0 },
+                user.tos_accepted_at,
+                tos_ver
             ],
         )?;
         let uid: i64 = conn.query_row(
@@ -487,10 +574,22 @@ impl Database {
                 totp_backup_codes_json = '[]',
                 subscription_tier = '',
                 subscription_expires_at = NULL,
+                tos_accepted_at = '',
                 role = 'deleted'
              WHERE id = ?2",
             params![anonymized_email, user_id],
         )?;
+
+        // 2b. Anonymize PII in kvkk_consent_logs and append immutable erasure entry
+        let _ = tx.execute(
+            "UPDATE kvkk_consent_logs SET email = ?1, ip_address = '' WHERE user_id = ?2 OR LOWER(email) = LOWER(?3)",
+            params![anonymized_email, user_id, original_email],
+        );
+        let _ = tx.execute(
+            "INSERT INTO kvkk_consent_logs (user_id, email, consent_type, consent_version, accepted, ip_address, consent_hash, created_at)
+             VALUES (?1, ?2, 'erasure', '2026-01', 1, '', ?3, ?4)",
+            params![user_id, anonymized_email, format!("ERASURE-{}", user_id), now],
+        );
 
         // 3. Anonymize order_invoices (retained for tax compliance) using original_email
         let _ = tx.execute(

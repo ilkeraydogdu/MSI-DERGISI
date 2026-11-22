@@ -66,6 +66,7 @@ pub fn spawn_monitoring_worker(state: AppState, cancel: CancellationToken) {
                         &state.db,
                         &cache,
                     ).await;
+                    let _ = crate::services::security_anomaly_service::evaluate_and_emit_anomalies(&state.db);
                 }
                 _ = slow_t.tick() => {
                     ms::tick_slow_checks(

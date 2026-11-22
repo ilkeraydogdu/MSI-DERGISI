@@ -96,7 +96,82 @@ pub async fn send_raw_mime_with_unsubscribe(
 ) -> Result<bool, String> {
     let raw_msg =
         build_mime_email_with_unsubscribe(&config.smtp_from, to, subject, html_body, unsub_url);
+    dispatch_mime_via_sendmail(config, to, &raw_msg).await
+}
 
+fn chunk_base64(input: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD
+        .encode(input)
+        .as_bytes()
+        .chunks(76)
+        .map(|chunk| std::str::from_utf8(chunk).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+/// Builds an RFC 2046 `multipart/alternative` MIME message containing both
+/// Base64-encoded `text/plain; charset=UTF-8` and `text/html; charset=UTF-8` parts.
+pub fn build_multipart_mime_email(
+    from: &str,
+    to: &str,
+    subject: &str,
+    text_body: &str,
+    html_body: &str,
+) -> String {
+    let encoded_subject = encode_rfc2047_utf8(subject);
+    let boundary = format!("----=_MSI_ALT_{}", uuid::Uuid::new_v4().simple());
+    let text_b64 = chunk_base64(text_body.as_bytes());
+    let html_b64 = chunk_base64(html_body.as_bytes());
+
+    format!(
+        "From: {from}\r\nTo: {to}\r\nSubject: {subj}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"{boundary}\"\r\nX-Mailer: MSI-Dergisi-Rust-MTA/2.6\r\n\r\n--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{text_b64}\r\n\r\n--{boundary}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{html_b64}\r\n\r\n--{boundary}--\r\n",
+        from = sanitize_header_value(from),
+        to = sanitize_header_value(to),
+        subj = encoded_subject,
+        boundary = boundary,
+        text_b64 = text_b64,
+        html_b64 = html_b64,
+    )
+}
+
+/// Sends a `multipart/alternative` (plain text + HTML) MIME email via the configured MTA,
+/// respecting `config.mail_delivery_enabled == false`.
+pub async fn send_multipart_mime(
+    config: &AppConfig,
+    to: &str,
+    subject: &str,
+    text_body: &str,
+    html_body: &str,
+) -> Result<bool, String> {
+    let raw_msg = build_multipart_mime_email(&config.smtp_from, to, subject, text_body, html_body);
+    dispatch_mime_via_sendmail(config, to, &raw_msg).await
+}
+
+fn extract_envelope_sender(smtp_from: &str) -> Option<String> {
+    let candidate = if let (Some(lt), Some(gt)) = (smtp_from.rfind('<'), smtp_from.rfind('>')) {
+        if lt < gt {
+            smtp_from[lt + 1..gt].trim()
+        } else {
+            smtp_from.trim()
+        }
+    } else {
+        smtp_from.trim()
+    };
+    if candidate.is_empty()
+        || !candidate.contains('@')
+        || candidate.starts_with('-')
+        || candidate.chars().any(|c| c.is_whitespace() || c.is_control())
+    {
+        return None;
+    }
+    Some(candidate.to_string())
+}
+
+async fn dispatch_mime_via_sendmail(
+    config: &AppConfig,
+    to: &str,
+    raw_msg: &str,
+) -> Result<bool, String> {
     if !config.mail_delivery_enabled {
         info!(
             "MTA delivery disabled (MAIL_DELIVERY_ENABLED=false); validated MIME message ({} bytes) for {}",
@@ -110,8 +185,14 @@ pub async fn send_raw_mime_with_unsubscribe(
         return Err(format!("MTA binary not found at {}", config.sendmail_bin));
     }
 
+    let mut args = vec!["-t".to_string(), "-i".to_string()];
+    if let Some(envelope_from) = extract_envelope_sender(&config.smtp_from) {
+        args.push("-f".to_string());
+        args.push(envelope_from);
+    }
+
     let mut child = Command::new(&config.sendmail_bin)
-        .args(["-t", "-i"])
+        .args(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -238,9 +319,13 @@ pub async fn dispatch_newsletter_campaign(
     let mut failed = 0usize;
 
     for user in recipients {
-        let unsub_token = uuid::Uuid::new_v4().to_string();
-        let _ = db.create_unsubscribe_token(user.id, &unsub_token);
-        let raw_unsub_url = format!("{}/abonelik-iptal?token={}", base_url, unsub_token);
+        let raw_unsub_url = if user.id > 0 {
+            let unsub_token = uuid::Uuid::new_v4().to_string();
+            let _ = db.create_unsubscribe_token(user.id, &unsub_token);
+            format!("{}/abonelik-iptal?token={}", base_url, unsub_token)
+        } else {
+            format!("{}/abonelik-iptal", base_url)
+        };
         let escaped_unsub_url = escape_html(&raw_unsub_url);
 
         let html = format!(
@@ -438,6 +523,8 @@ mod tests {
             email_verified: true,
             marketing_emails_opted_in: opt_in,
             totp_enabled: false,
+            tos_accepted_at: "2026-01-01T00:00:00Z".to_string(),
+            tos_version: "2026-01".to_string(),
         };
 
         let users = vec![
@@ -456,5 +543,41 @@ mod tests {
 
         let active_subs = filter_newsletter_recipients(&users, "active_subscribers", "*", "*");
         assert_eq!(active_subs.len(), 2);
+    }
+
+    #[test]
+    fn builds_valid_multipart_alternative_mime_message() {
+        let text = "MSI B2B Rapor\n- Test İçerik: %60.0 MSB, %40.0 SSB";
+        let html = "<h1>MSI B2B Rapor</h1><p>Test İçerik: %60.0 MSB, %40.0 SSB</p>";
+        let raw = build_multipart_mime_email(
+            "[REDACTED_SESSION_FALLBACK]",
+            "admin@msidergisi.com",
+            "MSI Dergisi Aylık B2B Raporu — 2026-10",
+            text,
+            html,
+        );
+        assert!(raw.contains("Content-Type: multipart/alternative; boundary=\"----=_MSI_ALT_"));
+        assert!(raw.contains("Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n"));
+        assert!(raw.contains("Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n"));
+
+        let b64_text = base64::engine::general_purpose::STANDARD.encode(text.as_bytes());
+        let b64_html = base64::engine::general_purpose::STANDARD.encode(html.as_bytes());
+        let stripped = raw.replace("\r\n", "");
+        assert!(stripped.contains(&b64_text));
+        assert!(stripped.contains(&b64_html));
+    }
+
+    #[test]
+    fn extracts_safe_envelope_sender_from_smtp_from() {
+        assert_eq!(
+            extract_envelope_sender("MSI Dergisi <mail@ilkeraydogdu.com.tr>"),
+            Some("mail@ilkeraydogdu.com.tr".to_string())
+        );
+        assert_eq!(
+            extract_envelope_sender("noreply@msidergisi.com"),
+            Some("noreply@msidergisi.com".to_string())
+        );
+        assert_eq!(extract_envelope_sender("-bad@example.com"), None);
+        assert_eq!(extract_envelope_sender("no-at-sign"), None);
     }
 }

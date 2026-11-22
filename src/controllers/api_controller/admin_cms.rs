@@ -10,17 +10,41 @@ pub async fn admin_overview(
         &operator,
         &[
             "analytics:read",
+            "analytics:export",
             "contents:read",
+            "contents:delete",
             "ads:read",
             "categories:read",
             "users:read",
             "issues:read",
+            "issues:delete",
             "approvals:read",
             "approvals:approve",
+            "approvals:reject",
             "commerce:read",
             "subscriptions:read",
             "invoices:read",
+            "revenue:read",
+            "notifications:read",
+            "corporate_requests:read",
+            "corporate_requests:decide",
+            "audit:read",
             "settings:read",
+            "media:read",
+            "media:delete",
+            "monitoring:read",
+            "translations:read",
+            "glossary:write",
+            "glossary:manage",
+            "locales:manage",
+            "newsletters:read",
+            "email_groups:write",
+            "email_groups:manage",
+            "backup:manage",
+            "roles:manage",
+            "redirects:write",
+            "redirects:manage",
+            "system:read",
         ],
     ) {
         return resp;
@@ -75,11 +99,13 @@ pub async fn admin_overview(
 
     let total_views: i64 = contents.iter().map(|c| c.view_count).sum();
     let total_true_reads: i64 = contents.iter().map(|c| c.true_read_count).sum();
+    let total_placements: i64 = contents.iter().map(|c| c.placements.len() as i64).sum();
 
     Json(json!({
         "total_contents": contents.len(),
         "total_views": total_views,
         "total_true_reads": total_true_reads,
+        "total_placements": total_placements,
         "active_ads": active_ads,
         "registered_users": registered_users,
         "pending_corporate_requests": pending_reqs,
@@ -554,6 +580,13 @@ pub async fn admin_check_ad_conflict(
         impressions_count: 0,
         clicks_count: 0,
         is_active: true,
+        start_date: payload.start_date.clone(),
+        end_date: payload.end_date.clone(),
+        rotation_mode: payload
+            .rotation_mode
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "weighted".to_string()),
     };
 
     let existing = state.db.get_all_ads();
@@ -569,18 +602,120 @@ pub async fn admin_check_ad_conflict(
     Json(json!(warning)).into_response()
 }
 
+#[derive(Deserialize)]
+pub struct UpsertAdPayload {
+    #[serde(flatten)]
+    pub ad: AdCampaign,
+    #[serde(default)]
+    pub force_override: Option<bool>,
+}
+
 pub async fn admin_upsert_ad(
     operator: OperatorUser,
     headers: HeaderMap,
     State(state): State<AppState>,
-    Json(ad): Json<AdCampaign>,
+    Json(payload): Json<UpsertAdPayload>,
 ) -> Response {
     if let Err(resp) = require_perm(&operator, "ads:write") {
         return resp;
     }
+
+    let mut ad = payload.ad;
+    ad.start_date = ad
+        .start_date
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+    ad.end_date = ad
+        .end_date
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+    if ad.rotation_mode.trim().is_empty() {
+        ad.rotation_mode = "weighted".to_string();
+    }
+
+    let parsed_start = match ad_service::parse_date_prefix(ad.start_date.as_deref()) {
+        Some(Ok(d)) => Some(d),
+        Some(Err(())) => {
+            return ApiResponse::raw(
+                StatusCode::BAD_REQUEST,
+                json!({
+                    "status": "error",
+                    "error_code": error_codes::BAD_REQUEST,
+                    "error": "Geçersiz kampanya tarih formatı (YYYY-MM-DD bekleniyor).",
+                    "message": "Geçersiz kampanya tarih formatı (YYYY-MM-DD bekleniyor).",
+                    "data": null
+                }),
+            )
+            .into_response();
+        }
+        None => None,
+    };
+    let parsed_end = match ad_service::parse_date_prefix(ad.end_date.as_deref()) {
+        Some(Ok(d)) => Some(d),
+        Some(Err(())) => {
+            return ApiResponse::raw(
+                StatusCode::BAD_REQUEST,
+                json!({
+                    "status": "error",
+                    "error_code": error_codes::BAD_REQUEST,
+                    "error": "Geçersiz kampanya tarih formatı (YYYY-MM-DD bekleniyor).",
+                    "message": "Geçersiz kampanya tarih formatı (YYYY-MM-DD bekleniyor).",
+                    "data": null
+                }),
+            )
+            .into_response();
+        }
+        None => None,
+    };
+
+    if let (Some(start), Some(end)) = (parsed_start, parsed_end) {
+        if start > end {
+            return ApiResponse::raw(
+                StatusCode::BAD_REQUEST,
+                json!({
+                    "status": "error",
+                    "error_code": error_codes::BAD_REQUEST,
+                    "error": "Kampanya bitiş tarihi başlangıç tarihinden önce olamaz.",
+                    "message": "Kampanya bitiş tarihi başlangıç tarihinden önce olamaz.",
+                    "data": null
+                }),
+            )
+            .into_response();
+        }
+    }
+
     let existing = state.db.get_all_ads();
-    let conflict =
-        ad_service::check_ad_conflict(&ad, &existing, state.config.ad_max_quota_per_keyword);
+    let conflict = ad_service::check_ad_conflict_with_window(
+        &ad,
+        &existing,
+        state.config.ad_max_quota_per_keyword,
+        ad.start_date.as_deref(),
+        ad.end_date.as_deref(),
+        Some(&ad.rotation_mode),
+    );
+
+    if ad.is_active
+        && !ad.is_default_fallback
+        && conflict.has_conflict
+        && payload.force_override != Some(true)
+    {
+        return ApiResponse::raw(
+            StatusCode::CONFLICT,
+            json!({
+                "status": "error",
+                "error_code": error_codes::CONFLICT,
+                "error": conflict.message_tr,
+                "message": conflict.message_tr,
+                "conflict_check": conflict
+            }),
+        )
+        .into_response();
+    }
+
     let is_update = ad.id > 0;
 
     match state.db.upsert_ad(&ad) {
@@ -591,7 +726,15 @@ pub async fn admin_upsert_ad(
                 if is_update { "update" } else { "create" },
                 "ad_campaign",
                 Some(id),
-                &json!({ "sponsor_name": ad.sponsor_name, "slot_code": ad.slot_code }).to_string(),
+                &json!({
+                    "sponsor_name": ad.sponsor_name,
+                    "slot_code": ad.slot_code,
+                    "start_date": ad.start_date,
+                    "end_date": ad.end_date,
+                    "rotation_mode": ad.rotation_mode,
+                    "force_override": payload.force_override.unwrap_or(false)
+                })
+                .to_string(),
                 &client_ip,
             );
             ApiResponse::ok(json!({
@@ -635,4 +778,366 @@ pub async fn admin_delete_ad(
 }
 
 // ============================================================================
+// RECOMMENDATION RULES CRUD (REQ-012)
+// ============================================================================
+
+fn default_rule_priority() -> i32 {
+    10
+}
+
+fn default_rule_active() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+pub struct RecommendationRulePayload {
+    #[serde(default)]
+    pub rule_name: String,
+    #[serde(default, alias = "source_category")]
+    pub source_tag_or_cat: String,
+    #[serde(default, alias = "target_category")]
+    pub target_institution: String,
+    #[serde(default)]
+    pub recommended_content_slug: String,
+    #[serde(default = "default_rule_priority")]
+    pub priority: i32,
+    #[serde(default = "default_rule_active")]
+    pub is_active: bool,
+}
+
+pub async fn admin_list_recommendation_rules(
+    operator: OperatorUser,
+    State(state): State<AppState>,
+) -> Response {
+    if let Err(resp) = require_any_perm(&operator, &["contents:read", "settings:read", "ads:read"]) {
+        return resp;
+    }
+    ApiResponse::ok(json!({ "rules": state.db.get_recommendation_rules() })).into_response()
+}
+
+pub async fn admin_create_recommendation_rule(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RecommendationRulePayload>,
+) -> Response {
+    if let Err(resp) =
+        require_any_perm(&operator, &["contents:write", "contents:manage", "settings:write"])
+    {
+        return resp;
+    }
+    if payload.rule_name.trim().is_empty()
+        || payload.source_tag_or_cat.trim().is_empty()
+        || payload.recommended_content_slug.trim().is_empty()
+    {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+
+    let mut rule = crate::models::RecommendationRule {
+        id: 0,
+        rule_name: payload.rule_name.trim().to_string(),
+        source_tag_or_cat: payload.source_tag_or_cat.trim().to_string(),
+        target_institution: if payload.target_institution.trim().is_empty() {
+            "*".to_string()
+        } else {
+            payload.target_institution.trim().to_string()
+        },
+        recommended_content_slug: payload.recommended_content_slug.trim().to_string(),
+        priority: payload.priority,
+        is_active: payload.is_active,
+    };
+
+    match state.db.insert_recommendation_rule(&rule) {
+        Ok(id) => {
+            rule.id = id;
+            let client_ip = extract_client_ip(&headers);
+            let _ = state.db.insert_audit_log(
+                &operator.email,
+                "create",
+                "recommendation_rule",
+                Some(id),
+                &json!({
+                    "rule_name": rule.rule_name,
+                    "source_tag_or_cat": rule.source_tag_or_cat,
+                    "recommended_content_slug": rule.recommended_content_slug,
+                })
+                .to_string(),
+                &client_ip,
+            );
+            ApiResponse::ok_with_status(
+                StatusCode::CREATED,
+                json!({ "status": "created", "id": id, "rule": rule }),
+            )
+            .into_response()
+        }
+        Err(e) => ApiResponse::server_error(
+            &state.translations,
+            "tr",
+            "admin_create_recommendation_rule",
+            &e,
+        )
+        .into_response(),
+    }
+}
+
+pub async fn admin_update_recommendation_rule(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(payload): Json<RecommendationRulePayload>,
+) -> Response {
+    if let Err(resp) =
+        require_any_perm(&operator, &["contents:write", "contents:manage", "settings:write"])
+    {
+        return resp;
+    }
+    if payload.rule_name.trim().is_empty()
+        || payload.source_tag_or_cat.trim().is_empty()
+        || payload.recommended_content_slug.trim().is_empty()
+    {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+
+    let rule = crate::models::RecommendationRule {
+        id,
+        rule_name: payload.rule_name.trim().to_string(),
+        source_tag_or_cat: payload.source_tag_or_cat.trim().to_string(),
+        target_institution: if payload.target_institution.trim().is_empty() {
+            "*".to_string()
+        } else {
+            payload.target_institution.trim().to_string()
+        },
+        recommended_content_slug: payload.recommended_content_slug.trim().to_string(),
+        priority: payload.priority,
+        is_active: payload.is_active,
+    };
+
+    match state.db.update_recommendation_rule(id, &rule) {
+        Ok(true) => {
+            let client_ip = extract_client_ip(&headers);
+            let _ = state.db.insert_audit_log(
+                &operator.email,
+                "update",
+                "recommendation_rule",
+                Some(id),
+                &json!({
+                    "rule_name": rule.rule_name,
+                    "priority": rule.priority,
+                    "is_active": rule.is_active,
+                })
+                .to_string(),
+                &client_ip,
+            );
+            ApiResponse::ok(json!({ "status": "updated", "id": id, "rule": rule })).into_response()
+        }
+        Ok(false) => not_found_error(),
+        Err(e) => ApiResponse::server_error(
+            &state.translations,
+            "tr",
+            "admin_update_recommendation_rule",
+            &e,
+        )
+        .into_response(),
+    }
+}
+
+pub async fn admin_delete_recommendation_rule(
+    operator: OperatorUser,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Response {
+    if let Err(resp) =
+        require_any_perm(&operator, &["contents:write", "contents:manage", "settings:write"])
+    {
+        return resp;
+    }
+
+    match state.db.delete_recommendation_rule(id) {
+        Ok(true) => {
+            let client_ip = extract_client_ip(&headers);
+            let _ = state.db.insert_audit_log(
+                &operator.email,
+                "delete",
+                "recommendation_rule",
+                Some(id),
+                "{}",
+                &client_ip,
+            );
+            ApiResponse::ok(json!({ "status": "deleted", "id": id })).into_response()
+        }
+        Ok(false) => not_found_error(),
+        Err(e) => ApiResponse::server_error(
+            &state.translations,
+            "tr",
+            "admin_delete_recommendation_rule",
+            &e,
+        )
+        .into_response(),
+    }
+}
+
+// ============================================================================
 // EDITORIAL, REVENUE & USER ANALYTICS ENDPOINTS
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AppConfig;
+    use crate::db::Database;
+    use crate::engine::translation_engine::TranslationCache;
+    use std::sync::Arc;
+
+    fn make_admin_operator() -> OperatorUser {
+        OperatorUser {
+            user_id: 1,
+            email: "admin_cms_test@msidergisi.com".to_string(),
+            full_name: "Test Super Admin".to_string(),
+            role: "super_admin".to_string(),
+            permissions: vec!["ads:write".to_string(), "ads:read".to_string()],
+        }
+    }
+
+    fn make_test_state(tag: &str) -> (AppState, String) {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_path = std::env::temp_dir()
+            .join(format!("msi_{}_{}_{}.db", tag, std::process::id(), ts))
+            .to_string_lossy()
+            .to_string();
+        let mut cfg = AppConfig::from_env();
+        cfg.app_env = "test".into();
+        cfg.sqlite_db_path = db_path.clone();
+        cfg.session_secret = "test-session-secret".into();
+        cfg.monitoring_enabled = false;
+        let db = Database::new(&db_path).expect("test db");
+        let translations = TranslationCache::new();
+        translations.load(db.load_all_translations());
+        let state = AppState {
+            config: Arc::new(cfg),
+            db,
+            translations,
+            monitoring_cache: None,
+        };
+        (state, db_path)
+    }
+
+    fn cleanup_db(db_path: &str) {
+        let _ = std::fs::remove_file(db_path);
+        let _ = std::fs::remove_file(format!("{}-wal", db_path));
+        let _ = std::fs::remove_file(format!("{}-shm", db_path));
+    }
+
+    fn make_upsert_payload(start: Option<&str>, end: Option<&str>) -> UpsertAdPayload {
+        UpsertAdPayload {
+            ad: AdCampaign {
+                id: 0,
+                slot_code: "ad-news-top".to_string(),
+                badge_label: "SPONSORLU".to_string(),
+                dimensions: "970x90".to_string(),
+                sponsor_name: "TestOEM".to_string(),
+                sponsor_type: "defense_oem".to_string(),
+                pill_style: "navy".to_string(),
+                title_tr: "Test Kampanya".to_string(),
+                title_en: "Test Campaign".to_string(),
+                desc_tr: "Açıklama".to_string(),
+                desc_en: "Description".to_string(),
+                target_url: "https://example.com".to_string(),
+                image_url: None,
+                budget_score: 80,
+                is_default_fallback: false,
+                is_floating_popup: false,
+                is_newsletter_ad: false,
+                target_categories: vec!["haberler".to_string()],
+                target_ssb_tags: vec!["test-tag".to_string()],
+                target_institutions: vec!["MSB".to_string()],
+                impressions_count: 0,
+                clicks_count: 0,
+                is_active: true,
+                start_date: start.map(ToString::to_string),
+                end_date: end.map(ToString::to_string),
+                rotation_mode: "weighted".to_string(),
+            },
+            force_override: Some(false),
+        }
+    }
+
+    async fn read_body_json(resp: Response) -> (StatusCode, Value) {
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        let val = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+        (status, val)
+    }
+
+    #[tokio::test]
+    async fn admin_upsert_ad_rejects_malformed_dates_with_400_and_accepts_iso_timestamps() {
+        let (state, db_path) = make_test_state("admin_cms_dates");
+        let op = make_admin_operator();
+
+        // 1. Malformed end_date ("2020-01-01" .. "invalid-date") -> 400 Bad Request
+        let resp_bad_end = admin_upsert_ad(
+            op.clone(),
+            HeaderMap::new(),
+            State(state.clone()),
+            Json(make_upsert_payload(Some("2020-01-01"), Some("invalid-date"))),
+        )
+        .await;
+        let (st_end, body_end) = read_body_json(resp_bad_end).await;
+        assert_eq!(st_end, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body_end["error"],
+            "Geçersiz kampanya tarih formatı (YYYY-MM-DD bekleniyor)."
+        );
+
+        // 2. Malformed start_date ("invalid-date" .. "2035-12-31") -> 400 Bad Request
+        let resp_bad_start = admin_upsert_ad(
+            op.clone(),
+            HeaderMap::new(),
+            State(state.clone()),
+            Json(make_upsert_payload(Some("invalid-date"), Some("2035-12-31"))),
+        )
+        .await;
+        let (st_start, body_start) = read_body_json(resp_bad_start).await;
+        assert_eq!(st_start, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body_start["error"],
+            "Geçersiz kampanya tarih formatı (YYYY-MM-DD bekleniyor)."
+        );
+
+        // 3. Reversed valid dates ("2026-12-31" > "2026-01-01") -> 400 Bad Request
+        let resp_rev = admin_upsert_ad(
+            op.clone(),
+            HeaderMap::new(),
+            State(state.clone()),
+            Json(make_upsert_payload(Some("2026-12-31"), Some("2026-01-01"))),
+        )
+        .await;
+        let (st_rev, body_rev) = read_body_json(resp_rev).await;
+        assert_eq!(st_rev, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body_rev["error"],
+            "Kampanya bitiş tarihi başlangıç tarihinden önce olamaz."
+        );
+
+        // 4. Valid ISO timestamps -> 200 OK
+        let resp_iso = admin_upsert_ad(
+            op,
+            HeaderMap::new(),
+            State(state.clone()),
+            Json(make_upsert_payload(
+                Some("2026-11-21T00:00:00Z"),
+                Some("2026-11-21T23:59:59Z"),
+            )),
+        )
+        .await;
+        let (st_iso, _) = read_body_json(resp_iso).await;
+        assert_eq!(st_iso, StatusCode::OK);
+
+        cleanup_db(&db_path);
+    }
+}

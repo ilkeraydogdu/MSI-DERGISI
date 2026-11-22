@@ -20,7 +20,7 @@ pub enum AdminAccess {
 ///
 /// Returns `AdminAccess::Allowed` when the user is a verified staff member,
 /// or `AdminAccess::Denied` with an appropriate error response otherwise.
-/// For non-API GET requests from unauthenticated users, returns a redirect
+/// For non-API GET/HEAD requests from unauthenticated users, returns a redirect
 /// to the admin login page instead of a JSON error.
 pub fn check_admin_access(
     state: &AppState,
@@ -39,7 +39,7 @@ pub fn check_admin_access(
         return AdminAccess::Allowed;
     }
 
-    if is_admin_api || method != Method::GET {
+    if is_admin_api || !matches!(method, Method::GET | Method::HEAD) {
         let response = if user.is_some() {
             (
                 StatusCode::FORBIDDEN,

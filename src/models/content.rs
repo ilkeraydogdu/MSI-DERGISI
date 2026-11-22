@@ -62,6 +62,8 @@ pub struct ContentItem {
     pub en_approved_at: Option<String>,
     #[serde(default)]
     pub tr_source_hash: Option<String>,
+    #[serde(default)]
+    pub target_institutions: Vec<String>,
 }
 
 impl Default for ContentItem {
@@ -100,6 +102,7 @@ impl Default for ContentItem {
             en_approved_by: None,
             en_approved_at: None,
             tr_source_hash: None,
+            target_institutions: Vec::new(),
         }
     }
 }

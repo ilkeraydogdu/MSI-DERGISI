@@ -38,12 +38,11 @@ pub fn test_config(db_path: &str) -> AppConfig {
         static_dir: "/tmp/msi_test_static".into(),
         sqlite_db_path: db_path.to_string(),
         edergi_dir: "/tmp/msi_test_edergi".into(),
-        mariadb_database: "test_db".into(),
         session_secret: "test-session-secret-key-for-unit-tests".into(),
         watermark_secret: "TEST-WATERMARK-SECRET".into(),
         admin_default_user: "admin@test.msidergisi.com".into(),
         admin_default_pass: "TestAdmin2026!".into(),
-        admin_path_secret: "msi-komuta".into(),
+        admin_path_secret: "podmin".into(),
         ad_max_quota_per_keyword: 3,
         paytr_merchant_id: "TEST_MERCHANT_ID".into(),
         paytr_merchant_key: "test_merchant_key_123".into(),
@@ -70,6 +69,19 @@ pub fn test_config(db_path: &str) -> AppConfig {
         monitoring_redis_port: 6379,
         monitoring_smtp_port: 25,
         indexnow_api_url: "https://api.indexnow.org/indexnow".into(),
+        backup_enabled: false,
+        backup_dir: format!("{}_backups", db_path),
+        backup_retention_days: 14,
+        backup_archive_dir: format!("{}_backups/offsite", db_path),
+        backup_incremental_interval_secs: 1800,
+        backup_encryption_key: "test-backup-encryption-key-2026".into(),
+        s3_backup_endpoint: String::new(),
+        s3_backup_bucket: String::new(),
+        s3_backup_region: "eu-central-1".into(),
+        s3_backup_access_key: String::new(),
+        s3_backup_secret_key: String::new(),
+        s3_backup_prefix: "msi-backups".into(),
+        newsletter_poll_interval_secs: 60,
     }
 }
 
@@ -185,6 +197,7 @@ pub fn fixture_content(seed: i64) -> ContentItem {
         en_approved_by: None,
         en_approved_at: None,
         tr_source_hash: None,
+        target_institutions: Vec::new(),
     }
 }
 
@@ -215,6 +228,8 @@ pub fn fixture_user(seed: i64) -> UserAccount {
         email_verified: false,
         marketing_emails_opted_in: true,
         totp_enabled: false,
+        tos_accepted_at: "2026-01-01T00:00:00Z".into(),
+        tos_version: "2026-01".into(),
     }
 }
 
@@ -324,4 +339,62 @@ pub fn assert_valid_robots_txt(content: &str) {
         content.contains("Sitemap:"),
         "robots.txt must contain Sitemap directive"
     );
+}
+
+/// Builds the full Axum router with WAF & telemetry middleware for non-tautological HTTP integration tests.
+pub fn build_test_router(state: &AppState) -> axum::Router {
+    msi_dergisi_platform::routes::build_router(state.clone()).layer(
+        axum::middleware::from_fn_with_state(
+            state.clone(),
+            msi_dergisi_platform::middleware::central_waf_and_telemetry_middleware,
+        ),
+    )
+}
+
+/// Creates a user in the DB (or updates if present) and returns `(UserAccount, "msi_session=...")`.
+pub fn create_user_with_session(
+    state: &AppState,
+    email: &str,
+    password: &str,
+    full_name: &str,
+    role: &str,
+    org_category: &str,
+    org_name: &str,
+    is_gov_verified: bool,
+    subscription_tier: &str,
+) -> (UserAccount, String) {
+    let pw_hash =
+        msi_dergisi_platform::services::auth_service::hash_password(password, &state.config.session_secret);
+    let now_rfc = chrono::Utc::now().to_rfc3339();
+    let user = UserAccount {
+        id: 0,
+        email: email.trim().to_lowercase(),
+        full_name: full_name.to_string(),
+        role: role.to_string(),
+        organization_category: org_category.to_string(),
+        organization_name: org_name.to_string(),
+        job_title: "Test Uzmanı".to_string(),
+        is_gov_verified,
+        subscription_tier: subscription_tier.to_string(),
+        subscription_expires_at: Some("2030-12-31".to_string()),
+        reminders_halted: false,
+        kvkk_consent_at: now_rfc.clone(),
+        kvkk_consent_ip: "127.0.0.1".to_string(),
+        kvkk_consent_hash: "TEST-HASH".to_string(),
+        email_consent: true,
+        ssb_interests: vec!["hava-araclari".to_string()],
+        created_at: now_rfc.clone(),
+        email_verified: true,
+        marketing_emails_opted_in: true,
+        totp_enabled: false,
+        tos_accepted_at: now_rfc,
+        tos_version: "2026-01".to_string(),
+    };
+    let uid = state.db.create_or_update_user(&user, &pw_hash).unwrap();
+    let saved = state.db.get_user_by_id(uid).unwrap();
+    let token = msi_dergisi_platform::services::auth_service::generate_session_token(
+        &saved,
+        &state.config.session_secret,
+    );
+    (saved, format!("msi_session={}", token))
 }

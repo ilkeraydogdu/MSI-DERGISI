@@ -147,7 +147,10 @@ pub async fn redirect_legacy_haber_tr(
 ) -> Response {
     for old in [format!("/haberler/{}", slug), format!("/haber/{}", slug)] {
         if let Some(rule) = state.db.find_seo_redirect(&old) {
-            return Redirect::permanent(&rule.new_path).into_response();
+            let target = rule.new_path.trim();
+            if crate::db::Database::is_safe_seo_redirect_target(target) {
+                return Redirect::permanent(target).into_response();
+            }
         }
     }
     Redirect::permanent(&crate::engine::url_builder::article_url(&slug)).into_response()
@@ -159,7 +162,10 @@ pub async fn redirect_legacy_haber_en(
 ) -> Response {
     let old = crate::engine::url_builder::legacy_haber_en_url(&slug);
     if let Some(rule) = state.db.find_seo_redirect(&old) {
-        return Redirect::permanent(&rule.new_path).into_response();
+        let target = rule.new_path.trim();
+        if crate::db::Database::is_safe_seo_redirect_target(target) {
+            return Redirect::permanent(target).into_response();
+        }
     }
     Redirect::permanent(&crate::engine::url_builder::article_url_lang(&slug, "en")).into_response()
 }
@@ -173,7 +179,10 @@ pub async fn redirect_legacy_kategori_tr(
         crate::engine::url_builder::category_url(&slug),
     ] {
         if let Some(rule) = state.db.find_seo_redirect(&old) {
-            return Redirect::permanent(&rule.new_path).into_response();
+            let target = rule.new_path.trim();
+            if crate::db::Database::is_safe_seo_redirect_target(target) {
+                return Redirect::permanent(target).into_response();
+            }
         }
     }
     Redirect::permanent(&crate::engine::url_builder::category_url(&slug)).into_response()
@@ -188,7 +197,10 @@ pub async fn redirect_legacy_kategori_en(
         format!("/en/kategori/{}", slug),
     ] {
         if let Some(rule) = state.db.find_seo_redirect(&old) {
-            return Redirect::permanent(&rule.new_path).into_response();
+            let target = rule.new_path.trim();
+            if crate::db::Database::is_safe_seo_redirect_target(target) {
+                return Redirect::permanent(target).into_response();
+            }
         }
     }
     Redirect::permanent(&crate::engine::url_builder::category_url_lang(&slug, "en")).into_response()
@@ -201,10 +213,15 @@ pub async fn render_legacy_html_page(
     headers: HeaderMap,
     Extension(csp_nonce): Extension<CspNonce>,
 ) -> Response {
-    // Check seo_redirects DB table first for any registered redirect
+    // Check seo_redirects DB table first for any registered safe site-relative redirect
     let old_path = format!("/{}", filename);
-    if let Some(rule) = state.db.find_seo_redirect(&old_path) {
-        return Redirect::permanent(&rule.new_path).into_response();
+    if !crate::config::is_retired_admin_segment(&old_path) {
+        if let Some(rule) = state.db.find_seo_redirect(&old_path) {
+            let target = rule.new_path.trim();
+            if crate::db::Database::is_safe_seo_redirect_target(target) {
+                return Redirect::permanent(target).into_response();
+            }
+        }
     }
 
     // Fallback hardcoded 301 redirects for known legacy .html URLs
@@ -243,9 +260,20 @@ pub async fn handle_fallback_or_redirect(
 ) -> Response {
     let path = uri.path();
 
-    // 1. Check 301 SEO Redirect database table first
+    // 0. Never resurrect retired /msi-komuta* admin paths even if legacy seo_redirects rows exist
+    let decoded_path = urlencoding::decode(path).unwrap_or(std::borrow::Cow::Borrowed(path));
+    if crate::config::is_retired_admin_segment(path)
+        || crate::config::is_retired_admin_segment(&decoded_path)
+    {
+        return render_not_found_with_nonce(&state, &headers, Some(&csp_nonce.0)).await;
+    }
+
+    // 1. Check 301 SEO Redirect database table (only safe site-relative targets)
     if let Some(rule) = state.db.find_seo_redirect(path) {
-        return Redirect::permanent(&rule.new_path).into_response();
+        let target = rule.new_path.trim();
+        if crate::db::Database::is_safe_seo_redirect_target(target) {
+            return Redirect::permanent(target).into_response();
+        }
     }
 
     // 2. Check if path matches Dynamic IndexNow verification file (`/{key}.txt`) or a legacy `.html` URL
@@ -270,6 +298,7 @@ pub async fn handle_fallback_or_redirect(
         trimmed,
         "kunye"
             | "hakkimizda"
+            | "biz-kimiz"
             | "yolculugumuz"
             | "kvkk"
             | "kvkk-basvuru-formu"
@@ -301,7 +330,23 @@ pub async fn handle_fallback_or_redirect(
         en_params.insert("lang".to_string(), "en".to_string());
         if matches!(
             en_sub,
-            "kunye" | "hakkimizda" | "yolculugumuz" | "kvkk" | "iletisim" | "cozum-ortaklarimiz"
+            "kunye"
+                | "imprint"
+                | "hakkimizda"
+                | "about"
+                | "about-us"
+                | "biz-kimiz"
+                | "who-we-are"
+                | "yolculugumuz"
+                | "our-journey"
+                | "kvkk"
+                | "privacy-policy"
+                | "iletisim"
+                | "contact"
+                | "cozum-ortaklarimiz"
+                | "solution-partners"
+                | "reklam-ve-sponsorluk"
+                | "advertising"
         ) {
             return render_corporate_page(
                 State(state),

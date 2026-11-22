@@ -493,6 +493,68 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
+        -- Migration 015 idempotent tables for fresh DBs (ALTER TABLE columns stay exclusively in 015)
+        CREATE TABLE IF NOT EXISTS kvkk_consent_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            email TEXT NOT NULL DEFAULT '',
+            consent_type TEXT NOT NULL,
+            consent_version TEXT NOT NULL DEFAULT '2026-01',
+            accepted INTEGER NOT NULL DEFAULT 1 CHECK (accepted IN (0, 1)),
+            ip_address TEXT NOT NULL DEFAULT '',
+            consent_hash TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_kvkk_consent_logs_user
+            ON kvkk_consent_logs(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_kvkk_consent_logs_email
+            ON kvkk_consent_logs(LOWER(email), created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS b2b_monthly_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_month TEXT NOT NULL,
+            report_type TEXT NOT NULL,
+            recipient_email TEXT NOT NULL,
+            summary_json TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'pending',
+            sent_at TEXT NOT NULL DEFAULT '',
+            UNIQUE(report_month, report_type, recipient_email)
+        );
+        CREATE INDEX IF NOT EXISTS idx_b2b_monthly_reports_month
+            ON b2b_monthly_reports(report_month, status);
+
+        -- Migration 016 idempotent tables for fresh DBs
+        CREATE TABLE IF NOT EXISTS revoked_tokens (
+            token_hash TEXT PRIMARY KEY,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires
+            ON revoked_tokens(expires_at);
+
+        CREATE TABLE IF NOT EXISTS custom_field_values (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            field_id INTEGER NOT NULL REFERENCES custom_fields(id) ON DELETE CASCADE,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            value_text TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            UNIQUE(field_id, entity_type, entity_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_field_values_entity
+            ON custom_field_values(entity_type, entity_id);
+
+        CREATE TABLE IF NOT EXISTS editorial_research_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL UNIQUE,
+            kind TEXT NOT NULL DEFAULT 'rss',
+            category TEXT NOT NULL DEFAULT 'Savunma',
+            scope TEXT NOT NULL DEFAULT 'tr',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        );
+
         -- Phase 1: Additional FK constraints (safe re-creation via new indexes)
         -- Note: SQLite does not support ALTER TABLE ADD CONSTRAINT FOREIGN KEY.
         -- These are enforced at application level until migration framework (Phase 5).

@@ -13,18 +13,28 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Instant;
 
 use crate::controllers::AppState;
-use crate::engine::security_engine::{self, CentralSecurityFilter, CspNonce};
+use crate::engine::security_engine::{self, CentralSecurityFilter, CspNonce, ResolvedClientIp};
 use crate::middleware::auth_gate::{check_admin_access, AdminAccess};
 use crate::middleware::csrf::validate_csrf;
 
 /// Resolves the real client IP. Proxy headers are only trusted when the TCP peer is loopback
-/// (i.e. the request came through the local Plesk/nginx reverse proxy); otherwise the socket peer wins.
-fn resolve_client_ip(req: &Request) -> String {
+/// (i.e. the request came through the local Plesk/nginx reverse proxy) in non-test environments
+/// (or when `ConnectInfo` is absent in unit tests); direct non-loopback peers never trust proxy
+/// headers, and direct loopback requests in test environments ignore `X-Forwarded-For` while
+/// flagging `was_forwarded = true` so spoofed `X-Forwarded-For` cannot rotate IPs or bypass limits.
+fn resolve_client_ip(req: &Request, app_env: &str) -> ResolvedClientIp {
     let peer: Option<IpAddr> = req
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|ci| ci.0.ip());
-    let trust_proxy = peer.map(|ip| ip.is_loopback()).unwrap_or(true);
+    let has_proxy_headers = req.headers().contains_key("x-real-ip")
+        || req.headers().contains_key("x-forwarded-for");
+
+    let trust_proxy = match peer {
+        Some(ip) => ip.is_loopback() && !app_env.eq_ignore_ascii_case("test"),
+        None => true,
+    };
+
     if trust_proxy {
         if let Some(real) = req
             .headers()
@@ -33,7 +43,10 @@ fn resolve_client_ip(req: &Request) -> String {
             .map(str::trim)
             .filter(|s| s.parse::<IpAddr>().is_ok())
         {
-            return real.to_string();
+            return ResolvedClientIp {
+                ip: real.to_string(),
+                was_forwarded: true,
+            };
         }
         // Right-most entry is the one appended by our own reverse proxy (client-supplied entries are to the left).
         if let Some(xff) = req
@@ -42,26 +55,41 @@ fn resolve_client_ip(req: &Request) -> String {
             .and_then(|v| v.to_str().ok())
             .and_then(|s| s.rsplit(',').map(str::trim).find(|p| p.parse::<IpAddr>().is_ok()))
         {
-            return xff.to_string();
+            return ResolvedClientIp {
+                ip: xff.to_string(),
+                was_forwarded: true,
+            };
         }
     }
-    peer.map(|ip| ip.to_string())
-        .unwrap_or_else(|| "127.0.0.1".to_string())
+
+    ResolvedClientIp {
+        ip: peer
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "127.0.0.1".to_string()),
+        was_forwarded: has_proxy_headers && peer.map(|ip| ip.is_loopback()).unwrap_or(true),
+    }
 }
 
 fn cookie_value<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
     let prefix = format!("{}=", name);
     req.headers()
-        .get(COOKIE)
-        .and_then(|v| v.to_str().ok())?
-        .split(';')
-        .map(str::trim)
-        .find_map(|p| p.strip_prefix(prefix.as_str()))
+        .get_all(COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|cookies| cookies.split(';'))
+        .find_map(|p| {
+            p.trim()
+                .strip_prefix(prefix.as_str())
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+        })
 }
 
 fn is_private_path(path: &str, admin_path: &str) -> bool {
     path == admin_path
         || path.starts_with(&format!("{}/", admin_path))
+        || path == "/podmin"
+        || path.starts_with("/podmin/")
         || path.starts_with("/hesabim")
         || path.starts_with("/hesap-dogrula")
         || path.starts_with("/abonelik-iptal")
@@ -76,7 +104,9 @@ pub async fn central_waf_and_telemetry_middleware(
     next: Next,
 ) -> Response {
     let t0 = Instant::now();
-    let client_ip = resolve_client_ip(&req);
+    let resolved_ip = resolve_client_ip(&req, &state.config.app_env);
+    let client_ip = resolved_ip.ip.clone();
+    req.extensions_mut().insert(resolved_ip);
 
     let path = req.uri().path().to_string();
     let method = req.method().clone();
@@ -119,6 +149,7 @@ pub async fn central_waf_and_telemetry_middleware(
         state.config.rate_limit_window_secs,
     ) {
         let _ = state.db.insert_security_audit_log(&log_entry);
+        let _ = crate::services::security_anomaly_service::evaluate_and_emit_anomalies(&state.db);
         let status = if log_entry.event_type == "RATE_LIMIT_EXCEEDED" {
             StatusCode::TOO_MANY_REQUESTS
         } else {
@@ -139,28 +170,44 @@ pub async fn central_waf_and_telemetry_middleware(
             .into_response();
     }
 
-    let admin_path = format!("/{}", state.config.admin_path_secret);
-    let is_admin_root = path == admin_path;
-    let is_admin_subpage = path.starts_with(&format!("{}/", admin_path));
-    let is_admin_api = path.starts_with("/api/v1/admin/")
-        || path == "/api/v1/analytics/sponsor-report"
-        || path == "/api/v1/subscriptions/trigger-reminders"
-        || path == "/api/v1/ads/check-conflict";
+    let admin_seg = crate::config::normalize_admin_path_secret(&state.config.admin_path_secret);
+    let admin_path = format!("/{}", admin_seg);
+    let is_podmin_root = path == "/podmin";
+    let is_podmin_subpage = path.starts_with("/podmin/");
+    let is_admin_root = path == admin_path || is_podmin_root;
+    let is_admin_subpage = path.starts_with(&format!("{}/", admin_path)) || is_podmin_subpage;
+    let is_admin_api = path.starts_with("/api/v1/admin/");
 
     // Operator gate. The admin root (`/{ADMIN_PATH_SECRET}`) is intentionally NOT gated here:
     // `web_controller::render_admin` serves the dedicated command login screen to anonymous users.
+    let state_changing = matches!(
+        method,
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+    );
     if is_admin_subpage || is_admin_api {
-        match check_admin_access(&state, &req, &admin_path, is_admin_api) {
+        let redirect_target = if is_podmin_subpage { "/podmin" } else { admin_path.as_str() };
+        match check_admin_access(&state, &req, redirect_target, is_admin_api) {
             AdminAccess::Allowed => {}
             AdminAccess::Denied(response) => return response,
         }
 
-        // CSRF: double-submit cookie + Origin verification on state-changing admin requests.
-        let state_changing = matches!(method, Method::POST | Method::PUT | Method::PATCH | Method::DELETE);
-        if is_admin_api && state_changing {
+        // CSRF: double-submit cookie + Origin/Referer verification on state-changing admin requests.
+        if (is_admin_subpage || is_admin_api) && state_changing {
             if let Some(csrf_error) = validate_csrf(&req, &state.config) {
                 return csrf_error;
             }
+        }
+    } else if state_changing
+        && (path.starts_with("/api/v1/account/")
+            || path.starts_with("/api/v1/auth/totp/")
+            || path == "/api/v1/auth/logout"
+            || path == "/api/v1/subscriptions/checkout"
+            || path == "/api/v1/commerce/cart-checkout"
+            || path == "/api/v1/email-preferences"
+            || path.starts_with("/api/v1/notifications/"))
+    {
+        if let Some(csrf_error) = validate_csrf(&req, &state.config) {
+            return csrf_error;
         }
     }
 
@@ -213,7 +260,8 @@ pub async fn central_waf_and_telemetry_middleware(
     let is_static = path.starts_with("/images/")
         || path.starts_with("/css/")
         || path.starts_with("/js/")
-        || path.starts_with("/fonts/");
+        || path.starts_with("/fonts/")
+        || path.starts_with("/uploads/");
 
     if is_private_path(&path, &admin_path) {
         response.headers_mut().insert(
@@ -233,6 +281,11 @@ pub async fn central_waf_and_telemetry_middleware(
             HeaderName::from_static("x-robots-tag"),
             HeaderValue::from_static("noindex, nofollow, noarchive"),
         );
+    } else if response.status() == StatusCode::NOT_FOUND {
+        response.headers_mut().insert(
+            HeaderName::from_static("x-robots-tag"),
+            HeaderValue::from_static("noindex, nofollow"),
+        );
     }
     if needs_csrf_cookie && !is_static {
         let token = security_engine::generate_csrf_token(&state.config.session_secret);
@@ -245,7 +298,12 @@ pub async fn central_waf_and_telemetry_middleware(
                 .append(axum::http::header::SET_COOKIE, v);
         }
     }
-    if !path.starts_with("/api/") && !is_static && !is_admin_root && !is_admin_subpage {
+    if response.status().is_success()
+        && !path.starts_with("/api/")
+        && !is_static
+        && !is_admin_root
+        && !is_admin_subpage
+    {
         let canonical_url = format!(
             "{}{}",
             state.config.public_url.trim_end_matches('/'),

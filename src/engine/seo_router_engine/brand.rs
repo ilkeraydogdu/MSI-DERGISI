@@ -62,7 +62,7 @@ impl SeoBrandConfig {
             issn: g("publisher_issn", "1306-0309"),
             default_og_image: g("default_og_image", crate::services::media_service::DEFAULT_OG_IMAGE),
             default_edergi_cover: g("default_edergi_cover", crate::services::media_service::DEFAULT_ISSUE_COVER),
-            logo_url: g("publisher_logo_url", "/images/logo.png"),
+            logo_url: g("publisher_logo_url", "/images/logo.svg"),
             address_street: g("publisher_address_street", "Yaşamkent Mah. 3147 Sok. No:10"),
             address_locality: g("publisher_address_locality", "Çankaya"),
             address_region: g("publisher_address_region", "Ankara"),

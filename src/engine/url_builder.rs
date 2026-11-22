@@ -1,8 +1,8 @@
-/// Central URL Builder for MSI Dergisi
-///
-/// All canonical path construction MUST go through this module.
-/// No controller, engine, or service should ever use `format!("/icerik/{}", slug)` directly.
-/// This ensures a single source of truth for URL structure across the entire application.
+//! Central URL Builder for MSI Dergisi
+//!
+//! All canonical path construction MUST go through this module.
+//! No controller, engine, or service should ever use `format!("/icerik/{}", slug)` directly.
+//! This ensures a single source of truth for URL structure across the entire application.
 
 // ── Public Content URLs ──────────────────────────────────────────────
 
@@ -128,12 +128,12 @@ pub fn legacy_kategori_en_url(slug: &str) -> String {
 
 // ── Admin / Operator URLs ────────────────────────────────────────────
 
-/// Admin panel section URL: `/admin/{section}` (empty section → `/admin`)
+/// Admin panel section URL: `/podmin/{section}` (empty section → `/podmin`)
 pub fn admin_url(section: &str) -> String {
     if section.is_empty() {
-        "/admin".to_string()
+        "/podmin".to_string()
     } else {
-        format!("/admin/{}", section)
+        format!("/podmin/{}", section)
     }
 }
 
@@ -174,9 +174,9 @@ pub const AI_PLUGIN: &str = "/.well-known/ai-plugin.json";
 pub const OPENSEARCH: &str = "/opensearch.xml";
 pub const MANIFEST: &str = "/manifest.webmanifest";
 pub const FAVICON: &str = "/favicon.ico";
-pub const ADMIN_PANEL: &str = "/admin";
-pub const ADMIN_DESIGN_EDITOR: &str = "/admin/tasarim";
-pub const ADMIN_DESIGN_PREVIEW: &str = "/admin/tasarim/onizleme";
+pub const ADMIN_PANEL: &str = "/podmin";
+pub const ADMIN_DESIGN_EDITOR: &str = "/podmin/tasarim";
+pub const ADMIN_DESIGN_PREVIEW: &str = "/podmin/tasarim/onizleme";
 pub const ADMIN_LEGACY: &str = "/yonetim";
 pub const ARTICLE_PATTERN: &str = "/icerik/:slug";
 pub const CATEGORY_PATTERN: &str = "/kategori/:slug";
@@ -242,17 +242,17 @@ mod tests {
 
     #[test]
     fn test_admin_url_empty() {
-        assert_eq!(admin_url(""), "/admin");
+        assert_eq!(admin_url(""), "/podmin");
     }
 
     #[test]
     fn test_admin_url_section() {
-        assert_eq!(admin_url("tasarim"), "/admin/tasarim");
+        assert_eq!(admin_url("tasarim"), "/podmin/tasarim");
     }
 
     #[test]
     fn test_account_url_with_next() {
-        assert_eq!(account_url(Some("/admin")), "/hesabim?next=%2Fadmin");
+        assert_eq!(account_url(Some("/podmin")), "/hesabim?next=%2Fpodmin");
     }
 
     #[test]

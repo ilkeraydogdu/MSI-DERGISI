@@ -62,6 +62,13 @@ impl Database {
             .find(|i| i.issue_number == issue_number)
     }
 
+    pub fn get_issues_by_number(&self, issue_number: i32) -> Vec<MagazineIssue> {
+        self.get_all_issues()
+            .into_iter()
+            .filter(|i| i.issue_number == issue_number)
+            .collect()
+    }
+
     pub fn get_issue(&self, publication_type: &str, issue_number: i32) -> Option<MagazineIssue> {
         self.get_all_issues()
             .into_iter()
@@ -84,7 +91,10 @@ impl Database {
             iss.publication_type.trim()
         };
         let pdf_path = if iss.pdf_path.trim().is_empty() {
-            format!("/api/v1/edergi/{}/download-pdf", iss.issue_number)
+            format!(
+                "/api/v1/edergi/{}/download-pdf?publication_type={}",
+                iss.issue_number, pub_type
+            )
         } else {
             iss.pdf_path.trim().to_string()
         };

@@ -21,20 +21,66 @@ use axum::{
 };
 use serde_json::json;
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 fn extract_editor_ip(headers: &HeaderMap) -> String {
-    headers
+    if let Some(real) = headers
         .get("x-real-ip")
         .and_then(|v| v.to_str().ok())
-        .or_else(|| {
-            headers
-                .get("x-forwarded-for")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.split(',').next())
-        })
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "127.0.0.1".to_string())
+        .map(str::trim)
+        .filter(|s| s.parse::<IpAddr>().is_ok())
+    {
+        return real.to_string();
+    }
+    if let Some(xff) = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.rsplit(',').map(str::trim).find(|p| p.parse::<IpAddr>().is_ok()))
+    {
+        return xff.to_string();
+    }
+    "127.0.0.1".to_string()
+}
+
+pub(crate) fn render_editor_html_full(
+    admin_path_secret: &str,
+    nonce: Option<&str>,
+    can_save: bool,
+    can_editorial: bool,
+) -> String {
+    let seg = crate::config::normalize_admin_path_secret(admin_path_secret);
+    let admin_base = format!("/{}", escape_html(&seg));
+    let mut extra_nav = String::from(
+        "<a href=\"/hesabim\" id=\"editor-account-link\" class=\"editor-breadcrumb-link\" title=\"Hesap Portalı\"><span>Hesap Portalı</span></a>",
+    );
+    if can_editorial {
+        extra_nav.push_str(&format!(
+            "<a href=\"{}/editor\" id=\"editor-studio-link\" class=\"editor-breadcrumb-link\" title=\"Editör Stüdyosu\"><span>Editör Stüdyosu</span></a>",
+            admin_base
+        ));
+    }
+    let mut html = include_str!("editor.html")
+        .replace("href=\".\"", &format!("href=\"{}\"", admin_base))
+        .replace("<!-- STUDIO_EXTRA_NAV -->", &extra_nav)
+        .replace(
+            "<body class=\"design-editor\">",
+            &format!(
+                "<body class=\"design-editor\" data-admin-path=\"{}\" data-can-save=\"{}\">",
+                admin_base,
+                if can_save { "true" } else { "false" }
+            ),
+        );
+    if let Some(raw_nonce) = nonce.filter(|n| !n.trim().is_empty()) {
+        let safe_nonce = escape_html(raw_nonce);
+        html = html.replace("<script ", &format!("<script nonce=\"{}\" ", safe_nonce));
+        html = html.replace("<script>", &format!("<script nonce=\"{}\">", safe_nonce));
+    }
+    html
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn render_editor_html(admin_path_secret: &str, nonce: Option<&str>) -> String {
+    render_editor_html_full(admin_path_secret, nonce, true, true)
 }
 
 pub async fn view(
@@ -47,20 +93,15 @@ pub async fn view(
             return resp.into_response();
         }
     }
-    let admin_base = format!("/{}", escape_html(&state.config.admin_path_secret));
-    let mut html = include_str!("editor.html")
-        .replace("href=\"/admin\"", &format!("href=\"{}\"", admin_base))
-        .replace("href=\".\"", &format!("href=\"{}\"", admin_base))
-        .replace(
-            "<body class=\"design-editor\">",
-            &format!(
-                "<body class=\"design-editor\" data-admin-path=\"{}\">",
-                admin_base
-            ),
-        );
-    let safe_nonce = escape_html(&csp_nonce.0);
-    html = html.replace("<script ", &format!("<script nonce=\"{}\" ", safe_nonce));
-    html = html.replace("<script>", &format!("<script nonce=\"{}\">", safe_nonce));
+    let can_save =
+        operator.has_permission("settings:write") || operator.has_permission("settings:manage");
+    let can_editorial = operator.has_permission("contents:write");
+    let html = render_editor_html_full(
+        &state.config.admin_path_secret,
+        Some(&csp_nonce.0),
+        can_save,
+        can_editorial,
+    );
     Html(html).into_response()
 }
 
@@ -73,16 +114,20 @@ pub async fn get(
             return resp.into_response();
         }
     }
+    let can_save =
+        operator.has_permission("settings:write") || operator.has_permission("settings:manage");
     Json(json!({
         "config": config::load(&state.db.get_setting_map("tr")),
         "defaults": config::defaults(),
-        "categories": state.db.get_all_categories()
+        "categories": state.db.get_all_categories(),
+        "can_save": can_save
     }))
     .into_response()
 }
 
 pub async fn save(
     State(state): State<AppState>,
+    opt_ip: Option<Extension<crate::engine::security_engine::ResolvedClientIp>>,
     operator: OperatorUser,
     headers: HeaderMap,
     Json(config): Json<DesignConfig>,
@@ -121,7 +166,9 @@ pub async fn save(
         setting_group: "design".into(),
         updated_at: chrono::Utc::now().to_rfc3339(),
     };
-    let client_ip = extract_editor_ip(&headers);
+    let client_ip = opt_ip
+        .map(|Extension(res)| res.ip)
+        .unwrap_or_else(|| extract_editor_ip(&headers));
     match state.db.upsert_site_setting(&setting) {
         Ok(_) => {
             let _ = state.db.insert_audit_log(
@@ -163,6 +210,7 @@ pub async fn preview(
     };
     let snap = crate::engine::query_engine::CentralQueryEngine::snapshot(&state.db).data;
     let mut settings = state.db.get_setting_map("tr");
+    let brand_config = seo_router_engine::SeoBrandConfig::from_settings(&settings);
     if let Ok(cfg_str) = serde_json::to_string(&config) {
         settings.insert(config::SETTING_KEY.into(), cfg_str);
     }
@@ -179,9 +227,8 @@ pub async fn preview(
             .and_then(|s| s.parse().ok()),
     };
     let body = components::render_page(page, &data);
-    let settings_map = state.db.get_setting_map("tr");
-    let brand_config = seo_router_engine::SeoBrandConfig::from_settings(&settings_map);
-    let preview_path = format!("/{}/tasarim/onizleme", state.config.admin_path_secret);
+    let seg = crate::config::normalize_admin_path_secret(&state.config.admin_path_secret);
+    let preview_path = format!("/{}/tasarim/onizleme", seg);
     let seo = seo_router_engine::build_seo_meta(
         &state.config.public_url,
         &preview_path,
@@ -235,4 +282,43 @@ fn strip_preview_scripts(html: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_editor_html_injects_nonces_logo_tokens_and_normalizes_admin_path() {
+        let html = render_editor_html("/podmin/", Some("nonce-123"));
+        assert!(html.contains(r#"data-admin-path="/podmin""#));
+        assert!(html.contains(r#"href="/podmin""#));
+        assert!(html.contains(r#"src="/images/logo.svg""#));
+        assert!(html.contains(r#"/css/admin/tokens.css?v=35"#));
+        assert!(html.contains(r#"/css/msi-design-editor.css?v=35"#));
+        assert!(html.contains(r#"id="studio-theme-toggle""#));
+        assert!(!html.contains(r#"<span class="editor-emblem">MSI</span>"#));
+        assert!(!html.contains(r#"msi-design-system.css"#));
+        assert!(html.contains(r#"<script nonce="nonce-123">"#));
+        assert!(html.contains(r#"<script nonce="nonce-123" src="/js/vendor/gsap.min.js""#));
+        assert!(html.contains(r#"<script nonce="nonce-123" src="/js/msi-design-editor.js?v=35""#));
+    }
+
+    #[test]
+    fn render_editor_html_defaults_empty_and_retired_secret_to_podmin() {
+        for raw in ["///", "msi-komuta", "/MSI-KOMUTA/"] {
+            let html = render_editor_html(raw, None);
+            assert!(html.contains(r#"data-admin-path="/podmin""#));
+            assert!(html.contains(r#"href="/podmin""#));
+        }
+    }
+
+    #[test]
+    fn strip_preview_scripts_removes_all_and_unclosed_scripts() {
+        let sample = r#"<html><head><script src="a.js"></script></head><body>Hi<script>alert(1)</script>!</body></html>"#;
+        assert_eq!(strip_preview_scripts(sample), "<html><head></head><body>Hi!</body></html>");
+
+        let unclosed = r#"<div>Keep</div><script>bad()"#;
+        assert_eq!(strip_preview_scripts(unclosed), "<div>Keep</div>");
+    }
 }

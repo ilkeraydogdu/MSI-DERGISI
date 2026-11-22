@@ -27,10 +27,20 @@ mod redirects;
 mod settings;
 mod security_audit;
 mod translations;
-mod admin_misc;
+mod audit_log;
+mod cache_ops;
+mod content_versions;
+mod custom_fields;
+mod media;
+mod system_health;
 mod approvals;
 mod monitoring;
 mod tokens;
 mod roles;
 mod i18n_glossary;
 pub use i18n_glossary::*;
+mod editorial_studio;
+pub use editorial_studio::{
+    parse_editorial_content_id, DueScheduledArticle, EditorialArticleListResponse,
+    EditorialArticleQuery, EditorialMediaInsert, EditorialStats, EditorialUpsertOutcome,
+};

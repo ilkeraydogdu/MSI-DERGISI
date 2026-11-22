@@ -4,7 +4,11 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+fn default_tos_version() -> String {
+    "2026-01".to_string()
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct UserAccount {
     pub id: i64,
     pub email: String,
@@ -31,6 +35,26 @@ pub struct UserAccount {
     pub marketing_emails_opted_in: bool,
     #[serde(default)]
     pub totp_enabled: bool,
+    #[serde(default)]
+    pub tos_accepted_at: String,
+    #[serde(default = "default_tos_version")]
+    pub tos_version: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct KvkkConsentLog {
+    pub id: i64,
+    pub user_id: Option<i64>,
+    pub email: String,
+    pub consent_type: String,
+    #[serde(default = "default_tos_version")]
+    pub consent_version: String,
+    pub accepted: bool,
+    #[serde(default)]
+    pub ip_address: String,
+    #[serde(default)]
+    pub consent_hash: String,
+    pub created_at: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

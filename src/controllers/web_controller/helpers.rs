@@ -2,26 +2,7 @@ use super::*;
 use crate::models::{AdCampaign, UserAccount};
 
 pub fn detect_language(params: &HashMap<String, String>, headers: &HeaderMap) -> String {
-    if let Some(l) = params.get("lang") {
-        if l.eq_ignore_ascii_case("en") {
-            return "en".to_string();
-        }
-        if l.eq_ignore_ascii_case("tr") {
-            return "tr".to_string();
-        }
-    }
-    if let Some(cookie) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
-        for part in cookie.split(';') {
-            let trimmed = part.trim();
-            if trimmed.eq_ignore_ascii_case("msi_lang=en") {
-                return "en".to_string();
-            }
-            if trimmed.eq_ignore_ascii_case("msi_lang=tr") {
-                return "tr".to_string();
-            }
-        }
-    }
-    "tr".to_string()
+    crate::engine::api_response::resolve_lang_from_headers(params, headers)
 }
 
 /// Constructs a typed response with the given content-type and body, eliminating

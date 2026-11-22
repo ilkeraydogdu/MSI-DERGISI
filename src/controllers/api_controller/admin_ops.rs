@@ -196,7 +196,60 @@ pub async fn admin_list_newsletters(
 pub struct AdminNewsletterPayload {
     #[serde(flatten)]
     pub campaign: NewsletterCampaign,
-    pub body_html: Option<String>,
+}
+
+/// Resolves the newsletter sponsor ad campaign:
+/// - If `sponsor_ad_id` is `Some(id)` with `id > 0`, returns that ad.
+/// - Otherwise (`None` or `<= 0`), automatically selects the highest-priority (`budget_score`)
+///   active `AdCampaign` with `is_newsletter_ad == true` within schedule.
+pub fn resolve_newsletter_sponsor_ad<'a>(
+    all_ads: &'a [AdCampaign],
+    sponsor_ad_id: Option<i64>,
+    target_institution: &str,
+    target_ssb_tag: &str,
+    today_yyyy_mm_dd: &str,
+) -> Option<&'a AdCampaign> {
+    if let Some(aid) = sponsor_ad_id.filter(|&id| id > 0) {
+        return all_ads.iter().find(|a| a.id == aid);
+    }
+    let inst = target_institution.trim();
+    let inst_active = !inst.is_empty() && !inst.eq_ignore_ascii_case("ALL") && inst != "*";
+    let tag = target_ssb_tag.trim();
+    let tag_active = !tag.is_empty() && !tag.eq_ignore_ascii_case("ALL") && tag != "*";
+
+    all_ads
+        .iter()
+        .filter(|a| a.is_active && a.is_newsletter_ad && ad_service::is_ad_within_schedule(a, today_yyyy_mm_dd))
+        .max_by_key(|a| {
+            let inst_tier = if !inst_active {
+                0
+            } else if a.target_institutions.iter().any(|i| i.eq_ignore_ascii_case(inst)) {
+                2
+            } else if a.target_institutions.is_empty()
+                || a.target_institutions
+                    .iter()
+                    .any(|i| i == "*" || i.eq_ignore_ascii_case("all"))
+            {
+                1
+            } else {
+                0
+            };
+            let tag_tier = if !tag_active {
+                0
+            } else if a.target_ssb_tags.iter().any(|t| t.eq_ignore_ascii_case(tag)) {
+                2
+            } else if a.target_ssb_tags.is_empty() {
+                1
+            } else {
+                0
+            };
+            let slot_bonus = if a.slot_code.eq_ignore_ascii_case("ad-newsletter-top") {
+                1
+            } else {
+                0
+            };
+            (inst_tier + tag_tier, a.budget_score, slot_bonus, a.id)
+        })
 }
 
 pub async fn admin_insert_newsletter(
@@ -210,13 +263,134 @@ pub async fn admin_insert_newsletter(
     }
     let mut nl = payload.campaign;
     let users = state.db.get_all_users();
-    let recipients = email_service::filter_newsletter_recipients(
-        &users,
-        &nl.target_group_filter,
+    let group_owned: Vec<crate::models::UserAccount>;
+    let recipients: Vec<&crate::models::UserAccount> = if let Some(ref code) = nl
+        .email_group_code
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        group_owned = state.db.resolve_email_group_recipients(
+            code,
+            &nl.target_institution,
+            &nl.target_ssb_tag,
+        );
+        group_owned.iter().collect()
+    } else {
+        email_service::filter_newsletter_recipients(
+            &users,
+            &nl.target_group_filter,
+            &nl.target_institution,
+            &nl.target_ssb_tag,
+        )
+    };
+    nl.recipient_count = recipients.len() as i64;
+
+    let now_utc = chrono::Utc::now();
+    let today_str = now_utc.format("%Y-%m-%d").to_string();
+    let all_ads = state.db.get_all_ads();
+    let resolved_sponsor = resolve_newsletter_sponsor_ad(
+        &all_ads,
+        nl.sponsor_ad_id,
         &nl.target_institution,
         &nl.target_ssb_tag,
-    );
-    nl.recipient_count = recipients.len() as i64;
+        &today_str,
+    )
+    .cloned();
+    if nl.sponsor_ad_id.filter(|&id| id > 0).is_none() {
+        if let Some(ref sp) = resolved_sponsor {
+            nl.sponsor_ad_id = Some(sp.id);
+            if nl.sponsor_name.as_deref().map(str::trim).unwrap_or("").is_empty() {
+                nl.sponsor_name = Some(sp.sponsor_name.clone());
+            }
+        }
+    } else if nl.sponsor_name.as_deref().map(str::trim).unwrap_or("").is_empty() {
+        if let Some(ref sp) = resolved_sponsor {
+            nl.sponsor_name = Some(sp.sponsor_name.clone());
+        }
+    }
+    if let Some(raw_sched) = nl.scheduled_at.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw_sched) {
+            nl.scheduled_at = Some(dt.with_timezone(&chrono::Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string());
+        } else if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(raw_sched, "%Y-%m-%dT%H:%M:%S")
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(raw_sched, "%Y-%m-%d %H:%M:%S"))
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(raw_sched, "%Y-%m-%dT%H:%M"))
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(raw_sched, "%Y-%m-%d %H:%M"))
+        {
+            nl.scheduled_at = Some(ndt.and_utc().format("%Y-%m-%dT%H:%M:%SZ").to_string());
+        }
+    }
+    let now_cmp = now_utc.format("%Y-%m-%d %H:%M:%S").to_string();
+    let is_future_schedule = nl
+        .scheduled_at
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let norm: String = s.chars().take(19).collect::<String>().replace('T', " ");
+            norm > now_cmp
+        })
+        .unwrap_or(false);
+
+    if is_future_schedule {
+        nl.status = "scheduled".to_string();
+        nl.sent_at = String::new();
+        let id = state.db.insert_newsletter_campaign(&nl).unwrap_or(0);
+        let client_ip = extract_client_ip(&headers);
+        let _ = state.db.insert_audit_log(
+            &operator.email,
+            "schedule",
+            "newsletter_campaign",
+            Some(id),
+            &json!({
+                "subject_tr": nl.subject_tr,
+                "recipient_count": nl.recipient_count,
+                "scheduled_at": nl.scheduled_at
+            })
+            .to_string(),
+            &client_ip,
+        );
+        return ApiResponse::ok(json!({
+            "status": nl.status,
+            "id": id,
+            "recipient_count": nl.recipient_count,
+            "scheduled_at": nl.scheduled_at
+        }))
+        .into_response();
+    }
+
+    let req_status = nl.status.trim().to_ascii_lowercase();
+    if req_status == "scheduled" {
+        return json_error(&state, StatusCode::BAD_REQUEST, msg_keys::VALIDATION_ERROR);
+    }
+    if req_status == "draft" {
+        nl.status = "draft".to_string();
+        nl.sent_at = String::new();
+        nl.scheduled_at = None;
+        nl.recipient_count = 0;
+        let id = state.db.insert_newsletter_campaign(&nl).unwrap_or(0);
+        let client_ip = extract_client_ip(&headers);
+        let _ = state.db.insert_audit_log(
+            &operator.email,
+            "draft",
+            "newsletter_campaign",
+            Some(id),
+            &json!({
+                "subject_tr": nl.subject_tr,
+                "recipient_count": 0
+            })
+            .to_string(),
+            &client_ip,
+        );
+        return ApiResponse::ok(json!({
+            "status": "draft",
+            "id": id,
+            "recipient_count": 0,
+            "scheduled_at": null
+        }))
+        .into_response();
+    }
+
     if nl.sent_at.trim().is_empty() {
         nl.sent_at = chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string();
     }
@@ -226,16 +400,15 @@ pub async fn admin_insert_newsletter(
         "queued".to_string()
     };
 
-    let sponsor_ad = nl
-        .sponsor_ad_id
-        .and_then(|aid| state.db.get_all_ads().into_iter().find(|a| a.id == aid));
+    let sponsor_ad = resolved_sponsor;
+    let body_opt = (!nl.body_html.trim().is_empty()).then_some(nl.body_html.as_str());
     let dispatch = email_service::dispatch_newsletter_campaign(
         &state.config,
         &state.db,
         &nl,
         &recipients,
         sponsor_ad.as_ref(),
-        payload.body_html.as_deref(),
+        body_opt,
     )
     .await;
 
@@ -303,7 +476,15 @@ pub async fn admin_list_redirects(
     State(state): State<AppState>,
     pagination: PaginationParams,
 ) -> Response {
-    if let Err(resp) = require_any_perm(&operator, &["settings:read", "contents:read"]) {
+    if let Err(resp) = require_any_perm(
+        &operator,
+        &[
+            "settings:read",
+            "contents:read",
+            "redirects:write",
+            "redirects:manage",
+        ],
+    ) {
         return resp;
     }
     let (redirects, total_count) = state
@@ -318,8 +499,43 @@ pub async fn admin_insert_redirect(
     State(state): State<AppState>,
     Json(rd): Json<SeoRedirectRule>,
 ) -> Response {
-    if let Err(resp) = require_any_perm(&operator, &["settings:write", "contents:publish"]) {
+    if let Err(resp) = require_any_perm(
+        &operator,
+        &[
+            "settings:write",
+            "contents:publish",
+            "redirects:write",
+            "redirects:manage",
+        ],
+    ) {
         return resp;
+    }
+    if crate::db::Database::is_protected_admin_redirect_source(
+        rd.old_path.trim(),
+        Some(&state.config.admin_path_secret),
+    ) {
+        return ApiResponse::raw(
+            StatusCode::BAD_REQUEST,
+            json!({
+                "status": "error",
+                "error_code": error_codes::BAD_REQUEST,
+                "message": "Yönetim veya kullanımdan kaldırılmış admin rota adresleri yönlendirilemez.",
+                "data": null
+            }),
+        )
+        .into_response();
+    }
+    if !crate::db::Database::is_safe_seo_redirect_target(rd.new_path.trim()) {
+        return ApiResponse::raw(
+            StatusCode::BAD_REQUEST,
+            json!({
+                "status": "error",
+                "error_code": error_codes::BAD_REQUEST,
+                "message": "Hedef yol yalnızca güvenli site-içi göreli bir yol ('/' ile başlayan) olabilir.",
+                "data": null
+            }),
+        )
+        .into_response();
     }
     match state.db.insert_seo_redirect(&rd) {
         Ok(id) => {
@@ -350,23 +566,143 @@ pub async fn admin_insert_redirect(
 pub async fn admin_export_open_data(
     operator: OperatorUser,
     headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
     State(state): State<AppState>,
 ) -> Response {
     if let Err(resp) = require_any_perm(&operator, &["analytics:export", "settings:write"]) {
         return resp;
     }
+    let anonymize = matches!(
+        params.get("anonymize").map(|s| s.trim().to_ascii_lowercase()).as_deref(),
+        Some("1" | "true" | "yes")
+    );
     let client_ip = extract_client_ip(&headers);
     let _ = state.db.insert_audit_log(
         &operator.email,
         "export_open_data",
         "system",
         None,
-        "{}",
+        &json!({ "anonymized": anonymize }).to_string(),
         &client_ip,
     );
 
+    let raw_users = state.db.get_all_users();
+    let users_payload = if anonymize {
+        json!(analytics_service::anonymize_open_data_users(&raw_users, &state.config.session_secret))
+    } else {
+        json!(raw_users)
+    };
+    let corp_requests_payload = if anonymize {
+        json!([])
+    } else {
+        json!(state.db.get_corporate_requests())
+    };
+    let invoices_payload = if anonymize {
+        let invs: Vec<serde_json::Value> = state
+            .db
+            .get_order_invoices()
+            .into_iter()
+            .map(|inv| {
+                json!({
+                    "invoice_no": inv.invoice_no,
+                    "item_type": inv.item_type,
+                    "item_code": inv.item_code,
+                    "amount_try": inv.amount_try,
+                    "payment_status": inv.payment_status,
+                    "created_at": inv.created_at
+                })
+            })
+            .collect();
+        json!(invs)
+    } else {
+        json!(state.db.get_order_invoices())
+    };
+    let events_payload = if anonymize {
+        use sha2::Digest;
+        let raw_events = state.db.get_all_analytics_events();
+        let mut cat_counts: HashMap<String, usize> = HashMap::new();
+        let mut cat_actors: HashMap<String, std::collections::HashSet<String>> = HashMap::new();
+        for (idx, ev) in raw_events.iter().enumerate() {
+            let cat = ev.organization_category.trim().to_string();
+            if !cat.is_empty() {
+                *cat_counts.entry(cat.clone()).or_insert(0) += 1;
+                let actor = if let Some(uid) = ev.user_id {
+                    format!("u:{}", uid)
+                } else if !ev.session_id.trim().is_empty() {
+                    format!("s:{}", ev.session_id.trim())
+                } else {
+                    format!("i:{}", idx)
+                };
+                cat_actors.entry(cat).or_default().insert(actor);
+            }
+        }
+        let evs: Vec<serde_json::Value> = raw_events
+            .into_iter()
+            .map(|mut ev| {
+                ev.user_id = None;
+                ev.organization_name = String::new();
+                if !ev.session_id.trim().is_empty() {
+                    let mut hasher = sha2::Sha256::new();
+                    hasher.update(
+                        format!(
+                            "msi-anon-sess:{}:{}",
+                            state.config.session_secret,
+                            ev.session_id.trim()
+                        )
+                        .as_bytes(),
+                    );
+                    let digest = hex::encode(hasher.finalize());
+                    ev.session_id = format!("anon_sess_{}", &digest[..12]);
+                }
+                let cat = ev.organization_category.trim().to_string();
+                let count_ok = !cat.is_empty()
+                    && cat_counts.get(&cat).copied().unwrap_or(0) >= 3
+                    && cat_actors.get(&cat).map(|s| s.len()).unwrap_or(0) >= 3;
+                if !count_ok {
+                    ev.organization_category = "Diğer Kurumlar (k<3)".to_string();
+                }
+                json!(ev)
+            })
+            .collect();
+        json!(evs)
+    } else {
+        json!(state.db.get_all_analytics_events())
+    };
+    let reminders_payload = if anonymize {
+        use sha2::Digest;
+        let rems: Vec<serde_json::Value> = state
+            .db
+            .get_renewal_reminders()
+            .into_iter()
+            .map(|r| {
+                let mut hasher = sha2::Sha256::new();
+                hasher.update(
+                    format!(
+                        "msi-anon-rem:{}:{}:{}",
+                        state.config.session_secret,
+                        r.user_id,
+                        r.user_email.trim().to_lowercase()
+                    )
+                    .as_bytes(),
+                );
+                let digest = hex::encode(hasher.finalize());
+                json!({
+                    "anon_id": format!("anon_{}", &digest[..8]),
+                    "stage_label": r.stage_label,
+                    "days_remaining": r.days_remaining,
+                    "status": r.status,
+                    "sent_at": r.sent_at
+                })
+            })
+            .collect();
+        json!(rems)
+    } else {
+        json!(state.db.get_renewal_reminders())
+    };
+
     let payload = json!({
         "export_standard": "UMSA-MSI-OPEN-DATA-V1 (Zero Vendor-Lock Universal JSON/PostgreSQL/SQLite Portable Archive)",
+        "anonymized": anonymize,
         "exported_at": chrono::Utc::now().to_rfc3339(),
         "domains": [&state.config.primary_domain, &state.config.news_domain],
         "categories": state.db.get_all_categories(),
@@ -375,15 +711,15 @@ pub async fn admin_export_open_data(
         "magazine_issues": state.db.get_all_issues(),
         "ad_campaigns": state.db.get_all_ads(),
         "recommendation_rules": state.db.get_recommendation_rules(),
-        "users_kvkk_verified": state.db.get_all_users(),
-        "corporate_verification_requests": state.db.get_corporate_requests(),
+        "users_kvkk_verified": users_payload,
+        "corporate_verification_requests": corp_requests_payload,
         "subscription_plans": state.db.get_subscription_plans(),
         "commerce_products": state.db.get_commerce_products(),
-        "order_invoices": state.db.get_order_invoices(),
-        "renewal_reminders_5_stage": state.db.get_renewal_reminders(),
+        "order_invoices": invoices_payload,
+        "renewal_reminders_5_stage": reminders_payload,
         "newsletter_campaigns": state.db.get_newsletter_campaigns(),
         "seo_301_redirects": state.db.get_seo_redirects(),
-        "analytics_events": state.db.get_all_analytics_events()
+        "analytics_events": events_payload
     });
 
     let body = serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string());
@@ -404,16 +740,28 @@ pub async fn admin_export_open_data(
 pub async fn admin_list_notifications_api(
     operator: OperatorUser,
     State(state): State<AppState>,
-    uri: Uri,
-    headers: HeaderMap,
-    query: Query<HashMap<String, String>>,
+    _uri: Uri,
+    _headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
     if let Err(resp) = require_any_perm(&operator, &["notifications:read", "settings:read"]) {
         return resp;
     }
-    list_notifications_api(State(state), uri, headers, query)
-        .await
-        .into_response()
+    let email_opt = params.get("email").map(|s| s.as_str()).filter(|s| !s.trim().is_empty());
+    let org_opt = params.get("org").map(|s| s.as_str()).filter(|s| !s.trim().is_empty());
+    let all = state.db.get_system_notifications(None);
+    let filtered: Vec<_> = if email_opt.is_some() || org_opt.is_some() {
+        crate::engine::notification_engine::filter_user_notifications(&all, email_opt, org_opt)
+    } else {
+        all
+    };
+    let banners = crate::engine::notification_engine::filter_active_banners(&filtered);
+    Json(json!({
+        "notifications": filtered,
+        "active_banners": banners,
+        "total": filtered.len()
+    }))
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -751,7 +1099,15 @@ pub async fn admin_delete_redirect(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Response {
-    if let Err(resp) = require_any_perm(&operator, &["settings:write", "contents:publish"]) {
+    if let Err(resp) = require_any_perm(
+        &operator,
+        &[
+            "settings:write",
+            "contents:publish",
+            "redirects:write",
+            "redirects:manage",
+        ],
+    ) {
         return resp;
     }
     match state.db.delete_seo_redirect(id) {

@@ -28,6 +28,8 @@ pub fn render_into(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
     render_issue_dialog(buf, ctx);
     render_auth_dialog(buf, ctx);
     render_offer_dialog(buf, ctx);
+    render_newsletter_dialog(buf, ctx);
+    render_cart_drawer(buf, ctx);
     render_cookie_consent_bar(buf, ctx);
     render_cookie_dialog(buf, ctx);
     render_gallery_lightbox(buf, ctx);
@@ -37,12 +39,9 @@ fn append_antispam_fields(f: &mut HtmlBuf) {
     f.void_with("input", |inp| {
         inp.attr("type", "text")
             .attr("name", "website_url")
+            .attr("class", "hp-antispam-field")
             .attr("tabindex", "-1")
             .attr("autocomplete", "off")
-            .attr(
-                "style",
-                "position:absolute;left:-9999px;opacity:0;height:0;width:0;",
-            )
             .attr("aria-hidden", "true");
     });
     f.void_with("input", |inp| {
@@ -106,10 +105,32 @@ fn render_issue_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
     let close_aria = close_label(ctx);
     let title = t(ctx, "dialogs.issue.title", "E-Dergi", "E-Magazine");
     let tab_toc = t(ctx, "dialogs.issue.tab_toc", "İçindekiler", "Table of Contents");
+    let tab_flipbook = t(ctx, "dialogs.issue.tab_flipbook", "Sayfa Çevirici", "Flipbook Reader");
     let tab_pdf = t(ctx, "dialogs.issue.tab_pdf", "PDF Okuyucu", "PDF Reader");
     let prev_aria = t(ctx, "dialogs.issue.prev_spread", "Önceki bölüm", "Previous section");
     let next_aria = t(ctx, "dialogs.issue.next_spread", "Sonraki bölüm", "Next section");
-    let open_pdf = t(ctx, "dialogs.issue.open_pdf", "PDF'yi aç ↗", "Open PDF ↗");
+    let open_fb_cta = t(ctx, "dialogs.issue.open_flipbook", "Sayfa Çeviricide Aç →", "Open in Flipbook →");
+    let open_pdf = t(ctx, "dialogs.issue.open_pdf", "Filigranlı PDF İndir ↗", "Download Watermarked PDF ↗");
+    let export_title = t(ctx, "dialogs.issue.export_title", "Filigranlı PDF Dışa Aktarım", "Watermarked PDF Export");
+    let export_all = t(ctx, "dialogs.issue.export_all", "Tam Sayı", "Full Issue");
+    let export_current = t(ctx, "dialogs.issue.export_current", "Bu Sayfa / Çift Sayfa", "Current Page / Spread");
+    let export_custom = t(ctx, "dialogs.issue.export_custom", "Belirli Sayfalar", "Custom Pages");
+    let export_ph = t(ctx, "dialogs.issue.export_placeholder", "Örn: 1-5, 8", "e.g. 1-5, 8");
+    let export_input_aria = t(ctx, "dialogs.issue.export_input_aria", "İndirilecek sayfa aralığı", "Page range to download");
+    let watermark_notice = t(
+        ctx,
+        "dialogs.issue.watermark_notice",
+        "Kişisel ve kurumsal DRM güvenlik filigranı indirilen tüm sayfalara dinamik olarak işlenir.",
+        "Personal and institutional DRM security watermark is dynamically embedded into every exported page.",
+    );
+    let fb_prev_aria = t(ctx, "dialogs.issue.fb_prev", "Önceki sayfa", "Previous page");
+    let fb_next_aria = t(ctx, "dialogs.issue.fb_next", "Sonraki sayfa", "Next page");
+    let fb_page_aria = t(ctx, "dialogs.issue.fb_page_aria", "Sayfa numarasına git", "Jump to page number");
+    let fb_toc_aria = t(ctx, "dialogs.issue.fb_toc_aria", "Bölüme atla", "Jump to section");
+    let fb_zoom_out_aria = t(ctx, "dialogs.issue.fb_zoom_out", "Uzaklaştır", "Zoom out");
+    let fb_zoom_in_aria = t(ctx, "dialogs.issue.fb_zoom_in", "Yakınlaştır", "Zoom in");
+    let fb_zoom_reset_aria = t(ctx, "dialogs.issue.fb_zoom_reset", "Yakınlaştırmayı sıfırla", "Reset zoom");
+    let fb_fullscreen_lbl = t(ctx, "dialogs.issue.fb_fullscreen", "Tam Ekran", "Fullscreen");
     let hint = t(
         ctx,
         "dialogs.issue.hint",
@@ -123,7 +144,10 @@ fn render_issue_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
         "E-Magazine reading view",
     );
     let active_issue = ctx.featured_issue.unwrap_or(286);
-    let pdf_src = format!("/api/v1/edergi/{}/download-pdf#toolbar=0", active_issue);
+    let pdf_src = format!(
+        "/api/v1/edergi/{}/download-pdf?publication_type=msi#toolbar=0",
+        active_issue
+    );
 
     buf.el(
         "dialog",
@@ -143,7 +167,7 @@ fn render_issue_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
             );
             b.el("div", &[("class", "issue-reader")], |r| {
                 r.void_el("img", &[("id", "issue-dialog-cover"), ("alt", "")]);
-                r.el("div", &[], |col| {
+                r.el("div", &[("class", "edergi-dialog-main")], |col| {
                     col.el("p", &[("id", "issue-dialog-summary")], |_| {});
                     col.el(
                         "div",
@@ -166,6 +190,21 @@ fn render_issue_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                                 ],
                                 |btn| {
                                     btn.text(&tab_toc);
+                                },
+                            );
+                            tabs.el(
+                                "button",
+                                &[
+                                    ("type", "button"),
+                                    ("id", "issue-tab-flipbook"),
+                                    ("class", "issue-view-tab"),
+                                    ("role", "tab"),
+                                    ("aria-selected", "false"),
+                                    ("aria-controls", "issue-flipbook-panel"),
+                                    ("data-issue-view", "flipbook"),
+                                ],
+                                |btn| {
+                                    btn.text(&tab_flipbook);
                                 },
                             );
                             tabs.el(
@@ -226,20 +265,266 @@ fn render_issue_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                             });
                             panel.el("article", &[("id", "reader-spread")], |_| {});
                             panel.el(
-                                "a",
-                                &[
-                                    ("id", "issue-download"),
-                                    ("class", "button primary"),
-                                    ("target", "_blank"),
-                                    ("rel", "noopener"),
-                                ],
-                                |a| {
-                                    a.text(&open_pdf);
+                                "div",
+                                &[("class", "edergi-toc-cta-row")],
+                                |row| {
+                                    row.el(
+                                        "button",
+                                        &[
+                                            ("type", "button"),
+                                            ("class", "button secondary edergi-open-fb-btn"),
+                                            ("data-issue-view", "flipbook"),
+                                        ],
+                                        |btn| {
+                                            btn.text(&open_fb_cta);
+                                        },
+                                    );
                                 },
                             );
+                            panel.el("div", &[("id", "edergi-toc-list"), ("class", "edergi-toc-list")], |_| {});
+                            panel.el("div", &[("class", "edergi-export-box")], |exp| {
+                                exp.el("div", &[("class", "edergi-export-head")], |hd| {
+                                    hd.text(&export_title);
+                                });
+                                exp.el(
+                                    "div",
+                                    &[
+                                        ("class", "edergi-export-modes"),
+                                        ("role", "radiogroup"),
+                                        ("aria-label", &export_title),
+                                    ],
+                                    |modes| {
+                                        modes.el("label", &[("class", "edergi-export-option")], |lbl| {
+                                            lbl.void_with("input", |inp| {
+                                                inp.attr("type", "radio")
+                                                    .attr("name", "edergi_export_mode")
+                                                    .attr("value", "all")
+                                                    .bool_attr("checked", true);
+                                            });
+                                            lbl.el("span", &[], |sp| {
+                                                sp.text(&export_all);
+                                            });
+                                        });
+                                        modes.el("label", &[("class", "edergi-export-option")], |lbl| {
+                                            lbl.void_with("input", |inp| {
+                                                inp.attr("type", "radio")
+                                                    .attr("name", "edergi_export_mode")
+                                                    .attr("value", "current");
+                                            });
+                                            lbl.el("span", &[("id", "edergi-export-current-label")], |sp| {
+                                                sp.text(&export_current);
+                                            });
+                                        });
+                                        modes.el("label", &[("class", "edergi-export-option")], |lbl| {
+                                            lbl.void_with("input", |inp| {
+                                                inp.attr("type", "radio")
+                                                    .attr("name", "edergi_export_mode")
+                                                    .attr("value", "custom");
+                                            });
+                                            lbl.el("span", &[], |sp| {
+                                                sp.text(&export_custom);
+                                            });
+                                        });
+                                    },
+                                );
+                                exp.el("div", &[("class", "edergi-export-custom-row")], |row| {
+                                    row.void_with("input", |inp| {
+                                        inp.attr("id", "edergi-pages-input")
+                                            .attr("type", "text")
+                                            .attr("class", "edergi-pages-input")
+                                            .attr("placeholder", &export_ph)
+                                            .attr("aria-label", &export_input_aria)
+                                            .bool_attr("disabled", true);
+                                    });
+                                    row.el(
+                                        "a",
+                                        &[
+                                            ("id", "issue-download"),
+                                            ("class", "button primary"),
+                                            ("target", "_blank"),
+                                            ("rel", "noopener"),
+                                        ],
+                                        |a| {
+                                            a.text(&open_pdf);
+                                        },
+                                    );
+                                });
+                                exp.el(
+                                    "p",
+                                    &[
+                                        ("id", "edergi-export-feedback"),
+                                        ("class", "form-feedback"),
+                                        ("role", "status"),
+                                        ("aria-live", "polite"),
+                                    ],
+                                    |_| {},
+                                );
+                                exp.el("p", &[("class", "edergi-watermark-notice")], |p| {
+                                    p.text(&watermark_notice);
+                                });
+                            });
                             panel.el("p", &[("class", "reader-hint")], |p| {
                                 p.text(&hint);
                             });
+                        },
+                    );
+                    col.el_with(
+                        "div",
+                        |attrs| {
+                            attrs
+                                .attr("id", "issue-flipbook-panel")
+                                .attr("class", "edergi-flipbook-panel")
+                                .attr("role", "tabpanel")
+                                .attr("aria-labelledby", "issue-tab-flipbook")
+                                .bool_attr("hidden", true);
+                        },
+                        |panel| {
+                            panel.el("div", &[("class", "edergi-fb-toolbar")], |tb| {
+                                tb.el("div", &[("class", "edergi-fb-nav-group")], |nav| {
+                                    nav.el(
+                                        "button",
+                                        &[
+                                            ("type", "button"),
+                                            ("class", "button secondary edergi-fb-btn"),
+                                            ("data-fb-prev", ""),
+                                            ("aria-label", &fb_prev_aria),
+                                        ],
+                                        |btn| {
+                                            btn.text("←");
+                                        },
+                                    );
+                                    nav.el("label", &[("class", "edergi-fb-jump-lbl")], |lbl| {
+                                        lbl.void_el(
+                                            "input",
+                                            &[
+                                                ("id", "edergi-page-input"),
+                                                ("type", "number"),
+                                                ("min", "1"),
+                                                ("value", "1"),
+                                                ("aria-label", &fb_page_aria),
+                                            ],
+                                        );
+                                        lbl.el("span", &[("class", "edergi-fb-total")], |sp| {
+                                            sp.raw("/ ");
+                                            sp.el("strong", &[("id", "edergi-page-total")], |st| {
+                                                st.text("1");
+                                            });
+                                        });
+                                    });
+                                    nav.el(
+                                        "button",
+                                        &[
+                                            ("type", "button"),
+                                            ("class", "button secondary edergi-fb-btn"),
+                                            ("data-fb-next", ""),
+                                            ("aria-label", &fb_next_aria),
+                                        ],
+                                        |btn| {
+                                            btn.text("→");
+                                        },
+                                    );
+                                });
+                                tb.el(
+                                    "select",
+                                    &[
+                                        ("id", "edergi-toc-jump"),
+                                        ("class", "edergi-toc-jump"),
+                                        ("aria-label", &fb_toc_aria),
+                                    ],
+                                    |_| {},
+                                );
+                                tb.el("div", &[("class", "edergi-fb-zoom-group")], |zg| {
+                                    zg.el(
+                                        "button",
+                                        &[
+                                            ("type", "button"),
+                                            ("class", "button secondary edergi-fb-btn"),
+                                            ("data-fb-zoom", "out"),
+                                            ("aria-label", &fb_zoom_out_aria),
+                                        ],
+                                        |btn| {
+                                            btn.text("−");
+                                        },
+                                    );
+                                    zg.el("span", &[("id", "edergi-zoom-level"), ("class", "edergi-zoom-level")], |sp| {
+                                        sp.text("100%");
+                                    });
+                                    zg.el(
+                                        "button",
+                                        &[
+                                            ("type", "button"),
+                                            ("class", "button secondary edergi-fb-btn"),
+                                            ("data-fb-zoom", "in"),
+                                            ("aria-label", &fb_zoom_in_aria),
+                                        ],
+                                        |btn| {
+                                            btn.text("+");
+                                        },
+                                    );
+                                    zg.el(
+                                        "button",
+                                        &[
+                                            ("type", "button"),
+                                            ("class", "button secondary edergi-fb-btn"),
+                                            ("data-fb-zoom", "reset"),
+                                            ("aria-label", &fb_zoom_reset_aria),
+                                        ],
+                                        |btn| {
+                                            btn.text("1:1");
+                                        },
+                                    );
+                                    zg.el(
+                                        "button",
+                                        &[
+                                            ("type", "button"),
+                                            ("id", "edergi-fullscreen-btn"),
+                                            ("class", "button secondary edergi-fb-btn"),
+                                            ("data-fb-fullscreen", ""),
+                                        ],
+                                        |btn| {
+                                            btn.text(&fb_fullscreen_lbl);
+                                        },
+                                    );
+                                });
+                            });
+                            panel.el(
+                                "div",
+                                &[
+                                    ("class", "edergi-fb-stage"),
+                                    ("tabindex", "0"),
+                                    ("data-fb-stage", ""),
+                                ],
+                                |stage| {
+                                    stage.el("div", &[("class", "edergi-fb-viewport")], |vp| {
+                                        vp.el("div", &[("id", "edergi-book"), ("class", "edergi-book")], |book| {
+                                            book.el("div", &[("id", "edergi-slot-left"), ("class", "edergi-page-slot is-left")], |slot| {
+                                                slot.el("span", &[("id", "edergi-badge-left"), ("class", "edergi-page-badge")], |_| {});
+                                                slot.void_el("img", &[("id", "edergi-page-left"), ("alt", ""), ("decoding", "async")]);
+                                                slot.el("div", &[("class", "edergi-page-skeleton"), ("aria-hidden", "true")], |_| {});
+                                            });
+                                            book.el("div", &[("class", "edergi-spine"), ("aria-hidden", "true")], |_| {});
+                                            book.el("div", &[("id", "edergi-slot-right"), ("class", "edergi-page-slot is-right")], |slot| {
+                                                slot.el("span", &[("id", "edergi-badge-right"), ("class", "edergi-page-badge")], |_| {});
+                                                slot.void_el("img", &[("id", "edergi-page-right"), ("alt", ""), ("decoding", "async")]);
+                                                slot.el("div", &[("class", "edergi-page-skeleton"), ("aria-hidden", "true")], |_| {});
+                                            });
+                                        });
+                                    });
+                                    stage.el_with(
+                                        "div",
+                                        |attrs| {
+                                            attrs
+                                                .attr("id", "edergi-fb-gate")
+                                                .attr("class", "edergi-fb-gate")
+                                                .bool_attr("hidden", true);
+                                        },
+                                        |gate| {
+                                            gate.el("p", &[("id", "edergi-fb-gate-msg")], |_| {});
+                                            gate.el("div", &[("id", "edergi-fb-gate-actions"), ("class", "hero-actions")], |_| {});
+                                        },
+                                    );
+                                },
+                            );
                         },
                     );
                     col.el_with(
@@ -444,6 +729,36 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
         "Department or badge reference for non-public email domains",
     );
     let reg_submit = t(ctx, "dialogs.auth.register_submit", "Hesap oluştur →", "Create account →");
+    let reg_step1_title = t(
+        ctx,
+        "dialogs.auth.reg_step1_title",
+        "Kimlik ve Hesap Bilgileri",
+        "Identity & Credentials",
+    );
+    let reg_step2_title = t(
+        ctx,
+        "dialogs.auth.reg_step2_title",
+        "Kurum ve Görev Doğrulama",
+        "Organisation & Role Verification",
+    );
+    let reg_gov_note = t(
+        ctx,
+        "dialogs.auth.reg_gov_note",
+        ".gov.tr / .tsk.tr kurumsal e-posta adresleri anında dijital E-Dergi erişimi kazanır.",
+        "Official .gov.tr / .tsk.tr domains unlock instant digital E-Magazine access.",
+    );
+    let reg_step3_title = t(
+        ctx,
+        "dialogs.auth.reg_step3_title",
+        "SSB Teknoloji İlgi Alanları",
+        "SSB Technology Interests",
+    );
+    let reg_step4_title = t(
+        ctx,
+        "dialogs.auth.reg_step4_title",
+        "Yasal Onaylar (KVKK & ETK)",
+        "Legal & Communication Consents",
+    );
 
     let kvkk_href = lang_href("/kurumsal/kvkk", ctx.lang);
     let terms_href = lang_href("/kurumsal/kullanim-kosullari", ctx.lang);
@@ -664,40 +979,49 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                 },
                 |f| {
                     append_antispam_fields(f);
-                    f.el("div", &[("class", "form-grid-2")], |row| {
-                        row.el("label", &[], |lbl| {
-                            lbl.text(&full_name_lbl);
-                            lbl.void_with("input", |inp| {
-                                inp.attr("name", "full_name")
-                                    .attr("autocomplete", "name")
-                                    .attr("maxlength", "100")
-                                    .bool_attr("required", true);
+                    // Step 1: Identity & Credentials
+                    f.el("section", &[("class", "auth-reg-section"), ("data-reg-step", "1")], |sec| {
+                        sec.el("div", &[("class", "auth-reg-section-head")], |hd| {
+                            hd.el("span", &[("class", "auth-reg-step-num")], |n| {
+                                n.text("01");
+                            });
+                            hd.el("span", &[("class", "auth-reg-section-title")], |tl| {
+                                tl.text(&reg_step1_title);
                             });
                         });
-                        row.el("label", &[], |lbl| {
-                            lbl.text(&corp_email_lbl);
-                            lbl.void_with("input", |inp| {
-                                inp.attr("name", "email")
-                                    .attr("type", "email")
-                                    .attr("autocomplete", "email")
-                                    .bool_attr("required", true);
+                        sec.el("div", &[("class", "form-grid-2")], |row| {
+                            row.el("label", &[], |lbl| {
+                                lbl.text(&full_name_lbl);
+                                lbl.void_with("input", |inp| {
+                                    inp.attr("name", "full_name")
+                                        .attr("autocomplete", "name")
+                                        .attr("maxlength", "100")
+                                        .bool_attr("required", true);
+                                });
+                            });
+                            row.el("label", &[], |lbl| {
+                                lbl.text(&corp_email_lbl);
+                                lbl.void_with("input", |inp| {
+                                    inp.attr("name", "email")
+                                        .attr("type", "email")
+                                        .attr("autocomplete", "email")
+                                        .bool_attr("required", true);
+                                });
                             });
                         });
-                    });
-                    f.el_with(
-                        "div",
-                        |attrs| {
-                            attrs
-                                .attr("id", "gov-domain-hint")
-                                .attr("class", "gov-domain-hint")
-                                .bool_attr("hidden", true);
-                        },
-                        |hint| {
-                            hint.text(&gov_hint);
-                        },
-                    );
-                    f.el("div", &[("class", "form-grid-2")], |row| {
-                        row.el("label", &[], |lbl| {
+                        sec.el_with(
+                            "div",
+                            |attrs| {
+                                attrs
+                                    .attr("id", "gov-domain-hint")
+                                    .attr("class", "gov-domain-hint")
+                                    .bool_attr("hidden", true);
+                            },
+                            |hint| {
+                                hint.text(&gov_hint);
+                            },
+                        );
+                        sec.el("label", &[], |lbl| {
                             lbl.text(&reg_pw_lbl);
                             lbl.void_with("input", |inp| {
                                 inp.attr("name", "password")
@@ -707,133 +1031,199 @@ fn render_auth_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
                                     .bool_attr("required", true);
                             });
                         });
-                        row.el("label", &[], |lbl| {
-                            lbl.text(&job_lbl);
-                            lbl.void_el(
-                                "input",
-                                &[
-                                    ("name", "job_title"),
-                                    ("autocomplete", "organization-title"),
-                                    ("placeholder", &job_ph),
-                                    ("maxlength", "100"),
-                                ],
-                            );
-                        });
                     });
-                    f.el("div", &[("class", "form-grid-2")], |row| {
-                        row.el("label", &[], |lbl| {
-                            lbl.text(&org_name_lbl);
-                            lbl.void_with("input", |inp| {
-                                inp.attr("name", "organization_name")
-                                    .attr("autocomplete", "organization")
-                                    .bool_attr("required", true);
+
+                    // Step 2: Organisation & Role Verification
+                    f.el("section", &[("class", "auth-reg-section"), ("data-reg-step", "2")], |sec| {
+                        sec.el("div", &[("class", "auth-reg-section-head")], |hd| {
+                            hd.el("span", &[("class", "auth-reg-step-num")], |n| {
+                                n.text("02");
+                            });
+                            hd.el("span", &[("class", "auth-reg-section-title")], |tl| {
+                                tl.text(&reg_step2_title);
                             });
                         });
-                        row.el("label", &[], |lbl| {
-                            lbl.text(&org_cat_lbl);
-                            lbl.el("select", &[("name", "organization_category")], |sel| {
-                                for inst in choices {
-                                    let lbl_txt = if ctx.lang.eq_ignore_ascii_case("en")
-                                        && !inst.label_en.trim().is_empty()
-                                    {
-                                        &inst.label_en
-                                    } else {
-                                        &inst.label_tr
-                                    };
-                                    sel.el("option", &[("value", &inst.code)], |opt| {
-                                        opt.text(lbl_txt);
-                                    });
+                        sec.el("div", &[("class", "auth-gov-note")], |note| {
+                            note.text(&reg_gov_note);
+                        });
+                        sec.el("div", &[("class", "form-grid-2")], |row| {
+                            row.el("label", &[], |lbl| {
+                                lbl.text(&org_name_lbl);
+                                lbl.void_with("input", |inp| {
+                                    inp.attr("name", "organization_name")
+                                        .attr("autocomplete", "organization")
+                                        .bool_attr("required", true);
+                                });
+                            });
+                            row.el("label", &[], |lbl| {
+                                lbl.text(&org_cat_lbl);
+                                lbl.el("select", &[("name", "organization_category")], |sel| {
+                                    for inst in choices {
+                                        let lbl_txt = if ctx.lang.eq_ignore_ascii_case("en")
+                                            && !inst.label_en.trim().is_empty()
+                                        {
+                                            &inst.label_en
+                                        } else {
+                                            &inst.label_tr
+                                        };
+                                        sel.el("option", &[("value", &inst.code)], |opt| {
+                                            opt.text(lbl_txt);
+                                        });
+                                    }
+                                });
+                            });
+                        });
+                        sec.el("div", &[("class", "form-grid-2")], |row| {
+                            row.el("label", &[], |lbl| {
+                                lbl.text(&job_lbl);
+                                lbl.void_el(
+                                    "input",
+                                    &[
+                                        ("name", "job_title"),
+                                        ("autocomplete", "organization-title"),
+                                        ("placeholder", &job_ph),
+                                        ("maxlength", "100"),
+                                    ],
+                                );
+                            });
+                            row.el("label", &[], |lbl| {
+                                lbl.text(&req_msg_lbl);
+                                lbl.void_el(
+                                    "input",
+                                    &[
+                                        ("name", "request_message"),
+                                        ("maxlength", "240"),
+                                        ("placeholder", &req_msg_ph),
+                                    ],
+                                );
+                            });
+                        });
+                    });
+
+                    // Step 3: SSB Technology Interests
+                    f.el("section", &[("class", "auth-reg-section"), ("data-reg-step", "3")], |sec| {
+                        sec.el("div", &[("class", "auth-reg-section-head")], |hd| {
+                            hd.el("span", &[("class", "auth-reg-step-num")], |n| {
+                                n.text("03");
+                            });
+                            hd.el("span", &[("class", "auth-reg-section-title")], |tl| {
+                                tl.text(&reg_step3_title);
+                            });
+                        });
+                        sec.el("fieldset", &[("class", "ssb-fieldset")], |fs| {
+                            fs.el("legend", &[], |lg| {
+                                lg.text(&ssb_legend);
+                            });
+                            fs.el("div", &[("id", "register-ssb-tags"), ("class", "ssb-tag-picks")], |_| {});
+                        });
+                    });
+
+                    // Step 4: Legal & Communication Consents
+                    f.el("section", &[("class", "auth-reg-section"), ("data-reg-step", "4")], |sec| {
+                        sec.el("div", &[("class", "auth-reg-section-head")], |hd| {
+                            hd.el("span", &[("class", "auth-reg-step-num")], |n| {
+                                n.text("04");
+                            });
+                            hd.el("span", &[("class", "auth-reg-section-title")], |tl| {
+                                tl.text(&reg_step4_title);
+                            });
+                        });
+                        sec.void_el(
+                            "input",
+                            &[
+                                ("type", "hidden"),
+                                ("name", "tos_version"),
+                                ("value", "2026-01"),
+                            ],
+                        );
+                        sec.el("label", &[("class", "check-label")], |lbl| {
+                            lbl.void_with("input", |inp| {
+                                inp.attr("type", "checkbox")
+                                    .attr("name", "kvkk_consent")
+                                    .bool_attr("required", true);
+                            });
+                            lbl.el("span", &[], |span| {
+                                if ctx.lang.eq_ignore_ascii_case("en") {
+                                    span.text("I have read the ");
+                                    span.el(
+                                        "a",
+                                        &[("href", &kvkk_href), ("target", "_blank"), ("rel", "noopener")],
+                                        |a| {
+                                            a.text("KVKK Personal Data Disclosure Notice");
+                                        },
+                                    );
+                                    span.text(" and acknowledge the processing of my personal data.");
+                                } else {
+                                    span.el(
+                                        "a",
+                                        &[("href", &kvkk_href), ("target", "_blank"), ("rel", "noopener")],
+                                        |a| {
+                                            a.text("6698 sayılı KVKK Aydınlatma Metni");
+                                        },
+                                    );
+                                    span.text("'ni okudum; kişisel verilerimin işlenmesine ilişkin aydınlatıldım.");
+                                }
+                            });
+                        });
+                        sec.el("label", &[("class", "check-label check-label-tos")], |lbl| {
+                            lbl.void_with("input", |inp| {
+                                inp.attr("type", "checkbox")
+                                    .attr("name", "tos_accepted")
+                                    .attr("id", "register-tos-accepted")
+                                    .attr("value", "true")
+                                    .bool_attr("required", true);
+                            });
+                            lbl.el("span", &[], |span| {
+                                if ctx.lang.eq_ignore_ascii_case("en") {
+                                    span.text("I have read and accept the ");
+                                    span.el(
+                                        "a",
+                                        &[("href", &terms_href), ("target", "_blank"), ("rel", "noopener")],
+                                        |a| {
+                                            a.text("Membership & Terms of Use");
+                                        },
+                                    );
+                                    span.text(" (version 2026-01).");
+                                } else {
+                                    span.text("2026-01 sürüm tarihli ");
+                                    span.el(
+                                        "a",
+                                        &[("href", &terms_href), ("target", "_blank"), ("rel", "noopener")],
+                                        |a| {
+                                            a.text("Üyelik ve Kullanım Koşulları");
+                                        },
+                                    );
+                                    span.text("'nı okudum, kabul ediyorum.");
+                                }
+                            });
+                        });
+                        sec.el("label", &[("class", "check-label")], |lbl| {
+                            lbl.void_el("input", &[("type", "checkbox"), ("name", "email_consent")]);
+                            lbl.el("span", &[], |span| {
+                                if ctx.lang.eq_ignore_ascii_case("en") {
+                                    span.text("I would like to receive email updates on new issues, special dossiers, and defence briefings under the ");
+                                    span.el(
+                                        "a",
+                                        &[("href", &etk_href), ("target", "_blank"), ("rel", "noopener")],
+                                        |a| {
+                                            a.text("Commercial Electronic Messaging Notice");
+                                        },
+                                    );
+                                    span.text(" (Optional).");
+                                } else {
+                                    span.el(
+                                        "a",
+                                        &[("href", &etk_href), ("target", "_blank"), ("rel", "noopener")],
+                                        |a| {
+                                            a.text("6563 sayılı ETK Ticari Elektronik İleti Metni");
+                                        },
+                                    );
+                                    span.text(" kapsamında yeni sayılar, özel dosyalar ve savunma bültenleri hakkında e-posta ile bilgilendirilmek istiyorum (İsteğe bağlı).");
                                 }
                             });
                         });
                     });
-                    f.el("fieldset", &[("class", "ssb-fieldset")], |fs| {
-                        fs.el("legend", &[], |lg| {
-                            lg.text(&ssb_legend);
-                        });
-                        fs.el("div", &[("id", "register-ssb-tags"), ("class", "ssb-tag-picks")], |_| {});
-                    });
-                    f.el("label", &[], |lbl| {
-                        lbl.text(&req_msg_lbl);
-                        lbl.void_el(
-                            "input",
-                            &[
-                                ("name", "request_message"),
-                                ("maxlength", "240"),
-                                ("placeholder", &req_msg_ph),
-                            ],
-                        );
-                    });
-                    f.el("label", &[("class", "check-label")], |lbl| {
-                        lbl.void_with("input", |inp| {
-                            inp.attr("type", "checkbox")
-                                .attr("name", "kvkk_consent")
-                                .bool_attr("required", true);
-                        });
-                        lbl.el("span", &[], |span| {
-                            if ctx.lang.eq_ignore_ascii_case("en") {
-                                span.text("I have read the ");
-                                span.el(
-                                    "a",
-                                    &[("href", &kvkk_href), ("target", "_blank"), ("rel", "noopener")],
-                                    |a| {
-                                        a.text("KVKK Personal Data Disclosure Notice");
-                                    },
-                                );
-                                span.text(" and ");
-                                span.el(
-                                    "a",
-                                    &[("href", &terms_href), ("target", "_blank"), ("rel", "noopener")],
-                                    |a| {
-                                        a.text("Terms of Use");
-                                    },
-                                );
-                                span.text(" and acknowledge the processing of my personal data.");
-                            } else {
-                                span.el(
-                                    "a",
-                                    &[("href", &kvkk_href), ("target", "_blank"), ("rel", "noopener")],
-                                    |a| {
-                                        a.text("6698 sayılı KVKK Aydınlatma Metni");
-                                    },
-                                );
-                                span.text("'ni ve ");
-                                span.el(
-                                    "a",
-                                    &[("href", &terms_href), ("target", "_blank"), ("rel", "noopener")],
-                                    |a| {
-                                        a.text("Üyelik / Kullanım Koşulları");
-                                    },
-                                );
-                                span.text("'nı okudum; kişisel verilerimin işlenmesine ilişkin aydınlatıldım.");
-                            }
-                        });
-                    });
-                    f.el("label", &[("class", "check-label")], |lbl| {
-                        lbl.void_el("input", &[("type", "checkbox"), ("name", "email_consent")]);
-                        lbl.el("span", &[], |span| {
-                            if ctx.lang.eq_ignore_ascii_case("en") {
-                                span.text("I would like to receive email updates on new issues, special dossiers, and defence briefings under the ");
-                                span.el(
-                                    "a",
-                                    &[("href", &etk_href), ("target", "_blank"), ("rel", "noopener")],
-                                    |a| {
-                                        a.text("Commercial Electronic Messaging Notice");
-                                    },
-                                );
-                                span.text(" (Optional).");
-                            } else {
-                                span.el(
-                                    "a",
-                                    &[("href", &etk_href), ("target", "_blank"), ("rel", "noopener")],
-                                    |a| {
-                                        a.text("6563 sayılı ETK Ticari Elektronik İleti Metni");
-                                    },
-                                );
-                                span.text(" kapsamında yeni sayılar, özel dosyalar ve savunma bültenleri hakkında e-posta ile bilgilendirilmek istiyorum (İsteğe bağlı).");
-                            }
-                        });
-                    });
+
                     f.el("p", &[("class", "form-feedback"), ("role", "status")], |_| {});
                     f.el("button", &[("class", "button primary"), ("type", "submit")], |btn| {
                         btn.text(&reg_submit);
@@ -1325,6 +1715,415 @@ fn render_gallery_lightbox(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
     );
 }
 
+fn render_newsletter_dialog(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
+    let close_aria = close_label(ctx);
+    let eyebrow = t(
+        ctx,
+        "dialogs.newsletter.eyebrow",
+        "MSI E-BÜLTEN",
+        "MSI BRIEFINGS",
+    );
+    let title = t(
+        ctx,
+        "dialogs.newsletter.title",
+        "Haftalık Savunma Bültenine Katılın",
+        "Subscribe to Defence Briefings",
+    );
+    let desc = t(
+        ctx,
+        "dialogs.newsletter.desc",
+        "Seçtiğiniz yayın grubuna göre yeni sayı duyuruları, özel savunma dosyaları ve fuar raporları doğrudan e-postanıza gelsin.",
+        "Receive new issue announcements, special defence dossiers and exhibition reports tailored to your selected briefing list.",
+    );
+    let email_lbl = t(ctx, "dialogs.auth.email", "E-posta", "Email");
+    let email_ph = if ctx.lang.eq_ignore_ascii_case("en") {
+        "name.surname@organisation.gov.tr"
+    } else {
+        "ad.soyad@kurum.gov.tr"
+    };
+    let full_name_lbl = t(
+        ctx,
+        "dialogs.newsletter.full_name",
+        "Ad soyad (İsteğe bağlı)",
+        "Full name (Optional)",
+    );
+    let group_lbl = t(
+        ctx,
+        "dialogs.newsletter.group",
+        "Bülten yayın grubu",
+        "Briefing edition",
+    );
+    let opt_general = t(
+        ctx,
+        "dialogs.newsletter.opt_general",
+        "Genel Savunma Bülteni",
+        "General Defence Briefing",
+    );
+    let opt_issues = t(
+        ctx,
+        "dialogs.newsletter.opt_issues",
+        "Yeni Sayı & Özel Dosyalar",
+        "New Issues & Special Dossiers",
+    );
+    let opt_events = t(
+        ctx,
+        "dialogs.newsletter.opt_events",
+        "Fuar & Etkinlik Duyuruları",
+        "Exhibitions & Event Alerts",
+    );
+    let submit_lbl = t(
+        ctx,
+        "dialogs.newsletter.submit",
+        "Bültene katıl",
+        "Subscribe now",
+    );
+    let kvkk_href = lang_href("/kurumsal/kvkk", ctx.lang);
+    let etk_href = lang_href("/kurumsal/ticari-ileti-aydinlatma", ctx.lang);
+
+    buf.el(
+        "dialog",
+        &[
+            ("id", "newsletter-dialog"),
+            ("class", "ui-dialog newsletter-dialog"),
+            ("aria-labelledby", "newsletter-dialog-title"),
+        ],
+        |b| {
+            write_dialog_heading(
+                b,
+                None,
+                &eyebrow,
+                "newsletter-dialog-title",
+                &title,
+                &close_aria,
+            );
+            b.el("p", &[("class", "newsletter-dialog-desc")], |p| {
+                p.text(&desc);
+            });
+            b.el(
+                "form",
+                &[
+                    ("id", "public-newsletter-form"),
+                    ("class", "ui-form"),
+                    ("action", "/api/v1/public/newsletter/subscribe"),
+                    ("data-endpoint", "/api/v1/public/newsletter/subscribe"),
+                ],
+                |f| {
+                    append_antispam_fields(f);
+                    f.el("label", &[], |lbl| {
+                        lbl.text(&email_lbl);
+                        lbl.void_with("input", |inp| {
+                            inp.attr("name", "email")
+                                .attr("type", "email")
+                                .attr("autocomplete", "email")
+                                .attr("placeholder", email_ph)
+                                .bool_attr("required", true);
+                        });
+                    });
+                    f.el("div", &[("class", "form-grid-2")], |row| {
+                        row.el("label", &[], |lbl| {
+                            lbl.text(&full_name_lbl);
+                            lbl.void_el(
+                                "input",
+                                &[
+                                    ("name", "full_name"),
+                                    ("type", "text"),
+                                    ("autocomplete", "name"),
+                                    ("maxlength", "100"),
+                                ],
+                            );
+                        });
+                        row.el("label", &[], |lbl| {
+                            lbl.text(&group_lbl);
+                            lbl.el("select", &[("name", "email_group_code")], |sel| {
+                                sel.el("option", &[("value", "general")], |opt| {
+                                    opt.text(&opt_general);
+                                });
+                                sel.el("option", &[("value", "edergi-releases")], |opt| {
+                                    opt.text(&opt_issues);
+                                });
+                                sel.el("option", &[("value", "exhibition-alerts")], |opt| {
+                                    opt.text(&opt_events);
+                                });
+                            });
+                        });
+                    });
+                    f.el("label", &[("class", "check-label")], |lbl| {
+                        lbl.void_with("input", |inp| {
+                            inp.attr("type", "checkbox")
+                                .attr("name", "kvkk_consent")
+                                .attr("value", "true")
+                                .bool_attr("required", true);
+                        });
+                        lbl.el("span", &[], |span| {
+                            if ctx.lang.eq_ignore_ascii_case("en") {
+                                span.text("I have read the ");
+                                span.el(
+                                    "a",
+                                    &[
+                                        ("href", &kvkk_href),
+                                        ("target", "_blank"),
+                                        ("rel", "noopener"),
+                                    ],
+                                    |a| {
+                                        a.text("KVKK Disclosure Notice");
+                                    },
+                                );
+                                span.text(" and consent to receiving defence briefings under the ");
+                                span.el(
+                                    "a",
+                                    &[
+                                        ("href", &etk_href),
+                                        ("target", "_blank"),
+                                        ("rel", "noopener"),
+                                    ],
+                                    |a| {
+                                        a.text("Commercial Messaging Notice");
+                                    },
+                                );
+                                span.text(".");
+                            } else {
+                                span.el(
+                                    "a",
+                                    &[
+                                        ("href", &kvkk_href),
+                                        ("target", "_blank"),
+                                        ("rel", "noopener"),
+                                    ],
+                                    |a| {
+                                        a.text("6698 sayılı KVKK Aydınlatma Metni");
+                                    },
+                                );
+                                span.text("'ni okudum ve ");
+                                span.el(
+                                    "a",
+                                    &[
+                                        ("href", &etk_href),
+                                        ("target", "_blank"),
+                                        ("rel", "noopener"),
+                                    ],
+                                    |a| {
+                                        a.text("6563 sayılı ETK Bilgilendirme Metni");
+                                    },
+                                );
+                                span.text(" kapsamında savunma bülteni e-postaları almayı onaylıyorum.");
+                            }
+                        });
+                    });
+                    f.el(
+                        "p",
+                        &[
+                            ("class", "form-feedback"),
+                            ("id", "public-newsletter-feedback"),
+                            ("role", "status"),
+                        ],
+                        |_| {},
+                    );
+                    f.el("button", &[("type", "submit"), ("class", "button primary")], |btn| {
+                        btn.text(&submit_lbl);
+                    });
+                },
+            );
+        },
+    );
+}
+
+fn render_cart_drawer(buf: &mut HtmlBuf, ctx: &DialogContext<'_>) {
+    let close_aria = close_label(ctx);
+    let title = t(ctx, "dialogs.cart.title", "Yayın Sepetim", "Publication Cart");
+    let empty_lbl = t(
+        ctx,
+        "dialogs.cart.empty",
+        "Sepetinizde henüz yayın veya abonelik bulunmuyor.",
+        "Your cart currently contains no publications or subscriptions.",
+    );
+    let full_name_lbl = t(ctx, "dialogs.auth.full_name", "Ad soyad", "Full name");
+    let email_lbl = t(ctx, "dialogs.auth.corp_email", "Kurumsal e-posta", "Work email");
+    let org_lbl = t(
+        ctx,
+        "dialogs.offer.org_name",
+        "Kurum / Şirket adı",
+        "Institution / Company name",
+    );
+    let submit_lbl = t(
+        ctx,
+        "dialogs.cart.submit",
+        "Sepeti öde",
+        "Proceed to checkout",
+    );
+    let subtotal_lbl = t(ctx, "dialogs.cart.subtotal", "Ara toplam", "Subtotal");
+    let distance_href = lang_href("/kurumsal/mesafeli-satis-sozlesmesi", ctx.lang);
+
+    buf.el_with(
+        "div",
+        |attrs| {
+            attrs
+                .attr("id", "cart-backdrop")
+                .attr("class", "cart-backdrop")
+                .bool_attr("hidden", true);
+        },
+        |_| {},
+    );
+    buf.el_with(
+        "aside",
+        |attrs| {
+            attrs
+                .attr("id", "cart-drawer")
+                .attr("class", "cart-drawer")
+                .attr("role", "dialog")
+                .attr("aria-modal", "true")
+                .attr("aria-hidden", "true")
+                .attr("aria-labelledby", "cart-drawer-title")
+                .bool_attr("hidden", true);
+        },
+        |aside| {
+            aside.el("div", &[("class", "cart-drawer-head")], |hd| {
+                hd.el("h2", &[("id", "cart-drawer-title")], |h2| {
+                    h2.text(&title);
+                });
+                hd.el(
+                    "button",
+                    &[
+                        ("type", "button"),
+                        ("class", "icon-button"),
+                        ("data-cart-close", ""),
+                        ("aria-label", &close_aria),
+                    ],
+                    |btn| {
+                        btn.raw("&times;");
+                    },
+                );
+            });
+            aside.el("div", &[("class", "cart-drawer-body")], |body| {
+                body.el(
+                    "p",
+                    &[("id", "cart-empty-state"), ("class", "empty-state")],
+                    |p| {
+                        p.text(&empty_lbl);
+                    },
+                );
+                body.el(
+                    "div",
+                    &[("id", "cart-items-list"), ("class", "cart-items-list")],
+                    |_| {},
+                );
+                body.el_with(
+                    "form",
+                    |attrs| {
+                        attrs
+                            .attr("id", "cart-checkout-form")
+                            .attr("class", "ui-form")
+                            .bool_attr("hidden", true);
+                    },
+                    |f| {
+                        f.el("label", &[], |lbl| {
+                            lbl.text(&full_name_lbl);
+                            lbl.void_with("input", |inp| {
+                                inp.attr("name", "full_name")
+                                    .attr("autocomplete", "name")
+                                    .bool_attr("required", true);
+                            });
+                        });
+                        f.el("label", &[], |lbl| {
+                            lbl.text(&email_lbl);
+                            lbl.void_with("input", |inp| {
+                                inp.attr("name", "email")
+                                    .attr("type", "email")
+                                    .attr("autocomplete", "email")
+                                    .bool_attr("required", true);
+                            });
+                        });
+                        f.el("label", &[], |lbl| {
+                            lbl.text(&org_lbl);
+                            lbl.void_el(
+                                "input",
+                                &[
+                                    ("name", "organization_name"),
+                                    ("autocomplete", "organization"),
+                                ],
+                            );
+                        });
+                        f.el("label", &[("class", "check-label")], |lbl| {
+                            lbl.void_with("input", |inp| {
+                                inp.attr("type", "checkbox")
+                                    .attr("name", "distance_sales_consent")
+                                    .attr("value", "true")
+                                    .bool_attr("required", true);
+                            });
+                            lbl.el("span", &[], |span| {
+                                if ctx.lang.eq_ignore_ascii_case("en") {
+                                    span.text("I accept the ");
+                                    span.el(
+                                        "a",
+                                        &[
+                                            ("href", &distance_href),
+                                            ("target", "_blank"),
+                                            ("rel", "noopener"),
+                                        ],
+                                        |a| {
+                                            a.text("Pre-Contractual Information & Distance Sales Terms");
+                                        },
+                                    );
+                                    span.text(".");
+                                } else {
+                                    span.el(
+                                        "a",
+                                        &[
+                                            ("href", &distance_href),
+                                            ("target", "_blank"),
+                                            ("rel", "noopener"),
+                                        ],
+                                        |a| {
+                                            a.text("Ön Bilgilendirme Formu ve Mesafeli Satış Sözleşmesi");
+                                        },
+                                    );
+                                    span.text("'ni okudum, kabul ediyorum.");
+                                }
+                            });
+                        });
+                        f.el("p", &[("class", "form-feedback"), ("role", "status")], |_| {});
+                        f.el(
+                            "button",
+                            &[("type", "submit"), ("class", "button primary")],
+                            |btn| {
+                                btn.text(&submit_lbl);
+                            },
+                        );
+                    },
+                );
+                body.el(
+                    "p",
+                    &[
+                        ("class", "form-feedback"),
+                        ("id", "cart-feedback"),
+                        ("role", "status"),
+                    ],
+                    |_| {},
+                );
+                body.el_with(
+                    "div",
+                    |attrs| {
+                        attrs
+                            .attr("id", "cart-paytr-wrap")
+                            .attr("class", "paytr-iframe-wrap")
+                            .bool_attr("hidden", true);
+                    },
+                    |_| {},
+                );
+            });
+            aside.el("div", &[("class", "cart-drawer-footer")], |ft| {
+                ft.el("div", &[("class", "cart-subtotal-row")], |row| {
+                    row.el("span", &[], |sp| {
+                        sp.text(&subtotal_lbl);
+                    });
+                    row.el("strong", &[("id", "cart-subtotal")], |st| {
+                        st.text("₺0");
+                    });
+                });
+            });
+        },
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1342,6 +2141,24 @@ mod tests {
         assert!(guest_html.contains("id=\"issue-dialog\""));
         assert!(guest_html.contains("id=\"auth-dialog\""));
         assert!(guest_html.contains("id=\"offer-dialog\""));
+        assert!(guest_html.contains("id=\"newsletter-dialog\""));
+        assert!(guest_html.contains("id=\"public-newsletter-form\""));
+        assert!(guest_html.contains("action=\"/api/v1/public/newsletter/subscribe\""));
+        assert!(guest_html.contains("name=\"email_group_code\""));
+        assert!(guest_html.contains("id=\"cart-backdrop\""));
+        assert!(guest_html.contains("id=\"cart-drawer\""));
+        assert!(guest_html.contains("id=\"cart-items-list\""));
+        assert!(guest_html.contains("id=\"cart-empty-state\""));
+        assert!(guest_html.contains("id=\"cart-subtotal\""));
+        assert!(guest_html.contains("id=\"cart-checkout-form\""));
+        assert!(guest_html.contains("id=\"cart-feedback\""));
+        assert!(guest_html.contains("id=\"cart-paytr-wrap\""));
+        assert!(guest_html.contains("id=\"cart-paytr-wrap\" class=\"paytr-iframe-wrap\""));
+        assert!(!guest_html.contains("paytr-frame-wrap"));
+        assert!(guest_html.contains("name=\"kvkk_consent\""));
+        assert!(guest_html.contains("name=\"tos_accepted\""));
+        assert!(guest_html.contains("id=\"register-tos-accepted\""));
+        assert!(guest_html.contains("name=\"tos_version\" value=\"2026-01\""));
         assert!(guest_html.contains("id=\"cookie-consent-bar\""));
         assert!(guest_html.contains("id=\"cookie-dialog\""));
         assert!(guest_html.contains("id=\"gallery-lightbox\""));
@@ -1350,6 +2167,7 @@ mod tests {
         assert!(guest_html.contains("MoND (Ministry of National Defence)"));
         assert!(!guest_html.contains("Hoş geldiniz"));
         assert!(!guest_html.contains("Zorunlu Oturum"));
+        assert!(!guest_html.contains("Yayın Sepetim"));
         assert!(!guest_html.contains("Defense"));
         assert!(!guest_html.contains("<iframe id=\"issue-pdf-frame\""));
 
@@ -1361,6 +2179,6 @@ mod tests {
             featured_issue: Some(286),
         });
         assert!(sub_html.contains("<iframe id=\"issue-pdf-frame\""));
-        assert!(sub_html.contains("/api/v1/edergi/286/download-pdf#toolbar=0"));
+        assert!(sub_html.contains("/api/v1/edergi/286/download-pdf?publication_type=msi#toolbar=0"));
     }
 }

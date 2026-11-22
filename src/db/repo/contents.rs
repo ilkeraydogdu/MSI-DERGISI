@@ -73,7 +73,8 @@ impl Database {
                     issue_number, published_at, read_time_min, visibility_level, single_price_try,
                     is_sponsored, sponsor_brand, sponsor_legal_label, is_featured, video_url,
                     view_count, true_read_count, COALESCE(status, 'published'),
-                    COALESCE(en_status, 'none'), en_translated_at, en_approved_by, en_approved_at, tr_source_hash
+                    COALESCE(en_status, 'none'), en_translated_at, en_approved_by, en_approved_at, tr_source_hash,
+                    COALESCE(target_institutions_json, '[]')
              FROM contents
              ORDER BY published_at DESC, id DESC",
         ) else {
@@ -81,6 +82,8 @@ impl Database {
         };
 
         let Ok(rows) = stmt.query_map([], |r| {
+            let inst_raw: String = r.get(31).unwrap_or_else(|_| "[]".to_string());
+            let target_institutions: Vec<String> = serde_json::from_str(&inst_raw).unwrap_or_default();
             Ok(ContentItem {
                 id: r.get(0)?,
                 slug: r.get(1)?,
@@ -115,6 +118,7 @@ impl Database {
                 en_approved_by: r.get(28)?,
                 en_approved_at: r.get(29)?,
                 tr_source_hash: r.get(30)?,
+                target_institutions,
             })
         }) else {
             return Vec::new();
@@ -129,9 +133,16 @@ impl Database {
     }
 
     pub fn get_content_by_slug(&self, slug: &str) -> Option<ContentItem> {
-        self.get_all_contents()
-            .into_iter()
-            .find(|c| c.slug.eq_ignore_ascii_case(slug))
+        let contents = self.get_all_contents();
+        if let Some(found) = contents.iter().find(|c| c.slug.eq_ignore_ascii_case(slug)) {
+            return Some(found.clone());
+        }
+        if slug.contains('_') && !slug.contains('/') && !slug.contains("..") {
+            if let Some(norm) = crate::engine::validation_engine::validate_slug(slug) {
+                return contents.into_iter().find(|c| c.slug.eq_ignore_ascii_case(&norm));
+            }
+        }
+        None
     }
 
     pub fn get_contents_by_placement_or_type(&self, slug: &str) -> Vec<ContentItem> {
@@ -165,6 +176,8 @@ impl Database {
         };
         let now = chrono::Utc::now().to_rfc3339();
         let new_tr_hash = Self::compute_tr_source_hash(&item.title_tr, &item.summary_tr, &item.body_tr);
+        let target_inst_json =
+            serde_json::to_string(&item.target_institutions).unwrap_or_else(|_| "[]".to_string());
 
         let content_id: i64 = if item.id > 0 {
             let prev: (String, String, String, String, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>) = tx.query_row(
@@ -247,8 +260,9 @@ impl Database {
                     en_translated_at = ?25,
                     en_approved_by = ?26,
                     en_approved_at = ?27,
-                    tr_source_hash = ?28
-                 WHERE id = ?29",
+                    tr_source_hash = ?28,
+                    target_institutions_json = ?29
+                 WHERE id = ?30",
                 params![
                     item.slug,
                     item.title_tr,
@@ -278,6 +292,7 @@ impl Database {
                     next_en_approved_by,
                     next_en_approved_at,
                     next_tr_hash,
+                    target_inst_json,
                     item.id
                 ],
             )?;
@@ -329,14 +344,16 @@ impl Database {
                     issue_number, published_at, read_time_min, visibility_level, single_price_try,
                     is_sponsored, sponsor_brand, sponsor_legal_label, is_featured, video_url,
                     view_count, true_read_count, status,
-                    en_status, en_translated_at, en_approved_by, en_approved_at, tr_source_hash
+                    en_status, en_translated_at, en_approved_by, en_approved_at, tr_source_hash,
+                    target_institutions_json
                 ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                     ?8, ?9, ?10, ?11, ?12,
                     ?13, ?14, ?15, ?16, ?17,
                     ?18, ?19, ?20, ?21, ?22,
                     ?23, ?24, ?25,
-                    ?26, ?27, ?28, ?29, ?30
+                    ?26, ?27, ?28, ?29, ?30,
+                    ?31
                 )",
                 params![
                     final_slug,
@@ -368,7 +385,8 @@ impl Database {
                     item.en_translated_at,
                     item.en_approved_by,
                     item.en_approved_at,
-                    tr_hash
+                    tr_hash,
+                    target_inst_json
                 ],
             )?;
             tx.last_insert_rowid()
@@ -382,7 +400,7 @@ impl Database {
         )?;
         {
             let mut stmt = tx.prepare_cached(
-                "INSERT OR IGNORE INTO content_placements (content_id, category_slug) VALUES (?1, ?2)",
+                "INSERT INTO content_placements (content_id, category_slug) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
             )?;
             // Always include primary content_type in placements as well
             for p in item.placements.iter().chain(std::iter::once(&item.content_type)) {
@@ -396,7 +414,7 @@ impl Database {
         )?;
         {
             let mut stmt = tx.prepare_cached(
-                "INSERT OR IGNORE INTO content_ssb_tags (content_id, ssb_code) VALUES (?1, ?2)",
+                "INSERT INTO content_ssb_tags (content_id, ssb_code) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
             )?;
             for tag in &item.ssb_tags {
                 stmt.execute(params![content_id, tag])?;

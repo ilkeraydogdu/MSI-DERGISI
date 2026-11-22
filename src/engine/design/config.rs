@@ -129,8 +129,20 @@ pub fn defaults() -> DesignConfig {
 
 pub fn load(settings: &HashMap<String, String>) -> DesignConfig {
     if let Some(raw) = settings.get(SETTING_KEY) {
-        if let Ok(config) = serde_json::from_str::<DesignConfig>(raw) {
+        if let Ok(mut config) = serde_json::from_str::<DesignConfig>(raw) {
             if config.validate().is_ok() {
+                if config.theme.dark.muted.eq_ignore_ascii_case("#a2aab8") {
+                    config.theme.dark.muted = "#b2bac8".into();
+                }
+                let default_cfg = defaults();
+                for page in default_cfg.pages {
+                    if config.pages.len() >= 50 {
+                        break;
+                    }
+                    if !config.pages.iter().any(|p| p.slug == page.slug) {
+                        config.pages.push(page);
+                    }
+                }
                 return config;
             }
         }
